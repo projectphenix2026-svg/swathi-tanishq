@@ -2,6 +2,57 @@
 import { query } from '../db/index.js';
 import { getProvider } from '../providers/index.js';
 import { normalizePhone } from './phone.js';
+import { fallbackToSms } from './sender.js';
+
+// Replies that mean "I want this": the customer goes on the hot-lead call list.
+const INTEREST_WORDS = ['interested', 'i am interested', 'im interested', 'book a visit', 'book visit', 'book', 'call me', 'yes', 'want to visit', 'see designs', 'see the designs'];
+const NOT_NOW_WORDS = ['not now', 'no', 'later', 'not interested'];
+
+/**
+ * Tags the customer from their reply and opens a lead when it shows interest.
+ * A tap on one of our quick-reply buttons counts too (the button text arrives as the reply).
+ */
+export async function trackInterest(clientId, contactId, inboundId, body) {
+  const text = String(body || '').trim();
+  const word = text.toLowerCase().replace(/[!.?]+$/, '');
+  if (!word) return null;
+  const { rows: [last] } = await query(
+    `SELECT id, campaign_id, buttons FROM messages
+      WHERE contact_id = $1 AND direction = 'outbound' AND (campaign_id IS NOT NULL OR occasion_id IS NOT NULL)
+        AND created_at > now() - interval '30 days'
+      ORDER BY created_at DESC LIMIT 1`,
+    [contactId],
+  );
+  const quickReplies = (last?.buttons || []).filter((b) => b.type === 'quick_reply').map((b) => b.text.toLowerCase());
+  const isNotNow = NOT_NOW_WORDS.includes(word);
+  const isInterest = !isNotNow && (INTEREST_WORDS.includes(word) || quickReplies.includes(word));
+  if (isNotNow) {
+    await addTag(contactId, 'not-now');
+    return null;
+  }
+  if (!isInterest) return null;
+  await addTag(contactId, 'interested');
+  const { rows: [open] } = await query(
+    `SELECT id FROM leads WHERE contact_id = $1 AND status IN ('new', 'called')`,
+    [contactId],
+  );
+  if (open) {
+    await query(`UPDATE leads SET updated_at = now(), reason = $2 WHERE id = $1`, [open.id, text.slice(0, 60)]);
+    return open.id;
+  }
+  const { rows: [lead] } = await query(
+    `INSERT INTO leads (client_id, contact_id, message_id, campaign_id, reason) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+    [clientId, contactId, inboundId, last?.campaign_id || null, text.slice(0, 60)],
+  );
+  return lead.id;
+}
+
+async function addTag(contactId, tag) {
+  await query(
+    `UPDATE contacts SET tags = ARRAY(SELECT DISTINCT unnest(tags || ARRAY[$2::text])), updated_at = now() WHERE id = $1`,
+    [contactId, tag],
+  );
+}
 
 // A status can only move forward (a late "delivered" never overwrites "read").
 const RANK = { queued: 0, retrying: 0, sending: 1, sent: 2, delivered: 3, read: 4 };
@@ -19,6 +70,7 @@ export async function applyStatus({ providerMessageId, status, errorCode, errorM
       `UPDATE messages SET status = 'failed', failed_at = now(), error_code = $2, error_message = $3 WHERE id = $1`,
       [msg.id, errorCode, errorMessage || 'Not delivered'],
     );
+    await fallbackToSms(msg.id);
     return true;
   }
   if (msg.status === 'failed' || (RANK[status] ?? -1) <= (RANK[msg.status] ?? -1)) return false;
@@ -69,6 +121,8 @@ export async function recordInbound(clientId, { providerMessageId, from, profile
               opt_in_source = 'WhatsApp reply: START', updated_at = now() WHERE id = $1`,
       [contact.id],
     );
+  } else if (inserted.rows[0]) {
+    await trackInterest(clientId, contact.id, inserted.rows[0].id, body);
   }
   return inserted.rows[0] ? { contactId: contact.id, messageId: inserted.rows[0].id } : null;
 }

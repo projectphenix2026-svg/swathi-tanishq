@@ -4,7 +4,8 @@ import { createApp } from './app.js';
 import { startQueue, stopQueue } from './queue/index.js';
 import { processSendJob, requeuePending } from './lib/sender.js';
 import { pollStatuses } from './lib/messages.js';
-import { getProvider } from './providers/index.js';
+import { getProvider, getSmsProvider } from './providers/index.js';
+import { runAllOccasions } from './lib/occasions.js';
 import { createUser } from './routes/auth.js';
 
 assertConfig();
@@ -35,12 +36,24 @@ if (provider.fetchStatus && config.statusPollSeconds > 0) {
   poller = setInterval(() => pollStatuses().catch((e) => console.warn('[status-poll]', e.message)), config.statusPollSeconds * 1000);
 }
 
+// Phase 3: birthday, anniversary and festival greetings. Each greeting has its own key,
+// so checking often is safe; the first check is a minute after start-up.
+let occasionTimer = null;
+if (config.occasionCheckMinutes > 0) {
+  const tick = () => runAllOccasions().catch((e) => console.warn('[occasions]', e.message));
+  setTimeout(tick, 60 * 1000);
+  occasionTimer = setInterval(tick, config.occasionCheckMinutes * 60 * 1000);
+}
+const sms = getSmsProvider();
+console.log(`[sms] ${sms.label}`);
+
 const server = createApp().listen(config.port, () => {
   console.log(`[api] ${database.kind} database, listening on http://localhost:${config.port}`);
 });
 
 async function shutdown() {
   clearInterval(poller);
+  clearInterval(occasionTimer);
   server.close();
   await stopQueue();
   await database.close();

@@ -8,7 +8,20 @@ import { createTwilioProvider } from './twilio.js';
 import { createMetaProvider } from './meta.js';
 import { createMockProvider } from './mock.js';
 
+import { createSmsProvider } from './sms.js';
+
 let current = null;
+let currentSms = null;
+
+/** The SMS backup channel (preview until DLT is approved). */
+export function getSmsProvider() {
+  if (!currentSms) currentSms = createSmsProvider(config.sms);
+  return currentSms;
+}
+
+export function setSmsProvider(p) {
+  currentSms = p;
+}
 
 export function getProvider() {
   if (!current) current = buildProvider(config.provider);

@@ -60,6 +60,59 @@ export async function requireAuth(req, res, next) {
   }
 }
 
+// Roles: admin (everything, approves big sends, manages staff), manager (customers,
+// templates, campaigns), viewer (reads reports and the inbox, answers replies).
+export const ROLES = ['admin', 'manager', 'viewer'];
+
+export function requireRole(...roles) {
+  return (req, res, next) => {
+    if (roles.includes(req.user?.role)) return next();
+    res.status(403).json({ error: 'Your login cannot do this. Ask the owner (an admin) to change your role.' });
+  };
+}
+
+// Staff management (admins only).
+router.get('/users', requireAuth, requireRole('admin'), async (req, res) => {
+  const { rows } = await query(
+    'SELECT id, email, name, role, created_at FROM users WHERE client_id = $1 ORDER BY created_at',
+    [req.clientId],
+  );
+  res.json({ users: rows });
+});
+
+router.post('/users', requireAuth, requireRole('admin'), async (req, res) => {
+  const { email, name, password, role = 'manager' } = req.body || {};
+  if (!ROLES.includes(role)) return res.status(400).json({ error: 'Choose a role: admin, manager or viewer.' });
+  if (!/^\S+@\S+\.\S+$/.test(String(email || ''))) return res.status(400).json({ error: 'Enter a valid email address.' });
+  const { rows: [taken] } = await query('SELECT client_id FROM users WHERE lower(email) = lower($1)', [email]);
+  if (taken) return res.status(409).json({ error: 'That email already has a login.' });
+  try {
+    const user = await createUser({ clientId: req.clientId, email, name, password, role });
+    res.status(201).json({ user: publicUser(user) });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.patch('/users/:id', requireAuth, requireRole('admin'), async (req, res) => {
+  const { role, password } = req.body || {};
+  const { rows: [u] } = await query('SELECT * FROM users WHERE id = $1 AND client_id = $2', [req.params.id, req.clientId]);
+  if (!u) return res.status(404).json({ error: 'Staff member not found.' });
+  if (role) {
+    if (!ROLES.includes(role)) return res.status(400).json({ error: 'Choose a role: admin, manager or viewer.' });
+    if (u.role === 'admin' && role !== 'admin') {
+      const { rows: [{ n }] } = await query(`SELECT count(*)::int AS n FROM users WHERE client_id = $1 AND role = 'admin'`, [req.clientId]);
+      if (n <= 1) return res.status(409).json({ error: 'Keep at least one admin.' });
+    }
+    await query('UPDATE users SET role = $2 WHERE id = $1', [u.id, role]);
+  }
+  if (password) {
+    if (String(password).length < 8) return res.status(400).json({ error: 'Use a password of at least 8 characters.' });
+    await query('UPDATE users SET password_hash = $2 WHERE id = $1', [u.id, await bcrypt.hash(String(password), 10)]);
+  }
+  res.json({ ok: true });
+});
+
 export async function createUser({ clientId, email, name, password, role = 'admin' }) {
   if (!email || !password) throw new Error('Email and password are required.');
   if (password.length < 8) throw new Error('Use a password of at least 8 characters.');

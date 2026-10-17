@@ -49,7 +49,21 @@ export const config = {
     appSecret: env.META_APP_SECRET || '',
     verifyToken: env.META_WEBHOOK_VERIFY_TOKEN || '',
     graphVersion: env.META_GRAPH_VERSION || 'v25.0',
+    // WhatsApp Business account ID: needed to submit templates for approval.
+    wabaId: env.META_WABA_ID || '',
   },
+
+  // SMS backup. Until DLT registration is approved, SMS_MODE=preview records the
+  // exact SMS that would go out without sending it.
+  sms: {
+    mode: (env.SMS_MODE || 'preview').toLowerCase(), // preview | msg91
+    msg91AuthKey: env.MSG91_AUTH_KEY || '',
+    senderId: env.MSG91_SENDER_ID || '',
+    costPerSms: Number(env.SMS_COST_INR || 0.25),
+  },
+
+  // How often the occasion scheduler checks for birthdays, anniversaries and festivals.
+  occasionCheckMinutes: Number(env.OCCASION_CHECK_MINUTES ?? 15),
 };
 
 export function assertConfig() {

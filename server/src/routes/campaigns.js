@@ -5,6 +5,9 @@ import { getProvider } from '../providers/index.js';
 import { previewAudience, launchCampaign, campaignReport } from '../lib/campaigns.js';
 import { render, valuesFor } from '../lib/template.js';
 import { withButtons } from '../providers/twilio.js';
+import { requireRole } from './auth.js';
+
+const canEdit = requireRole('admin', 'manager');
 
 const router = express.Router();
 
@@ -31,7 +34,7 @@ router.post('/preview', async (req, res) => {
   const { audience = { mode: 'all' }, templateId, variables = {} } = req.body || {};
   let template = null;
   if (templateId) template = (await query('SELECT * FROM templates WHERE id = $1 AND client_id = $2', [templateId, req.clientId])).rows[0];
-  const result = await previewAudience(req.clientId, { audience, templateBody: template?.body, variables });
+  const result = await previewAudience(req.clientId, { audience, template, variables });
   res.json(result);
 });
 
@@ -52,17 +55,20 @@ router.post('/render', async (req, res) => {
   });
 });
 
-router.post('/', async (req, res) => {
+router.post('/', canEdit, async (req, res) => {
   const b = req.body || {};
   const name = String(b.name || '').trim();
   if (!name) return res.status(400).json({ error: 'Give the campaign a name.' });
   const { rows: [t] } = await query('SELECT * FROM templates WHERE id = $1 AND client_id = $2', [b.templateId, req.clientId]);
   if (!t) return res.status(400).json({ error: 'Choose a message template.' });
-  if (t.status !== 'approved') return res.status(400).json({ error: 'This template is not approved for sending yet.' });
+  if (t.status !== 'approved') return res.status(400).json({ error: 'This template is not ready to send yet.' });
   const provider = getProvider();
   const missingConfig = provider.missingConfig();
   if (missingConfig.length) {
     return res.status(400).json({ error: `Sending is not set up yet. Missing: ${missingConfig.join(', ')}.` });
+  }
+  if (provider.name === 'meta' && (!t.provider_ref || (t.provider_status && t.provider_status !== 'APPROVED'))) {
+    return res.status(400).json({ error: 'Meta has not approved this template yet. Submit it from the template page and check back.' });
   }
   let scheduledAt = null;
   if (b.scheduledAt) {
@@ -70,7 +76,7 @@ router.post('/', async (req, res) => {
     if (Number.isNaN(scheduledAt.getTime())) return res.status(400).json({ error: 'Pick a valid date and time.' });
     if (scheduledAt.getTime() < Date.now() - 60000) return res.status(400).json({ error: 'That time has already passed.' });
   }
-  const preview = await previewAudience(req.clientId, { audience: b.audience, templateBody: t.body, variables: b.variables });
+  const preview = await previewAudience(req.clientId, { audience: b.audience, template: t, variables: b.variables });
   if (!preview.sendable) return res.status(400).json({ error: 'No customers can receive this campaign. Check the audience and offer.' });
   if (b.expectedCount !== undefined && Number(b.expectedCount) !== preview.sendable) {
     return res.status(409).json({
@@ -78,13 +84,36 @@ router.post('/', async (req, res) => {
       preview,
     });
   }
+  // Big sends by non-admins wait for an admin's approval.
+  const needsApproval = req.user.role !== 'admin' && preview.sendable >= preview.approvalThreshold;
   const { rows: [campaign] } = await query(
-    `INSERT INTO campaigns (client_id, name, template_id, audience, variables, status, scheduled_at, cost_per_message, provider, created_by)
-     VALUES ($1, $2, $3, $4, $5, 'scheduled', $6, $7, $8, $9) RETURNING *`,
-    [req.clientId, name, t.id, JSON.stringify(b.audience || { mode: 'all' }), JSON.stringify(b.variables || {}), scheduledAt, config.costPerMessage, provider.name, req.user.id],
+    `INSERT INTO campaigns (client_id, name, template_id, audience, variables, status, scheduled_at, cost_per_message, provider,
+                            created_by, sms_fallback, expected_count, approved_by, approved_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, CASE WHEN $13::int IS NULL THEN NULL ELSE now() END) RETURNING *`,
+    [req.clientId, name, t.id, JSON.stringify(b.audience || { mode: 'all' }), JSON.stringify(b.variables || {}),
+      needsApproval ? 'pending_approval' : 'scheduled', scheduledAt, config.costPerMessage, provider.name, req.user.id,
+      Boolean(b.smsFallback), preview.sendable, needsApproval ? null : req.user.id],
   );
+  if (needsApproval) return res.status(202).json({ campaign, pendingApproval: true, queued: 0 });
   const result = await launchCampaign(req.clientId, campaign, t);
   res.status(201).json({ campaign, queued: result.queued, skipped: result.skipped });
+});
+
+// An admin approves a big send; it then goes out (or waits for its scheduled time).
+router.post('/:id/approve', requireRole('admin'), async (req, res) => {
+  const { rows: [c] } = await query(
+    `UPDATE campaigns SET status = 'scheduled', approved_by = $3, approved_at = now()
+      WHERE id = $1 AND client_id = $2 AND status = 'pending_approval' RETURNING *`,
+    [req.params.id, req.clientId, req.user.id],
+  );
+  if (!c) return res.status(409).json({ error: 'This campaign is not waiting for approval.' });
+  if (c.scheduled_at && new Date(c.scheduled_at).getTime() < Date.now()) {
+    await query('UPDATE campaigns SET scheduled_at = NULL WHERE id = $1', [c.id]);
+    c.scheduled_at = null;
+  }
+  const { rows: [t] } = await query('SELECT * FROM templates WHERE id = $1', [c.template_id]);
+  const result = await launchCampaign(req.clientId, c, t);
+  res.json({ campaign: c, queued: result.queued, skipped: result.skipped });
 });
 
 router.get('/:id', async (req, res) => {
@@ -107,8 +136,9 @@ router.get('/:id/messages', async (req, res) => {
   else if (status === 'read') cond = ` AND m.status = 'read'`;
   else if (status === 'delivered') cond = ` AND m.status IN ('delivered', 'read')`;
   else if (status === 'pending') cond = ` AND m.status IN ('queued', 'retrying', 'sending')`;
+  else if (status === 'sms') cond = ` AND m.channel = 'sms'`;
   const { rows } = await query(
-    `SELECT m.id, m.status, m.error_code, m.error_message, m.sent_at, m.delivered_at, m.read_at, m.failed_at, m.attempts,
+    `SELECT m.id, m.channel, m.offer_code, m.body, m.status, m.error_code, m.error_message, m.sent_at, m.delivered_at, m.read_at, m.failed_at, m.attempts,
             ct.id AS contact_id, ct.name, ct.phone
        FROM messages m JOIN contacts ct ON ct.id = m.contact_id
       WHERE m.campaign_id = $1 AND m.client_id = $2${cond}
@@ -122,7 +152,7 @@ router.get('/:id/messages', async (req, res) => {
 router.post('/:id/cancel', async (req, res) => {
   const { rows: [c] } = await query(
     `UPDATE campaigns SET status = 'cancelled', completed_at = now()
-      WHERE id = $1 AND client_id = $2 AND status IN ('scheduled', 'sending') RETURNING *`,
+      WHERE id = $1 AND client_id = $2 AND status IN ('scheduled', 'sending', 'pending_approval') RETURNING *`,
     [req.params.id, req.clientId],
   );
   if (!c) return res.status(409).json({ error: 'This campaign has already finished.' });

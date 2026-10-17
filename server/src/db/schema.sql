@@ -100,3 +100,73 @@ CREATE INDEX IF NOT EXISTS messages_provider_id_idx ON messages (provider_messag
 CREATE INDEX IF NOT EXISTS messages_campaign_status_idx ON messages (campaign_id, status);
 CREATE INDEX IF NOT EXISTS messages_contact_idx ON messages (contact_id, created_at);
 CREATE INDEX IF NOT EXISTS contacts_client_idx ON contacts (client_id, created_at);
+
+-- ===================== Phases 2-5 (additive, safe on existing databases) =====================
+
+-- Phase 2: Meta template approval status
+ALTER TABLE templates ADD COLUMN IF NOT EXISTS provider_status TEXT;   -- PENDING | APPROVED | REJECTED (from Meta)
+ALTER TABLE templates ADD COLUMN IF NOT EXISTS provider_reason TEXT;
+
+-- Phase 4: SMS backup
+ALTER TABLE contacts  ADD COLUMN IF NOT EXISTS sms_opt_in BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE templates ADD COLUMN IF NOT EXISTS sms_body TEXT;          -- same placeholders, in the DLT-registered wording
+ALTER TABLE templates ADD COLUMN IF NOT EXISTS sms_dlt_template_id TEXT;
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS sms_fallback BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE messages  ADD COLUMN IF NOT EXISTS fallback_of BIGINT;
+
+-- Phase 3: occasions (birthdays, anniversaries, festivals)
+CREATE TABLE IF NOT EXISTS occasions (
+  id            SERIAL PRIMARY KEY,
+  client_id     INT NOT NULL REFERENCES clients(id),
+  name          TEXT NOT NULL,
+  kind          TEXT NOT NULL,                 -- birthday | anniversary | festival
+  festival_date DATE,                          -- festivals only
+  days_before   INT[] NOT NULL DEFAULT '{0}',  -- e.g. {7,0} = a week before and on the day
+  send_hour     INT NOT NULL DEFAULT 10,       -- India time
+  template_id   INT NOT NULL REFERENCES templates(id),
+  variables     JSONB NOT NULL DEFAULT '{}',
+  audience      JSONB NOT NULL DEFAULT '{"mode":"all"}',
+  sms_fallback  BOOLEAN NOT NULL DEFAULT false,
+  enabled       BOOLEAN NOT NULL DEFAULT true,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS occasion_id INT REFERENCES occasions(id);
+
+-- Phase 5: offer codes, redemptions, hot leads, limits, roles and approvals
+ALTER TABLE messages  ADD COLUMN IF NOT EXISTS offer_code TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS messages_offer_code_idx ON messages (client_id, offer_code) WHERE offer_code IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS redemptions (
+  id          SERIAL PRIMARY KEY,
+  client_id   INT NOT NULL REFERENCES clients(id),
+  message_id  BIGINT NOT NULL REFERENCES messages(id),
+  contact_id  INT NOT NULL REFERENCES contacts(id),
+  code        TEXT NOT NULL,
+  amount      NUMERIC(12,2) NOT NULL DEFAULT 0,
+  note        TEXT,
+  redeemed_by INT REFERENCES users(id),
+  redeemed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (client_id, code)
+);
+
+CREATE TABLE IF NOT EXISTS leads (
+  id          SERIAL PRIMARY KEY,
+  client_id   INT NOT NULL REFERENCES clients(id),
+  contact_id  INT NOT NULL REFERENCES contacts(id),
+  message_id  BIGINT REFERENCES messages(id),    -- the customer's reply that created it
+  campaign_id INT REFERENCES campaigns(id),
+  reason      TEXT NOT NULL,                     -- e.g. "Interested", "Book a visit"
+  status      TEXT NOT NULL DEFAULT 'new',       -- new | called | won | lost
+  note        TEXT,
+  updated_by  INT REFERENCES users(id),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS leads_open_idx ON leads (client_id, status, created_at);
+
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS weekly_cap INT NOT NULL DEFAULT 2;            -- marketing messages per customer per 7 days
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS approval_threshold INT NOT NULL DEFAULT 500;  -- sends this big need an admin's approval
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS approved_by INT REFERENCES users(id);
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ;
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS expected_count INT;

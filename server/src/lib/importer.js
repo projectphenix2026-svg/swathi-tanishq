@@ -14,6 +14,7 @@ export const FIELDS = [
   { key: 'last_purchase', label: 'Last purchase', synonyms: ['last purchase', 'last item', 'last bought', 'purchase', 'product', 'last product', 'item'] },
   { key: 'interests', label: 'Interests', synonyms: ['interests', 'interest', 'category', 'preference', 'preferences', 'likes'] },
   { key: 'opt_in', label: 'WhatsApp opt-in', synonyms: ['opt in', 'optin', 'opt-in', 'whatsapp opt-in', 'whatsapp opt in', 'consent', 'whatsapp consent', 'subscribed'] },
+  { key: 'sms_opt_in', label: 'SMS opt-in', synonyms: ['sms opt-in', 'sms opt in', 'sms optin', 'sms consent'] },
 ];
 
 export const MAX_ROWS = 50000;
@@ -31,10 +32,56 @@ export function parseFile(buffer, filename = '') {
     const sheet = wb.Sheets[wb.SheetNames[0]];
     if (!sheet) throw new ImportError('The file has no sheets.');
     grid = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '', blankrows: false });
+  } else if (ext === 'vcf') {
+    grid = parseVcard(buffer.toString('utf8'));
   } else {
-    throw new ImportError('Please upload an Excel (.xlsx, .xls) or CSV (.csv) file.');
+    throw new ImportError('Please upload an Excel (.xlsx, .xls), CSV (.csv) or phone contacts (.vcf) file.');
   }
   return gridToTable(grid);
+}
+
+/**
+ * Phone contacts exported as a vCard file (.vcf): one row per contact with a name,
+ * the first mobile number and the birthday if saved.
+ */
+export function parseVcard(text) {
+  const lines = String(text || '').replace(/\r\n/g, '\n').replace(/\n[ \t]/g, '').split('\n');
+  const grid = [['Name', 'Phone', 'Birthday']];
+  let card = null;
+  for (const line of lines) {
+    const upper = line.toUpperCase();
+    if (upper.startsWith('BEGIN:VCARD')) card = { name: '', phones: [], bday: '' };
+    else if (upper.startsWith('END:VCARD') && card) {
+      const mobile = card.phones.find((p) => p.mobile) || card.phones[0];
+      if (mobile) grid.push([card.name, mobile.value, card.bday]);
+      card = null;
+    } else if (card) {
+      const idx = line.indexOf(':');
+      if (idx === -1) continue;
+      const key = upper.slice(0, idx);
+      const value = line.slice(idx + 1).trim();
+      if (key === 'FN' || key.startsWith('FN;')) card.name = value;
+      else if ((key === 'N' || key.startsWith('N;')) && !card.name) card.name = value.split(';').slice(0, 2).reverse().filter(Boolean).join(' ');
+      else if (key.startsWith('TEL')) card.phones.push({ value, mobile: /CELL|MOBILE|IPHONE/.test(key) });
+      else if (key.startsWith('BDAY') && /^\d{4}-?\d{2}-?\d{2}/.test(value)) card.bday = value.replace(/^(\d{4})-?(\d{2})-?(\d{2}).*/, '$1-$2-$3');
+    }
+  }
+  return grid;
+}
+
+/** A Google Sheets link becomes its CSV export link (the sheet must be shared "anyone with the link"). */
+export function sheetsCsvUrl(link) {
+  const help = 'Paste the full Google Sheets link (it starts with https://docs.google.com/spreadsheets/).';
+  let url;
+  try {
+    url = new URL(String(link || '').trim());
+  } catch {
+    throw new ImportError(help);
+  }
+  const m = url.pathname.match(/^\/spreadsheets\/d\/([a-zA-Z0-9_-]{20,})/);
+  if (url.protocol !== 'https:' || url.hostname !== 'docs.google.com' || !m) throw new ImportError(help);
+  const gid = (url.hash.match(/gid=(\d+)/) || url.search.match(/gid=(\d+)/) || [])[1] || '0';
+  return `https://docs.google.com/spreadsheets/d/${m[1]}/export?format=csv&gid=${gid}`;
 }
 
 /**
@@ -156,6 +203,7 @@ export function buildPreview({ rows, mapping }, existingPhones = new Set()) {
       last_purchase: cleanText(get('last_purchase')),
       interests: cleanText(get('interests')),
       opt_in: parseOptIn(get('opt_in')),
+      sms_opt_in: parseOptIn(get('sms_opt_in')),
       status: 'ok',
       reason: null,
       warnings,

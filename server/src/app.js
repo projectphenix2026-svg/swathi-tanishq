@@ -10,6 +10,9 @@ import campaignRoutes from './routes/campaigns.js';
 import inboxRoutes from './routes/inbox.js';
 import dashboardRoutes from './routes/dashboard.js';
 import webhookRoutes from './routes/webhooks.js';
+import occasionRoutes from './routes/occasions.js';
+import leadRoutes from './routes/leads.js';
+import offerRoutes from './routes/offers.js';
 
 export function createApp() {
   const app = express();
@@ -28,6 +31,9 @@ export function createApp() {
   app.use('/api/campaigns', requireAuth, campaignRoutes);
   app.use('/api/inbox', requireAuth, inboxRoutes);
   app.use('/api/dashboard', requireAuth, dashboardRoutes);
+  app.use('/api/occasions', requireAuth, occasionRoutes);
+  app.use('/api/leads', requireAuth, leadRoutes);
+  app.use('/api/offers', requireAuth, offerRoutes);
 
   app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));
 

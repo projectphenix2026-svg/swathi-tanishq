@@ -1,7 +1,9 @@
 import express from 'express';
 import { query } from '../db/index.js';
 import { config } from '../config.js';
-import { getProvider } from '../providers/index.js';
+import { getProvider, getSmsProvider } from '../providers/index.js';
+import { clientSettings } from '../lib/campaigns.js';
+import { requireRole } from './auth.js';
 
 const router = express.Router();
 
@@ -38,22 +40,51 @@ router.get('/', async (req, res) => {
     [req.clientId],
   );
   const { rows: [t] } = await query('SELECT count(*)::int AS n FROM templates WHERE client_id = $1', [req.clientId]);
-  res.json({ customers, month: { ...month, spend: Math.round(month.spend * 100) / 100 }, inbox, recent, templates: t.n });
+  const { rows: [extra] } = await query(
+    `SELECT (SELECT count(*)::int FROM leads WHERE client_id = $1 AND status = 'new') AS new_leads,
+            (SELECT count(*)::int FROM campaigns WHERE client_id = $1 AND status = 'pending_approval') AS pending_approval,
+            (SELECT count(*)::int FROM occasions WHERE client_id = $1 AND enabled) AS occasions_on,
+            (SELECT count(*)::int FROM messages WHERE client_id = $1 AND occasion_id IS NOT NULL
+               AND created_at >= date_trunc('day', now() AT TIME ZONE 'Asia/Kolkata') AT TIME ZONE 'Asia/Kolkata') AS greetings_today,
+            (SELECT COALESCE(sum(amount), 0)::float FROM redemptions WHERE client_id = $1
+               AND redeemed_at >= date_trunc('month', now() AT TIME ZONE 'Asia/Kolkata') AT TIME ZONE 'Asia/Kolkata') AS revenue,
+            (SELECT count(*)::int FROM redemptions WHERE client_id = $1
+               AND redeemed_at >= date_trunc('month', now() AT TIME ZONE 'Asia/Kolkata') AT TIME ZONE 'Asia/Kolkata') AS redeemed`,
+    [req.clientId],
+  );
+  res.json({ customers, month: { ...month, spend: Math.round(month.spend * 100) / 100 }, inbox, recent, templates: t.n, ...extra });
 });
 
-// Settings the screens need: which provider, cost per message, sandbox hints.
-router.get('/settings', (req, res) => {
+// Settings the screens need: which provider, cost per message, sandbox hints, limits.
+router.get('/settings', async (req, res) => {
   const p = getProvider();
+  const sms = getSmsProvider();
+  const limits = await clientSettings(req.clientId);
   res.json({
     businessName: config.businessName,
     provider: { name: p.name, label: p.label, stub: Boolean(p.stub), missing: p.missingConfig() },
+    sms: { name: sms.name, label: sms.label, live: sms.live, missing: sms.missingConfig(), costPerSms: config.sms.costPerSms },
+    metaTemplatesReady: Boolean(config.meta.wabaId && config.meta.accessToken),
     costPerMessage: config.costPerMessage,
     webhooksReachable: Boolean(config.publicBaseUrl),
+    weeklyCap: limits.weekly_cap,
+    approvalThreshold: limits.approval_threshold,
+    role: req.user.role,
     sandbox:
       p.name === 'twilio'
         ? { number: process.env.TWILIO_SANDBOX_DISPLAY_NUMBER || config.twilio.whatsappFrom, joinCode: process.env.TWILIO_SANDBOX_JOIN_CODE || '' }
         : null,
   });
+});
+
+// Admins set the weekly limit and when big sends need approval.
+router.put('/settings', requireRole('admin'), async (req, res) => {
+  const cap = Number(req.body?.weeklyCap);
+  const threshold = Number(req.body?.approvalThreshold);
+  if (!Number.isInteger(cap) || cap < 0 || cap > 14) return res.status(400).json({ error: 'Weekly limit: a whole number from 0 (no limit) to 14.' });
+  if (!Number.isInteger(threshold) || threshold < 1) return res.status(400).json({ error: 'Approval size: a whole number of customers, 1 or more.' });
+  await query('UPDATE clients SET weekly_cap = $2, approval_threshold = $3 WHERE id = $1', [req.clientId, cap, threshold]);
+  res.json({ weeklyCap: cap, approvalThreshold: threshold });
 });
 
 export default router;

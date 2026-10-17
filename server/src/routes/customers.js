@@ -2,7 +2,10 @@ import express from 'express';
 import multer from 'multer';
 import { query, db } from '../db/index.js';
 import { normalizePhone } from '../lib/phone.js';
-import { parseFile, parsePasted, buildPreview, parseDate, sampleWorkbook, FIELDS, ImportError } from '../lib/importer.js';
+import { parseFile, parsePasted, buildPreview, parseDate, sampleWorkbook, sheetsCsvUrl, FIELDS, ImportError } from '../lib/importer.js';
+import { requireRole } from './auth.js';
+
+const canEdit = requireRole('admin', 'manager');
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
@@ -68,7 +71,7 @@ router.get('/sample.xlsx', (req, res) => {
 router.get('/fields', (req, res) => res.json({ fields: FIELDS.map(({ key, label }) => ({ key, label })) }));
 
 // One customer from the form.
-router.post('/', async (req, res) => {
+router.post('/', canEdit, async (req, res) => {
   const b = req.body || {};
   const phone = normalizePhone(b.phone);
   const errors = {};
@@ -95,8 +98,8 @@ router.post('/', async (req, res) => {
   const optIn = Boolean(b.whatsapp_opt_in);
   const { rows: [c] } = await query(
     `INSERT INTO contacts (client_id, name, phone, city, birthday, anniversary, last_purchase, interests, tags,
-                           whatsapp_opt_in, opt_in_at, opt_in_source)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CASE WHEN $10 THEN now() END, $11) RETURNING *`,
+                           whatsapp_opt_in, opt_in_at, opt_in_source, sms_opt_in)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CASE WHEN $10 THEN now() END, $11, $12) RETURNING *`,
     [
       req.clientId,
       b.name.trim(),
@@ -109,12 +112,13 @@ router.post('/', async (req, res) => {
       tagsFrom(b.tags),
       optIn,
       optIn ? clean(b.opt_in_source) || 'Added by staff (form)' : null,
+      Boolean(b.sms_opt_in),
     ],
   );
   res.status(201).json({ customer: c });
 });
 
-router.patch('/:id', async (req, res) => {
+router.patch('/:id', canEdit, async (req, res) => {
   const b = req.body || {};
   const sets = [];
   const params = [req.params.id, req.clientId];
@@ -127,6 +131,7 @@ router.patch('/:id', async (req, res) => {
   if ('last_purchase' in b) add('last_purchase', clean(b.last_purchase));
   if ('interests' in b) add('interests', clean(b.interests));
   if ('tags' in b) add('tags', tagsFrom(b.tags));
+  if ('sms_opt_in' in b) add('sms_opt_in', Boolean(b.sms_opt_in));
   if ('birthday' in b) add('birthday', parseDate(b.birthday));
   if ('anniversary' in b) add('anniversary', parseDate(b.anniversary));
   if ('whatsapp_opt_in' in b) {
@@ -145,10 +150,11 @@ router.patch('/:id', async (req, res) => {
 });
 
 // Step 1 of a file / paste import: parse and show what will happen. Nothing is saved.
-router.post('/import/preview', upload.single('file'), async (req, res) => {
+router.post('/import/preview', canEdit, upload.single('file'), async (req, res) => {
   let table;
   if (req.file) table = parseFile(req.file.buffer, req.file.originalname);
   else if (req.body?.text !== undefined) table = parsePasted(req.body.text);
+  else if (req.body?.sheetUrl) table = parseFile(await fetchSheet(req.body.sheetUrl), 'sheet.csv');
   else throw new ImportError('Choose a file or paste some numbers.');
   if (req.body?.mapping) {
     const m = typeof req.body.mapping === 'string' ? JSON.parse(req.body.mapping) : req.body.mapping;
@@ -167,12 +173,13 @@ router.post('/import/preview', upload.single('file'), async (req, res) => {
 });
 
 // Step 2: save the rows the staff member accepted.
-router.post('/import/commit', async (req, res) => {
+router.post('/import/commit', canEdit, async (req, res) => {
   const { rows = [], optIn = {}, updateExisting = false, source = 'import', tags = [] } = req.body || {};
   if (!optIn.confirmed) {
     return res.status(400).json({ error: 'Please confirm these customers agreed to receive WhatsApp messages, or untick opt-in.' });
   }
   const defaultOptIn = Boolean(optIn.value);
+  const defaultSms = Boolean(optIn.sms);
   const extraTags = tagsFrom(tags);
   const toSave = rows.filter((r) => r.status === 'ok' || (updateExisting && r.status === 'exists'));
   let created = 0;
@@ -188,8 +195,8 @@ router.post('/import/commit', async (req, res) => {
       const optedIn = r.opt_in === null || r.opt_in === undefined ? defaultOptIn : Boolean(r.opt_in);
       const result = await tx.query(
         `INSERT INTO contacts (client_id, name, phone, city, birthday, anniversary, last_purchase, interests, tags,
-                               whatsapp_opt_in, opt_in_at, opt_in_source)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CASE WHEN $10 THEN now() END, $11)
+                               whatsapp_opt_in, opt_in_at, opt_in_source, sms_opt_in)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CASE WHEN $10 THEN now() END, $11, $12)
          ON CONFLICT (client_id, phone) DO ${
            updateExisting
              ? `UPDATE SET name = COALESCE(EXCLUDED.name, contacts.name),
@@ -215,6 +222,7 @@ router.post('/import/commit', async (req, res) => {
           extraTags,
           optedIn,
           optedIn ? String(source).slice(0, 120) : null,
+          r.sms_opt_in === null || r.sms_opt_in === undefined ? defaultSms : Boolean(r.sms_opt_in),
         ],
       );
       const row = result.rows[0];
@@ -225,6 +233,24 @@ router.post('/import/commit', async (req, res) => {
   });
   res.json({ created, updated, skipped: skipped + (rows.length - toSave.length) });
 });
+
+/** Downloads a Google Sheet shared "anyone with the link" as CSV. Only docs.google.com links are accepted. */
+async function fetchSheet(link) {
+  const url = sheetsCsvUrl(link);
+  let res;
+  try {
+    res = await fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(15000) });
+  } catch {
+    throw new ImportError('Could not reach Google Sheets. Check the internet connection and try again.');
+  }
+  const type = res.headers.get('content-type') || '';
+  if (!res.ok || !type.includes('text/csv')) {
+    throw new ImportError('Google did not share this sheet. In Google Sheets, click Share and set it to "Anyone with the link can view", then try again.');
+  }
+  const buf = Buffer.from(await res.arrayBuffer());
+  if (buf.length > 15 * 1024 * 1024) throw new ImportError('That sheet is too large (15 MB limit).');
+  return buf;
+}
 
 async function existingPhones(clientId) {
   const { rows } = await query('SELECT phone FROM contacts WHERE client_id = $1', [clientId]);
