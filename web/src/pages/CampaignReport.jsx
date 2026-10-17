@@ -1,0 +1,151 @@
+import { useCallback, useEffect, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
+import { AlertCircle, ArrowLeft, CheckCheck, Eye, IndianRupee, MessageCircle, RefreshCw, Send, XCircle } from 'lucide-react';
+import { api } from '../lib/api.js';
+import { Alert, CampaignStatus, Kpi, MessageStatus, Skeleton, Spinner, useToast } from '../components/ui.jsx';
+import { Funnel, PROVIDER_NAMES } from './Campaigns.jsx';
+import { dateTime, inr, num, pct, phone, plural } from '../lib/format.js';
+
+const TABS = [
+  { key: '', label: 'Everyone' },
+  { key: 'read', label: 'Read' },
+  { key: 'delivered', label: 'Delivered' },
+  { key: 'failed', label: 'Failed' },
+  { key: 'pending', label: 'Waiting' },
+];
+
+export default function CampaignReport() {
+  const { id } = useParams();
+  const toast = useToast();
+  const [data, setData] = useState(null);
+  const [tab, setTab] = useState('');
+  const [messages, setMessages] = useState(null);
+  const [cancelling, setCancelling] = useState(false);
+
+  const load = useCallback(() => {
+    api(`/api/campaigns/${id}`).then(setData).catch((e) => setData({ error: e.message }));
+    api(`/api/campaigns/${id}/messages${tab ? `?status=${tab}` : ''}`).then((r) => setMessages(r.messages)).catch(() => {});
+  }, [id, tab]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  // Refresh while messages are still going out or statuses are still arriving.
+  const live = data?.campaign && (['scheduled', 'sending'].includes(data.campaign.status) || data.report.sent > data.report.read);
+  useEffect(() => {
+    if (!live) return undefined;
+    const t = setInterval(load, 4000);
+    return () => clearInterval(t);
+  }, [live, load]);
+
+  async function cancel() {
+    if (!confirm('Stop this campaign? Messages already sent cannot be taken back.')) return;
+    setCancelling(true);
+    try {
+      const r = await api(`/api/campaigns/${id}/cancel`, { method: 'POST' });
+      toast(`Stopped. ${plural(r.cancelled, 'message')} will not be sent.`);
+      load();
+    } catch (e) {
+      toast(e.message, 'bad');
+    } finally {
+      setCancelling(false);
+    }
+  }
+
+  if (!data) return <div className="page"><Skeleton h={28} w="40%" /><Skeleton h={120} style={{ marginTop: 20 }} /></div>;
+  if (data.error) return <div className="page"><Alert tone="bad">{data.error}</Alert></div>;
+
+  const { campaign: c, report: r } = data;
+  return (
+    <div className="page">
+      <Link to="/campaigns" className="back"><ArrowLeft size={16} />Campaigns</Link>
+      <div className="page-head">
+        <div>
+          <div className="row wrap" style={{ gap: 10 }}>
+            <h1>{c.name}</h1>
+            <CampaignStatus status={c.status} />
+            {live && <span className="badge neutral"><RefreshCw size={12} className="spin" />Updating</span>}
+          </div>
+          <p>
+            {c.status === 'scheduled' ? `Goes out ${dateTime(c.scheduled_at)}` : `Started ${dateTime(c.started_at || c.created_at)}`}
+            {c.created_by_name ? ` by ${c.created_by_name}` : ''} · {c.template_name} · via {PROVIDER_NAMES[c.provider] || c.provider}
+          </p>
+        </div>
+        {['scheduled', 'sending'].includes(c.status) && (
+          <button className="btn danger" onClick={cancel} disabled={cancelling}>{cancelling ? <Spinner /> : <><XCircle size={18} />{c.status === 'scheduled' ? 'Cancel' : 'Stop sending'}</>}</button>
+        )}
+      </div>
+
+      <div className="stack">
+        <div className="grid kpis">
+          <Kpi icon={Send} tone="brand" label="Sent" value={num(r.sent)} sub={r.pending ? `${num(r.pending)} still waiting` : `of ${num(r.total)}`} />
+          <Kpi icon={CheckCheck} tone="wa" label="Delivered" value={`${pct(r.delivered, r.sent)}%`} sub={`${num(r.delivered)} phones`} />
+          <Kpi icon={Eye} tone="info" label="Read" value={`${pct(r.read, r.sent)}%`} sub={`${num(r.read)} customers`} />
+          <Kpi icon={MessageCircle} tone="gold" label="Replied" value={num(r.replied)} sub={<Link to="/inbox">Open inbox</Link>} />
+        </div>
+
+        <div className="card card-pad stack" style={{ gap: 12 }}>
+          <div className="row between wrap">
+            <h2>Where each message got to</h2>
+            <span className="row muted" style={{ gap: 6 }}><IndianRupee size={16} />Cost so far <b className="num" style={{ color: 'var(--text)' }}>{inr(r.cost)}</b></span>
+          </div>
+          <Funnel total={r.total} sent={r.sent} delivered={r.delivered} read={r.read} failed={r.failed} />
+          <div className="legend">
+            <span><i style={{ background: 'var(--read)' }} />Read {num(r.read)}</span>
+            <span><i style={{ background: 'var(--wa)' }} />Delivered, not read yet {num(r.delivered - r.read)}</span>
+            <span><i style={{ background: 'var(--text-3)', opacity: 0.45 }} />Sent, not delivered yet {num(r.sent - r.delivered)}</span>
+            {r.pending > 0 && <span><i style={{ background: 'var(--border)' }} />Waiting to send {num(r.pending)}</span>}
+            <span><i style={{ background: 'var(--bad)' }} />Failed {num(r.failed)}</span>
+            {r.cancelled > 0 && <span>Cancelled {num(r.cancelled)}</span>}
+          </div>
+        </div>
+
+        {r.failureReasons.length > 0 && (
+          <div className="card">
+            <div className="card-head"><h2>Why some failed</h2></div>
+            {r.failureReasons.map((f) => (
+              <div key={f.reason} className="list-item">
+                <AlertCircle size={18} style={{ color: 'var(--bad)', flexShrink: 0 }} />
+                <span style={{ flex: 1 }}>{f.reason}</span>
+                <b className="num">{num(f.count)}</b>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="card">
+          <div className="card-head" style={{ overflowX: 'auto' }}>
+            <div className="chips" style={{ flexWrap: 'nowrap' }}>
+              {TABS.map((t) => <button key={t.key} className={`chip ${tab === t.key ? 'on' : ''}`} onClick={() => { setTab(t.key); setMessages(null); }}>{t.label}</button>)}
+            </div>
+          </div>
+          {!messages ? (
+            <div style={{ padding: 20 }}><Spinner /></div>
+          ) : messages.length === 0 ? (
+            <p className="muted" style={{ padding: 20 }}>Nobody here yet.</p>
+          ) : (
+            <div className="table-wrap">
+              <table className="table">
+                <thead><tr><th>Customer</th><th>Status</th><th className="hide-mobile">Sent</th><th className="hide-mobile">Read</th></tr></thead>
+                <tbody>
+                  {messages.map((m) => (
+                    <tr key={m.id}>
+                      <td><b>{m.name || 'No name'}</b><div className="subtle num">{phone(m.phone)}</div></td>
+                      <td>
+                        <MessageStatus status={m.status} />
+                        {m.error_message && <div className="subtle" style={{ marginTop: 4, maxWidth: 360 }}>{m.error_message}</div>}
+                      </td>
+                      <td className="hide-mobile subtle">{dateTime(m.sent_at)}</td>
+                      <td className="hide-mobile subtle">{dateTime(m.read_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
