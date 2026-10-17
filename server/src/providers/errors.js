@@ -30,6 +30,8 @@ const FRIENDLY = {
   63049: "Meta chose not to deliver this marketing message (WhatsApp's per-user marketing limit).",
   // Meta Cloud API
   131026: 'This number cannot receive the message (not on WhatsApp or an old app).',
+  131030: 'This number is not on the test recipient list (Meta test number).',
+  131031: 'Meta has locked this WhatsApp Business account. Check Account quality in Meta Business Suite.',
   131047: 'More than 24 hours since the customer last wrote. Use an approved template.',
   131049: "Meta chose not to deliver this marketing message (WhatsApp's per-user marketing limit).",
   131050: 'The customer has stopped marketing messages from this business.',
