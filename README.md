@@ -2,7 +2,18 @@
 
 A web app for a jewellery franchise to send **personal, relevant WhatsApp offers** to its customers (up to 30,000 a month), track who received and read them, and answer replies in one shared inbox. SMS backup (MSG91) and automatic birthday/anniversary greetings come in later phases.
 
-> **Phase 1: core sending** (this version): staff login · customers from Excel, CSV, a form or pasted numbers · templates with placeholders and up to 2 buttons · 4-step campaign builder with live preview and cost · sending queue with retries and no double sends · delivered/read/failed report · shared inbox.
+> **Phase 1: core sending**: staff login · customers from Excel, CSV, a form or pasted numbers · templates with placeholders and up to 2 buttons · 4-step campaign builder with live preview and cost · sending queue with retries and no double sends · delivered/read/failed report · shared inbox.
+
+## Phases 2–5
+
+| Phase | What it adds | Where in the app |
+|---|---|---|
+| **2 · Go live on Meta** | Submit a template to Meta for approval from the template page and check its status; Meta sends are blocked until approved. Needs `META_WABA_ID`. | Templates → WhatsApp approval |
+| **3 · Occasions** | Birthday, anniversary and festival greetings sent every morning (India time) with no one touching the app; choose a week before, 3 days, the day before and/or on the day. Each greeting is keyed by occasion + customer + date, so it goes out once. `{{days_left}}` works in these messages. | Occasions |
+| **4 · SMS backup** | If WhatsApp says a number is not on WhatsApp, customers with SMS consent get the SMS version of the template (DLT wording + DLT template ID). `SMS_MODE=preview` (default) records the exact SMS without sending until DLT registration is approved; `SMS_MODE=msg91` sends through MSG91. | Templates → SMS version; campaign step 3; Occasions |
+| **5 · Sales-linked extras** | `{{offer_code}}` gives each customer a unique code (PRIYA-DIWALI-4821); staff enter it at billing with the bill amount, and reports show sales and return per campaign. Replies like “Interested” or a quick-reply tap open a **hot lead** to call. Weekly limit on marketing messages per customer. Import phone contacts (.vcf) and Google Sheets links. Roles: admin, manager, viewer; big sends by managers wait for an admin’s approval. | Offer codes · Hot leads · Settings · Add customers |
+
+Settings for these phases (all in `server/.env`, see `.env.example`): `META_WABA_ID`, `SMS_MODE`, `MSG91_AUTH_KEY`, `MSG91_SENDER_ID`, `SMS_COST_INR`, `OCCASION_CHECK_MINUTES`. The weekly limit (default 2) and approval size (default 500) are set by an admin under **Settings**.
 
 ## How it fits together
 
@@ -89,7 +100,7 @@ No other code changes. Test with a small send first: this adapter has not yet ru
 npm test
 ```
 
-75 tests across `server/test/`:
+93 tests across `server/test/`:
 
 | File | Covers |
 |---|---|
@@ -98,6 +109,7 @@ npm test
 | `queue.test.js` | queue de-duplication, back-off retries, rate limit, scheduled jobs; the full send pipeline: personalisation, skips, no double sends, temporary vs permanent failures, cancelled campaigns, status order |
 | `providers.test.js` | Twilio request, Content templates, error mapping, signature check, webhook parsing; Meta template payload, signature check, webhook parsing |
 | `api.test.js` | sign-in, import preview/commit, form, template validation, campaign preview and send, audience-changed guard, inbox, STOP opt-out, double-click reply |
+| `phases.test.js` | Meta template submission format; birthday on the day (once only), anniversary N days before, send time, 29 Feb; SMS fallback and SMS consent; unique offer codes and one-time redemption with revenue; hot leads and tags; weekly limit; viewer permissions; admin approval of big sends; staff management; .vcf and Google Sheets import |
 
 ## Project layout
 

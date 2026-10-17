@@ -150,6 +150,7 @@ function EditCustomer({ c, onClose, onSaved }) {
     name: c.name || '', city: c.city || '', last_purchase: c.last_purchase || '', interests: c.interests || '',
     birthday: c.birthday ? String(c.birthday).slice(0, 10) : '', anniversary: c.anniversary ? String(c.anniversary).slice(0, 10) : '',
     whatsapp_opt_in: c.whatsapp_opt_in && !c.opted_out_at,
+    sms_opt_in: Boolean(c.sms_opt_in),
   });
   const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }));
@@ -158,7 +159,7 @@ function EditCustomer({ c, onClose, onSaved }) {
   const save = async () => {
     setBusy(true);
     try {
-      const body = { name: f.name, city: f.city, last_purchase: f.last_purchase, interests: f.interests, birthday: f.birthday || null, anniversary: f.anniversary || null };
+      const body = { name: f.name, city: f.city, last_purchase: f.last_purchase, interests: f.interests, birthday: f.birthday || null, anniversary: f.anniversary || null, sms_opt_in: f.sms_opt_in };
       if (changedOpt) body.whatsapp_opt_in = f.whatsapp_opt_in;
       await api(`/api/customers/${c.id}`, { method: 'PATCH', body });
       toast('Customer saved');
@@ -205,6 +206,14 @@ function EditCustomer({ c, onClose, onSaved }) {
             <span className="hint" style={{ display: 'block' }}>Only switch on if the customer agreed. Customers who reply STOP are switched off automatically.</span>
           </span>
         </label>
+        <label className="check card card-pad" style={{ padding: 14 }}>
+          <span className="switch"><input type="checkbox" checked={f.sms_opt_in} onChange={set('sms_opt_in')} /><span /></span>
+          <span>
+            <b>Can receive SMS (backup)</b>
+            <span className="hint" style={{ display: 'block' }}>Used only when WhatsApp can’t reach them.</span>
+          </span>
+        </label>
+        {c.tags?.length > 0 && <div className="pill-list">{c.tags.map((t) => <span key={t} className="badge neutral">{t}</span>)}</div>}
       </div>
     </Modal>
   );

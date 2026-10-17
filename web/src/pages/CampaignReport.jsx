@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, CheckCheck, Eye, IndianRupee, MessageCircle, RefreshCw, Send, XCircle } from 'lucide-react';
+import { AlertCircle, ArrowLeft, CheckCheck, Eye, Flame, IndianRupee, MessageCircle, MessageSquareText, RefreshCw, Send, ShieldCheck, Ticket, XCircle } from 'lucide-react';
+import { useAuth } from '../lib/auth.js';
 import { api } from '../lib/api.js';
 import { Alert, CampaignStatus, Kpi, MessageStatus, Skeleton, Spinner, useToast } from '../components/ui.jsx';
 import { Funnel, PROVIDER_NAMES } from './Campaigns.jsx';
@@ -12,6 +13,7 @@ const TABS = [
   { key: 'delivered', label: 'Delivered' },
   { key: 'failed', label: 'Failed' },
   { key: 'pending', label: 'Waiting' },
+  { key: 'sms', label: 'SMS' },
 ];
 
 export default function CampaignReport() {
@@ -21,6 +23,8 @@ export default function CampaignReport() {
   const [tab, setTab] = useState('');
   const [messages, setMessages] = useState(null);
   const [cancelling, setCancelling] = useState(false);
+  const [approving, setApproving] = useState(false);
+  const { settings } = useAuth();
 
   const load = useCallback(() => {
     api(`/api/campaigns/${id}`).then(setData).catch((e) => setData({ error: e.message }));
@@ -38,6 +42,19 @@ export default function CampaignReport() {
     const t = setInterval(load, 4000);
     return () => clearInterval(t);
   }, [live, load]);
+
+  async function approve() {
+    setApproving(true);
+    try {
+      const r = await api(`/api/campaigns/${id}/approve`, { method: 'POST' });
+      toast(`Approved. Sending to ${plural(r.queued, 'customer')}.`);
+      load();
+    } catch (e) {
+      toast(e.message, 'bad');
+    } finally {
+      setApproving(false);
+    }
+  }
 
   async function cancel() {
     if (!confirm('Stop this campaign? Messages already sent cannot be taken back.')) return;
@@ -72,17 +89,31 @@ export default function CampaignReport() {
             {c.created_by_name ? ` by ${c.created_by_name}` : ''} · {c.template_name} · via {PROVIDER_NAMES[c.provider] || c.provider}
           </p>
         </div>
-        {['scheduled', 'sending'].includes(c.status) && (
-          <button className="btn danger" onClick={cancel} disabled={cancelling}>{cancelling ? <Spinner /> : <><XCircle size={18} />{c.status === 'scheduled' ? 'Cancel' : 'Stop sending'}</>}</button>
-        )}
+        <div className="row wrap">
+          {c.status === 'pending_approval' && settings?.role === 'admin' && (
+            <button className="btn wa" onClick={approve} disabled={approving}>{approving ? <Spinner /> : <><ShieldCheck size={18} />Approve and send</>}</button>
+          )}
+          {['scheduled', 'sending', 'pending_approval'].includes(c.status) && (
+            <button className="btn danger" onClick={cancel} disabled={cancelling}>{cancelling ? <Spinner /> : <><XCircle size={18} />{c.status === 'sending' ? 'Stop sending' : 'Cancel'}</>}</button>
+          )}
+        </div>
       </div>
 
       <div className="stack">
+        {c.status === 'pending_approval' && (
+          <Alert tone="warn" icon={ShieldCheck}>
+            <b>Waiting for the owner’s approval.</b> It goes to about {num(c.expected_count)} customers ({inr((c.expected_count || 0) * Number(c.cost_per_message))}). Nothing has been sent yet.
+          </Alert>
+        )}
         <div className="grid kpis">
           <Kpi icon={Send} tone="brand" label="Sent" value={num(r.sent)} sub={r.pending ? `${num(r.pending)} still waiting` : `of ${num(r.total)}`} />
           <Kpi icon={CheckCheck} tone="wa" label="Delivered" value={`${pct(r.delivered, r.sent)}%`} sub={`${num(r.delivered)} phones`} />
           <Kpi icon={Eye} tone="info" label="Read" value={`${pct(r.read, r.sent)}%`} sub={`${num(r.read)} customers`} />
           <Kpi icon={MessageCircle} tone="gold" label="Replied" value={num(r.replied)} sub={<Link to="/inbox">Open inbox</Link>} />
+          <Kpi icon={Flame} tone="bad" label="Hot leads" value={num(r.leads)} sub={<Link to="/leads">Call list</Link>} />
+          <Kpi icon={Ticket} tone="brand" label="Bought with code" value={num(r.redeemed)} sub={`${inr(r.revenue)} in sales`} />
+          <Kpi icon={IndianRupee} tone="gold" label="Return" value={r.cost ? `${num(Math.round(r.revenue / r.cost))}×` : '—'} sub={`${inr(r.cost)} spent`} />
+          <Kpi icon={MessageSquareText} tone="info" label="SMS backup" value={num(r.sms_total)} sub={r.sms_preview ? `${num(r.sms_preview)} preview only (no DLT yet)` : c.sms_fallback ? 'On' : 'Off'} />
         </div>
 
         <div className="card card-pad stack" style={{ gap: 12 }}>
@@ -131,9 +162,9 @@ export default function CampaignReport() {
                 <tbody>
                   {messages.map((m) => (
                     <tr key={m.id}>
-                      <td><b>{m.name || 'No name'}</b><div className="subtle num">{phone(m.phone)}</div></td>
+                      <td><b>{m.name || 'No name'}</b><div className="subtle num">{phone(m.phone)}{m.offer_code ? ` · ${m.offer_code}` : ''}</div></td>
                       <td>
-                        <MessageStatus status={m.status} />
+                        {m.channel === 'sms' && <span className="badge info" style={{ marginRight: 6 }}>SMS</span>}<MessageStatus status={m.status} />
                         {m.error_message && <div className="subtle" style={{ marginTop: 4, maxWidth: 360 }}>{m.error_message}</div>}
                       </td>
                       <td className="hide-mobile subtle">{dateTime(m.sent_at)}</td>

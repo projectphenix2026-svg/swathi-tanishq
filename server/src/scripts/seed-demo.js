@@ -50,5 +50,49 @@ if (!n) {
     [clientId],
   );
 }
+// Phases 3-5 demo: anniversaries, SMS consent, a few birthdays today and next week, greetings.
+await query(
+  `UPDATE contacts SET anniversary = make_date(2010 + (id % 12), ((id * 5) % 12) + 1, (id % 27) + 1),
+                       sms_opt_in = (id % 3 = 0)
+    WHERE client_id = $1 AND tags @> ARRAY['demo'] AND anniversary IS NULL`,
+  [clientId],
+);
+const today = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+const md = (d) => [d.getMonth() + 1, d.getDate()];
+const in7 = new Date(today.getTime() + 7 * 864e5);
+await query(
+  `UPDATE contacts SET birthday = make_date(1990 + (id % 10), $2, $3)
+    WHERE client_id = $1 AND tags @> ARRAY['demo'] AND id IN (SELECT id FROM contacts WHERE client_id = $1 ORDER BY id LIMIT 3)`,
+  [clientId, ...md(today)],
+);
+await query(
+  `UPDATE contacts SET anniversary = make_date(2015, $2, $3)
+    WHERE client_id = $1 AND tags @> ARRAY['demo'] AND id IN (SELECT id FROM contacts WHERE client_id = $1 ORDER BY id OFFSET 3 LIMIT 4)`,
+  [clientId, ...md(in7)],
+);
+const { rows: [{ n: occ }] } = await query('SELECT count(*)::int AS n FROM occasions WHERE client_id = $1', [clientId]);
+if (!occ) {
+  const { rows: [bday] } = await query(
+    `INSERT INTO templates (client_id, name, category, body, buttons, status, sms_body) VALUES
+     ($1, 'Birthday gift', 'utility',
+      'Happy birthday {{name}}! To celebrate, here is {{offer}} on anything you pick this month. Show code {{offer_code}} at the counter.',
+      '[{"type":"quick_reply","text":"Book a visit"},{"type":"quick_reply","text":"Not now"}]', 'approved',
+      'Happy birthday {{name}}! {{offer}} this month at Swathi Tanishq. Code {{offer_code}}. -SWATHI') RETURNING id`,
+    [clientId],
+  );
+  const { rows: [anniv] } = await query(
+    `INSERT INTO templates (client_id, name, category, body, buttons, status) VALUES
+     ($1, 'Anniversary gift reminder', 'utility',
+      'Hi {{name}}, your anniversary is in {{days_left}} days. Surprise your partner: {{offer}} with code {{offer_code}}.',
+      '[{"type":"quick_reply","text":"Interested"},{"type":"quick_reply","text":"Not now"}]', 'approved') RETURNING id`,
+    [clientId],
+  );
+  await query(
+    `INSERT INTO occasions (client_id, name, kind, days_before, send_hour, template_id, variables, sms_fallback) VALUES
+     ($1, 'Birthday', 'birthday', '{0}', 10, $2, '{"offer":"a free silver coin"}', true),
+     ($1, 'Anniversary', 'anniversary', '{7}', 11, $3, '{"offer":"15% off making charges"}', false)`,
+    [clientId, bday.id, anniv.id],
+  );
+}
 console.log(`Demo data ready (${added} new customers).`);
 await closeDb();

@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  AlertTriangle, ArrowLeft, CheckCircle2, ClipboardPaste, Copy, Download, FileSpreadsheet, RefreshCw, Send, Upload, UserPlus, XCircle,
+  AlertTriangle, ArrowLeft, CheckCircle2, ClipboardPaste, Copy, Download, FileSpreadsheet, MessageSquareText, RefreshCw, Send, Table, Upload, UserPlus, XCircle,
 } from 'lucide-react';
 import { normalizePhone } from '@shared/phone.js';
 import { api, fileUrl } from '../lib/api.js';
@@ -9,7 +9,8 @@ import { Alert, Field, Spinner, useToast } from '../components/ui.jsx';
 import { num, plural } from '../lib/format.js';
 
 const TABS = [
-  { key: 'file', label: 'Excel or CSV', icon: FileSpreadsheet },
+  { key: 'file', label: 'Excel, CSV or contacts', icon: FileSpreadsheet },
+  { key: 'sheet', label: 'Google Sheet', icon: Table },
   { key: 'paste', label: 'Type or paste numbers', icon: ClipboardPaste },
   { key: 'one', label: 'One customer', icon: UserPlus },
 ];
@@ -48,6 +49,7 @@ export default function AddCustomers() {
             ))}
           </div>
           {tab === 'file' && <FileStep onPreview={setPreview} />}
+          {tab === 'sheet' && <SheetStep onPreview={setPreview} />}
           {tab === 'paste' && <PasteStep onPreview={setPreview} />}
           {tab === 'one' && <OneCustomer />}
         </div>
@@ -65,8 +67,8 @@ function FileStep({ onPreview }) {
 
   async function upload(file) {
     if (!file) return;
-    if (!/\.(xlsx|xls|csv)$/i.test(file.name)) {
-      toast('Please choose an Excel (.xlsx, .xls) or CSV file.', 'bad');
+    if (!/\.(xlsx|xls|csv|vcf)$/i.test(file.name)) {
+      toast('Please choose an Excel (.xlsx, .xls), CSV or phone contacts (.vcf) file.', 'bad');
       return;
     }
     setBusy(true);
@@ -96,8 +98,8 @@ function FileStep({ onPreview }) {
       >
         <div className="icon">{busy ? <Spinner size={26} /> : <Upload size={26} />}</div>
         <h2>{busy ? 'Reading your file…' : 'Drop your customer file here'}</h2>
-        <p className="muted">or <b style={{ color: 'var(--brand)' }}>choose a file</b> · Excel (.xlsx, .xls) or CSV · up to 50,000 rows</p>
-        <input ref={input} type="file" accept=".xlsx,.xls,.csv" hidden onChange={(e) => upload(e.target.files[0])} />
+        <p className="muted">or <b style={{ color: 'var(--brand)' }}>choose a file</b> · Excel (.xlsx, .xls), CSV or phone contacts (.vcf) · up to 50,000 rows</p>
+        <input ref={input} type="file" accept=".xlsx,.xls,.csv,.vcf" hidden onChange={(e) => upload(e.target.files[0])} />
       </div>
       <div className="card card-pad row between wrap">
         <div className="row">
@@ -110,6 +112,35 @@ function FileStep({ onPreview }) {
         <a className="btn" href={fileUrl('/api/customers/sample.xlsx')}><Download size={18} />Sample Excel file</a>
       </div>
     </div>
+  );
+}
+
+/* ---------- Google Sheet link ---------- */
+function SheetStep({ onPreview }) {
+  const toast = useToast();
+  const [url, setUrl] = useState('');
+  const [busy, setBusy] = useState(false);
+  async function check(e) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      const r = await api('/api/customers/import/preview', { method: 'POST', body: { sheetUrl: url } });
+      onPreview({ ...r, source: 'Google Sheet' });
+    } catch (err) {
+      toast(err.message, 'bad');
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <form className="card card-pad stack" onSubmit={check}>
+      <Field label="Google Sheets link" hint="In Google Sheets, click Share and choose “Anyone with the link can view”, then copy the link. The first row should have column names.">
+        <input className="input" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://docs.google.com/spreadsheets/d/…" inputMode="url" autoFocus />
+      </Field>
+      <div className="row" style={{ justifyContent: 'flex-end' }}>
+        <button className="btn primary" disabled={!url.trim() || busy}>{busy ? <Spinner /> : 'Read the sheet'}</button>
+      </div>
+    </form>
   );
 }
 
@@ -165,6 +196,7 @@ function ImportReview({ preview, onBack, onDone, onRemap }) {
   const toast = useToast();
   const [show, setShow] = useState(preview.summary.invalid ? 'invalid' : 'all');
   const [optIn, setOptIn] = useState(true);
+  const [smsOptIn, setSmsOptIn] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [updateExisting, setUpdateExisting] = useState(false);
   const [source, setSource] = useState(preview.source);
@@ -199,7 +231,7 @@ function ImportReview({ preview, onBack, onDone, onRemap }) {
     try {
       const r = await api('/api/customers/import/commit', {
         method: 'POST',
-        body: { rows: preview.rows, optIn: { confirmed: optIn ? confirmed : true, value: optIn }, updateExisting, source, tags: tags.split(',') },
+        body: { rows: preview.rows, optIn: { confirmed: optIn || smsOptIn ? confirmed : true, value: optIn, sms: smsOptIn }, updateExisting, source, tags: tags.split(',') },
       });
       onDone(r);
     } catch (e) {
@@ -293,14 +325,21 @@ function ImportReview({ preview, onBack, onDone, onRemap }) {
             </span>
           </span>
         </label>
-        {optIn && (
+        <label className="check">
+          <input type="checkbox" checked={smsOptIn} onChange={(e) => setSmsOptIn(e.target.checked)} />
+          <span>
+            <b>They also agreed to get SMS</b>
+            <span className="hint" style={{ display: 'block' }}>Used only as a backup for customers who are not on WhatsApp.</span>
+          </span>
+        </label>
+        {(optIn || smsOptIn) && (
           <>
             <Field label="Where did they agree?" hint="Saved with each customer as proof of consent.">
               <input className="input" value={source} onChange={(e) => setSource(e.target.value)} placeholder="e.g. Billing counter form, Diwali 2026" />
             </Field>
             <label className="check alert warn" style={{ cursor: 'pointer' }}>
               <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
-              <span>I confirm these customers gave permission to receive WhatsApp offers.</span>
+              <span>I confirm these customers gave permission to receive {optIn && smsOptIn ? 'WhatsApp and SMS' : smsOptIn ? 'SMS' : 'WhatsApp'} offers.</span>
             </label>
           </>
         )}
@@ -322,7 +361,7 @@ function ImportReview({ preview, onBack, onDone, onRemap }) {
 
       <div className="action-bar">
         <button className="btn ghost" onClick={onBack}><ArrowLeft size={18} />Start over</button>
-        <button className="btn primary lg" onClick={save} disabled={busy || !willAdd || (optIn && !confirmed)}>
+        <button className="btn primary lg" onClick={save} disabled={busy || !willAdd || ((optIn || smsOptIn) && !confirmed)}>
           {busy ? <Spinner /> : willAdd ? `Add ${plural(willAdd, 'customer')}` : 'Nothing to add'}
         </button>
       </div>
@@ -353,7 +392,7 @@ function ImportDone({ result, onAgain }) {
 }
 
 /* ---------- One customer ---------- */
-const EMPTY = { name: '', phone: '', city: '', last_purchase: '', interests: '', birthday: '', anniversary: '', whatsapp_opt_in: true, opt_in_source: 'Agreed at the store' };
+const EMPTY = { name: '', phone: '', city: '', last_purchase: '', interests: '', birthday: '', anniversary: '', whatsapp_opt_in: true, sms_opt_in: false, opt_in_source: 'Agreed at the store' };
 
 function OneCustomer() {
   const toast = useToast();
@@ -409,7 +448,11 @@ function OneCustomer() {
         <span className="switch"><input type="checkbox" checked={f.whatsapp_opt_in} onChange={set('whatsapp_opt_in')} /><span /></span>
         <span><b>Customer agreed to receive WhatsApp offers</b><span className="hint" style={{ display: 'block' }}>Without this, they are saved but never sent campaigns.</span></span>
       </label>
-      {f.whatsapp_opt_in && (
+      <label className="check">
+        <span className="switch"><input type="checkbox" checked={f.sms_opt_in} onChange={set('sms_opt_in')} /><span /></span>
+        <span><b>Customer agreed to receive SMS</b><span className="hint" style={{ display: 'block' }}>Only used as a backup if they are not on WhatsApp.</span></span>
+      </label>
+      {(f.whatsapp_opt_in || f.sms_opt_in) && (
         <Field label="How did they agree?"><input className="input" value={f.opt_in_source} onChange={set('opt_in_source')} /></Field>
       )}
       {!f.name.trim() && touched && <Alert tone="warn" icon={AlertTriangle}>A name lets every message start with “Hi Priya”, not a generic greeting.</Alert>}
