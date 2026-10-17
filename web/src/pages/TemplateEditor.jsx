@@ -205,7 +205,7 @@ export default function TemplateEditor() {
                     <option value="draft">Draft (cannot be sent)</option>
                   </select>
                 </Field>
-                <Field label="Meta template name" hint="Needed only when sending through Meta’s WhatsApp Cloud API: the name of the matching template Meta approved.">
+                <Field label="Approved template ID" hint="Twilio: the Content template SID (HX…). Meta Cloud API: the approved template’s name. Needed when the sender only accepts approved templates.">
                   <input className="input" value={t.provider_ref} onChange={(e) => set({ provider_ref: e.target.value })} placeholder="e.g. past_buyers_offer" />
                 </Field>
               </div>

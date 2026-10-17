@@ -3,6 +3,7 @@
 // so buttons are written as tappable lines under the message.
 import crypto from 'node:crypto';
 import { ProviderError, isRetryableHttp, friendlyError } from './errors.js';
+import { extractVariables } from '../lib/template.js';
 
 const API = 'https://api.twilio.com/2010-04-01';
 
@@ -23,12 +24,23 @@ export function createTwilioProvider(cfg, { publicBaseUrl, fetchImpl = fetch } =
       ].filter(Boolean);
     },
 
-    async send({ to, body, buttons = [], imageUrl }) {
+    /**
+     * With a Twilio Content template (template.provider_ref = "HX..."), sends ContentSid and the
+     * placeholder values as {{1}}, {{2}}... in order; real WhatsApp buttons come from the template.
+     * Otherwise sends free text, which WhatsApp only allows inside a 24-hour chat window.
+     */
+    async send({ to, body, buttons = [], imageUrl, template, values }) {
       const form = new URLSearchParams();
       form.set('To', `whatsapp:${to}`);
       form.set('From', from);
-      form.set('Body', withButtons(body, buttons));
-      if (imageUrl) form.set('MediaUrl', imageUrl);
+      if (/^HX[0-9a-f]{32}$/i.test(template?.provider_ref || '')) {
+        form.set('ContentSid', template.provider_ref);
+        const vars = Object.fromEntries(extractVariables(template.body).map((k, i) => [String(i + 1), String(values?.[k] ?? '')]));
+        if (Object.keys(vars).length) form.set('ContentVariables', JSON.stringify(vars));
+      } else {
+        form.set('Body', withButtons(body, buttons));
+        if (imageUrl) form.set('MediaUrl', imageUrl);
+      }
       if (publicBaseUrl) form.set('StatusCallback', `${publicBaseUrl}/webhooks/twilio`);
 
       let res;

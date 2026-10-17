@@ -73,6 +73,8 @@ Set `PUBLIC_BASE_URL` to the `https://…trycloudflare.com` address, restart, an
 
 The sandbox shows buttons as links under the message; real WhatsApp buttons need approved templates (Meta, or Twilio Content API).
 
+**Senders that only accept templates.** Some Twilio senders (including newer sandboxes) reject free text with error **21654 "ContentSid Required"**. Put the Twilio Content template SID (`HX…`) in the template's **Approved template ID** field (More options): the app then sends `ContentSid` with the placeholders as `{{1}}`, `{{2}}`… in the order they appear. Creating your own Content templates needs an upgraded (paid) Twilio account; trial accounts get error 20003 and can only send Twilio's sample templates.
+
 ## Switching to Meta's WhatsApp Cloud API later
 
 1. Create the Meta app and WhatsApp Business account; note the phone number ID, a permanent access token and the app secret.

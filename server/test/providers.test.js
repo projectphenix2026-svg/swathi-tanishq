@@ -32,6 +32,17 @@ describe('Twilio adapter', () => {
     expect(form.get('StatusCallback')).toBe('https://api.example.com/webhooks/twilio');
   });
 
+  it('sends a Content template with placeholders as numbered variables', async () => {
+    const fetchImpl = fakeFetch(201, { sid: 'SM9', status: 'queued' });
+    const p = createTwilioProvider(cfg, { fetchImpl });
+    const template = { body: 'Hi {{name}}, {{offer}} till {{offer_ends}}.', provider_ref: 'HX' + 'a'.repeat(32) };
+    await p.send({ to: '+919876543210', body: 'ignored', template, values: { name: 'Priya', offer: '20% off', offer_ends: '31 Oct' } });
+    const form = new URLSearchParams(fetchImpl.calls[0].init.body);
+    expect(form.get('ContentSid')).toBe(template.provider_ref);
+    expect(JSON.parse(form.get('ContentVariables'))).toEqual({ 1: 'Priya', 2: '20% off', 3: '31 Oct' });
+    expect(form.get('Body')).toBeNull();
+  });
+
   it('turns errors into plain reasons and marks only temporary ones for retry', async () => {
     const perm = createTwilioProvider(cfg, { fetchImpl: fakeFetch(400, { code: 21211, message: 'Invalid To' }) });
     await expect(perm.send({ to: '+91', body: 'x' })).rejects.toMatchObject({ retryable: false, message: 'The phone number is not valid.' });

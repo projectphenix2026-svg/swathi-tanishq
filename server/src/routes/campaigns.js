@@ -108,7 +108,7 @@ router.get('/:id/messages', async (req, res) => {
   else if (status === 'delivered') cond = ` AND m.status IN ('delivered', 'read')`;
   else if (status === 'pending') cond = ` AND m.status IN ('queued', 'retrying', 'sending')`;
   const { rows } = await query(
-    `SELECT m.id, m.status, m.error_message, m.sent_at, m.delivered_at, m.read_at, m.failed_at, m.attempts,
+    `SELECT m.id, m.status, m.error_code, m.error_message, m.sent_at, m.delivered_at, m.read_at, m.failed_at, m.attempts,
             ct.id AS contact_id, ct.name, ct.phone
        FROM messages m JOIN contacts ct ON ct.id = m.contact_id
       WHERE m.campaign_id = $1 AND m.client_id = $2${cond}

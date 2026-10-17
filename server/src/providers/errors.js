@@ -20,6 +20,7 @@ const FRIENDLY = {
   21211: 'The phone number is not valid.',
   21408: 'Twilio account is not allowed to send to this region.',
   21610: 'The customer has blocked messages from this number (replied STOP).',
+  21654: 'This WhatsApp sender only accepts approved templates. Add the Twilio Content template ID (HX…) to the template.',
   63003: 'This number is not on WhatsApp.',
   63007: 'The WhatsApp sender number is not set up in Twilio.',
   63015: "This phone hasn't joined the Twilio sandbox yet. Ask the customer to send the join code first.",
