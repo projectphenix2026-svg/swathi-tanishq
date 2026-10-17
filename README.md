@@ -89,14 +89,14 @@ No other code changes. Test with a small send first: this adapter has not yet ru
 npm test
 ```
 
-74 tests across `server/test/`:
+75 tests across `server/test/`:
 
 | File | Covers |
 |---|---|
 | `phone.test.js` | +91 E.164 normalisation: spaces, dashes, 0 / 91 / 0091 prefixes, Excel numbers and scientific notation, landlines, too short / long |
 | `importer.test.js` | CSV (BOM, quoted commas, no header), .xlsx and .xls, column guessing, Indian date formats, opt-in words, duplicates in file and already saved, pasted lists |
 | `queue.test.js` | queue de-duplication, back-off retries, rate limit, scheduled jobs; the full send pipeline: personalisation, skips, no double sends, temporary vs permanent failures, cancelled campaigns, status order |
-| `providers.test.js` | Twilio request, error mapping, signature check, webhook parsing; Meta template payload, signature check, webhook parsing |
+| `providers.test.js` | Twilio request, Content templates, error mapping, signature check, webhook parsing; Meta template payload, signature check, webhook parsing |
 | `api.test.js` | sign-in, import preview/commit, form, template validation, campaign preview and send, audience-changed guard, inbox, STOP opt-out, double-click reply |
 
 ## Project layout
