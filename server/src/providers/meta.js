@@ -38,11 +38,11 @@ export function createMetaProvider(cfg, { fetchImpl = fetch } = {}) {
     label: 'Meta WhatsApp Cloud API',
     stub: true,
 
+    // Sending needs only the token and number ID; META_APP_SECRET is needed to accept webhooks.
     missingConfig() {
       return [
         !accessToken && 'META_ACCESS_TOKEN',
         !phoneNumberId && 'META_PHONE_NUMBER_ID',
-        !appSecret && 'META_APP_SECRET',
       ].filter(Boolean);
     },
 

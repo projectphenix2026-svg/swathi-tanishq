@@ -48,7 +48,7 @@ export const config = {
     phoneNumberId: env.META_PHONE_NUMBER_ID || '',
     appSecret: env.META_APP_SECRET || '',
     verifyToken: env.META_WEBHOOK_VERIFY_TOKEN || '',
-    graphVersion: env.META_GRAPH_VERSION || 'v21.0',
+    graphVersion: env.META_GRAPH_VERSION || 'v25.0',
   },
 };
 
