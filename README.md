@@ -118,6 +118,6 @@ index.html         the original starter page
 
 ## Deploying (outline)
 
-- **Web:** Cloudflare Pages with root directory `web`, build command `npm run build`, output `dist`, and `VITE_API_URL` set to the API's address. (Today the Pages project serves the starter `index.html` from the repo root; change its build settings when moving to the app.)
+- **Web:** Cloudflare (Workers Builds, already linked to this repo) reads `wrangler.jsonc`: it runs `npm run build` and serves `web/dist`. Set `VITE_API_URL` in the Cloudflare build settings to the API's address; until then the deployed site shows the sign-in page but cannot reach an API.
 - **API:** Render, Railway or a small VM with `NODE_ENV=production`, `DATABASE_URL`, `REDIS_URL`, `WEB_ORIGIN` = the Pages address, `PUBLIC_BASE_URL` = the API address. Cookies are `Secure; SameSite=None` in production, so both must be on HTTPS.
 - Keep secrets in the host's secret settings, never in the repo.
