@@ -3,6 +3,7 @@ import { query, batch, NOW } from '../db/index.js';
 import { normalizePhone } from '../lib/phone.js';
 import { parseDate, sheetsCsvUrl, ImportError } from '../lib/import-basics.js';
 import { requireRole } from './auth.js';
+import { offersThisWeekSql, lastOfferSql } from '../lib/campaigns.js';
 
 const router = express.Router();
 const canEdit = requireRole('admin', 'manager');
@@ -34,7 +35,8 @@ router.get('/', async (req, res) => {
   if (filter === 'sms') where.push('sms_opt_in = 1 AND opted_out_at IS NULL');
   const w = where.join(' AND ');
   const { rows } = await query(
-    `SELECT * FROM contacts WHERE ${w} ORDER BY ${SORTS[sort] || SORTS.recent}, id DESC LIMIT ${limit} OFFSET ${offset}`,
+    `SELECT *${req.query.offers ? `, ${offersThisWeekSql()} AS offers_this_week, ${lastOfferSql()} AS last_offer` : ''}
+       FROM contacts c WHERE ${w} ORDER BY ${SORTS[sort] || SORTS.recent}, id DESC LIMIT ${limit} OFFSET ${offset}`,
     params,
   );
   const { rows: [{ total }] } = await query(`SELECT count(*) AS total FROM contacts WHERE ${w}`, params);

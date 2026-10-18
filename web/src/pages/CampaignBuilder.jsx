@@ -7,7 +7,7 @@ import { useAuth } from '../lib/auth.js';
 import { Alert, Avatar, Field, Pic, Spinner, useToast } from '../components/ui.jsx';
 import { PhonePreview } from '../components/PhonePreview.jsx';
 import { ProviderBanner } from './Dashboard.jsx';
-import { dateTime, inr, num, phone, plural, rate } from '../lib/format.js';
+import { ago, dateTime, inr, num, phone, plural, rate } from '../lib/format.js';
 import { READY_MESSAGES } from '../lib/ready.js';
 import { LANGS, readyIn } from '../lib/ready-lang.js';
 import { toFriendly } from '../lib/friendly.js';
@@ -86,7 +86,7 @@ export default function CampaignBuilder() {
   const rendered = template && values ? render(template.body, values) : null;
 
   const stepError = [
-    preview && preview.eligible === 0 ? (isSms ? 'No customers in this group have agreed to SMS yet.' : 'No customers in this group can receive WhatsApp yet.') : preview && preview.sendable === 0 && preview.atCap > 0 ? 'Everyone in this group already got this week’s offers. Try again in a few days, or the owner can raise the weekly limit in Settings.' : audience.mode === 'selected' && !audience.contactIds.length ? 'Pick at least one customer.' : null,
+    audience.mode === 'selected' && !audience.contactIds.length ? 'Pick at least one customer.' : preview && preview.eligible === 0 ? (isSms ? 'No customers in this group have agreed to SMS yet.' : 'No customers in this group can receive WhatsApp yet.') : preview && preview.sendable === 0 && preview.atCap > 0 ? 'Everyone in this group already got this week’s offers. Try again in a few days, or the owner can raise the weekly limit in Settings.' : audience.mode === 'selected' && !audience.contactIds.length ? 'Pick at least one customer.' : null,
     !template ? 'Choose a message.' : isSms && !template.sms_body ? 'This message has no SMS version yet. Pick a ready-made message or add one on its page.' : neededCampaignVars.find((v) => !String(variables[v.key] || '').trim()) ? `Fill in the ${neededCampaignVars.find((v) => !String(variables[v.key] || '').trim()).label.toLowerCase()}.` : sendCount === 0 ? 'None of these customers have the details this message needs.' : null,
     when.mode === 'later' && (!when.at || new Date(when.at).getTime() < Date.now()) ? 'Pick a time in the future.' : null,
     !name.trim() ? 'Give this offer a name.' : sendCount >= 500 && !bigOk ? 'Tick the box to confirm this large send.' : null,
@@ -225,20 +225,46 @@ function CostCard({ preview, sendCount, cost, loading, hasTemplate, isSms }) {
   );
 }
 
+/** Who already got this week's offers: named, with their last offer, so nobody wonders where they went. */
+function AlreadyGot({ preview }) {
+  const people = preview.atCapPeople || [];
+  const offers = preview.weeklyCap === 1 ? 'an offer' : `${preview.weeklyCap} offers`;
+  return (
+    <div className="stack-sm" style={{ background: 'var(--warn-soft)', border: '1px solid #f1d9a6', borderRadius: 10, padding: '10px 12px', color: 'var(--text)' }}>
+      <b>{preview.atCap === 1 ? '1 customer already got' : `${num(preview.atCap)} customers already got`} {offers} this week, so they are skipped</b>
+      {people.map((c) => (
+        <span key={c.id} className="row" style={{ gap: 8, alignItems: 'center' }}>
+          <Avatar name={c.name} seed={c.phone} size={24} />
+          <span><b>{c.name || phone(c.phone)}</b>{c.lastOffer && <span className="subtle"> · last offer “{c.lastOffer}”, {ago(c.lastAt)}</span>}</span>
+        </span>
+      ))}
+      {preview.atCap > people.length && <span className="subtle">and {num(preview.atCap - people.length)} more</span>}
+      <span className="subtle">
+        WhatsApp can block shops that send too many offers, so each customer gets at most {offers} in 7 days. They can get offers again in a few days.
+        The owner can change this limit in <Link to="/settings">Settings</Link>.
+      </span>
+    </div>
+  );
+}
+
 /** Why some customers in the group will not get this offer, one line per reason. */
 function LeftOut({ preview, isSms }) {
   const details = preview.eligible - preview.sendable - (preview.atCap || 0);
   const lines = [
-    preview.atCap > 0 && `${plural(preview.atCap, 'customer')} already got ${preview.weeklyCap === 1 ? 'an offer' : `${preview.weeklyCap} offers`} in the last 7 days. The weekly limit keeps the shop’s WhatsApp number safe; they can get offers again in a few days.`,
     preview.no_opt_in > 0 && `${plural(preview.no_opt_in, 'customer')} ${preview.no_opt_in === 1 ? 'has' : 'have'} not agreed to ${isSms ? 'SMS' : 'WhatsApp'} messages.`,
     preview.opted_out > 0 && `${plural(preview.opted_out, 'customer')} said STOP.`,
     details > 0 && `${plural(details, 'customer')} ${details === 1 ? 'is' : 'are'} missing details this message needs (for example their last purchase).`,
   ].filter(Boolean);
-  if (!lines.length) return null;
+  if (!lines.length && !preview.atCap) return null;
   return (
-    <div className="stack-sm subtle">
-      <b style={{ color: 'var(--text)' }}>Left out ({num(preview.matched - preview.sendable)})</b>
-      {lines.map((l) => <span key={l}>• {l}</span>)}
+    <div className="stack-sm">
+      {preview.atCap > 0 && <AlreadyGot preview={preview} />}
+      {lines.length > 0 && (
+        <div className="stack-sm subtle">
+          <b style={{ color: 'var(--text)' }}>Also left out</b>
+          {lines.map((l) => <span key={l}>• {l}</span>)}
+        </div>
+      )}
     </div>
   );
 }
@@ -309,7 +335,7 @@ function WhoStep({ t, channel, setChannel, audience, setAudience, picked, setPic
       )}
 
       {audience.mode === 'selected' && (
-        <PickCustomers picked={picked} onChange={(list) => { setPicked(list); set({ contactIds: list.map((c) => c.id) }); }} />
+        <PickCustomers weeklyCap={preview?.weeklyCap} isSms={channel === 'sms'} picked={picked} onChange={(list) => { setPicked(list); set({ contactIds: list.map((c) => c.id) }); }} />
       )}
 
       {preview && (
@@ -324,15 +350,15 @@ function WhoStep({ t, channel, setChannel, audience, setAudience, picked, setPic
   );
 }
 
-function PickCustomers({ picked, onChange }) {
+function PickCustomers({ picked, onChange, weeklyCap, isSms }) {
   const [q, setQ] = useState('');
   const [results, setResults] = useState([]);
   useEffect(() => {
     const t = setTimeout(() => {
-      api(`/api/customers?${new URLSearchParams({ q, filter: 'opted_in', limit: 8, sort: 'name' })}`).then((r) => setResults(r.customers)).catch(() => {});
+      api(`/api/customers?${new URLSearchParams({ q, filter: isSms ? 'sms' : 'opted_in', limit: 8, sort: 'name', offers: 1 })}`).then((r) => setResults(r.customers)).catch(() => {});
     }, 200);
     return () => clearTimeout(t);
-  }, [q]);
+  }, [q, isSms]);
   const ids = new Set(picked.map((p) => p.id));
   return (
     <div className="stack" style={{ gap: 10 }}>
@@ -353,7 +379,14 @@ function PickCustomers({ picked, onChange }) {
           <label key={c.id} className="list-item" style={{ cursor: 'pointer' }}>
             <input type="checkbox" checked={ids.has(c.id)} onChange={() => onChange(ids.has(c.id) ? picked.filter((p) => p.id !== c.id) : [...picked, c])} style={{ width: 18, height: 18, accentColor: 'var(--brand)' }} />
             <Avatar name={c.name} seed={c.phone} size={32} />
-            <div><b>{c.name || 'No name'}</b><div className="subtle num">{phone(c.phone)}</div></div>
+            <div style={{ minWidth: 0 }}>
+              <b>{c.name || 'No name'}</b><div className="subtle num">{phone(c.phone)}</div>
+              {!isSms && weeklyCap > 0 && c.offers_this_week >= weeklyCap && (
+                <div style={{ color: 'var(--warn)', fontSize: '.85rem', fontWeight: 600 }}>
+                  Already got {plural(c.offers_this_week, 'offer')} this week{c.last_offer ? ` (last: “${c.last_offer.split('|')[0]}”)` : ''}. Will be skipped.
+                </div>
+              )}
+            </div>
           </label>
         ))}
       </div>
