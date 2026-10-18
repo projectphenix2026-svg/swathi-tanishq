@@ -4,6 +4,8 @@ import { normalizePhone } from '../lib/phone.js';
 import { parseDate, sheetsCsvUrl, ImportError } from '../lib/import-basics.js';
 import { requireRole } from './auth.js';
 import { offersThisWeekSql, lastOfferSql } from '../lib/campaigns.js';
+import { addSamples, countSamples, removeSamples } from '../lib/samples.js';
+import { getProvider } from '../providers/index.js';
 
 const router = express.Router();
 const canEdit = requireRole('admin', 'manager');
@@ -68,6 +70,18 @@ router.get('/summary', async (req, res) => {
     [req.clientId],
   );
   res.json({ ...s, cities: cities.map((c) => ({ city: titleCase(c.city), count: c.count })), tags });
+});
+
+// Sample customers for Test mode: add five (only in test mode), or remove them.
+router.get('/samples', async (req, res) => {
+  res.json({ samples: await countSamples(req.clientId) });
+});
+router.post('/samples', canEdit, async (req, res) => {
+  if (getProvider().name !== 'mock') return res.status(400).json({ error: 'Sample customers are only for Test mode.' });
+  res.status(201).json({ samples: await addSamples(req.clientId) });
+});
+router.delete('/samples', canEdit, async (req, res) => {
+  res.json({ removed: await removeSamples(req.clientId) });
 });
 
 // One customer from the form.

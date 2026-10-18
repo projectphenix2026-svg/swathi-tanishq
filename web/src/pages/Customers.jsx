@@ -23,9 +23,14 @@ export default function Customers() {
   const [data, setData] = useState(null);
   const [page, setPage] = useState(0);
   const [editing, setEditing] = useState(null);
+  const [samples, setSamples] = useState(0);
+  const { settings: appSettings } = useAuth();
+  const testMode = appSettings?.provider?.name === 'mock';
+  const toastList = useToast();
 
   const reload = () => {
     api('/api/customers/summary').then(setSummary).catch(() => {});
+    api('/api/customers/samples').then((r) => setSamples(r.samples)).catch(() => {});
     const params = new URLSearchParams({ filter, q, limit: PAGE, offset: page * PAGE });
     api(`/api/customers?${params}`).then(setData).catch(() => setData({ customers: [], total: 0 }));
   };
@@ -38,6 +43,16 @@ export default function Customers() {
 
   useEffect(() => setPage(0), [filter, q]);
 
+  async function samplesAction(add) {
+    try {
+      await api('/api/customers/samples', { method: add ? 'POST' : 'DELETE' });
+      toastList(add ? '5 sample customers added' : 'Sample customers removed');
+      reload();
+    } catch (e) {
+      toastList(e.message, 'bad');
+    }
+  }
+
   if (summary && summary.total === 0) {
     return (
       <div className="page">
@@ -49,11 +64,12 @@ export default function Customers() {
             actions={
               <>
                 <Link to="/customers/add" className="btn primary"><UserPlus size={18} />Add customers</Link>
-                <button className="btn" onClick={downloadSample}><Download size={18} />Sample Excel file</button>
+                {testMode && <button className="btn" onClick={() => samplesAction(true)}>Try with 5 sample customers</button>}
+                <button className="btn ghost" onClick={downloadSample}><Download size={18} />Sample Excel file</button>
               </>
             }
           >
-            Upload the customer list you already have (Excel or CSV), or add people one by one. Download the sample file to see which columns help personalise messages.
+            Every message and wish goes to this list. Bring in your Excel list, or add people one by one.
           </Empty>
         </div>
       </div>
@@ -65,12 +81,18 @@ export default function Customers() {
       <div className="page-head">
         <div>
           <h1>Customers</h1>
-          <p>{summary ? `${num(summary.opted_in)} of ${num(summary.total)} can receive WhatsApp offers` : ' '}</p>
+          <p>{summary ? `${num(summary.opted_in)} of ${num(summary.total)} can receive WhatsApp messages` : ' '}</p>
         </div>
         <Link to="/customers/add" className="btn primary"><UserPlus size={18} />Add customers</Link>
       </div>
 
       <div className="stack">
+        {samples > 0 && (
+          <div className="alert info row wrap" style={{ gap: 8 }}>
+            <span style={{ flex: '1 1 260px' }}><b>{samples} sample customers</b> are here to try things out. They are removed when you go live.</span>
+            <button className="btn sm" onClick={() => samplesAction(false)}>Remove them now</button>
+          </div>
+        )}
         <div className="input-icon">
           <Search size={18} />
           <input className="input" placeholder="Search by name, phone, city or purchase" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search customers" />
@@ -102,7 +124,7 @@ export default function Customers() {
                           <div className="row" style={{ gap: 10 }}>
                             <Avatar name={c.name} seed={c.phone} size={34} />
                             <div>
-                              <b>{c.name || <span className="muted">No name</span>}</b>
+                              <b>{c.name || <span className="muted">No name</span>}</b>{c.tags?.includes('sample') && <span className="badge neutral" style={{ marginLeft: 6 }}>Sample</span>}
                               {c.interests && <div className="subtle">{c.interests}</div>}
                             </div>
                           </div>

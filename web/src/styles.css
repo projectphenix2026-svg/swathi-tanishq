@@ -673,3 +673,23 @@ a.chart-card:hover { border-color: var(--brand); }
 .gs-step.next .tick { background: var(--brand); color: #fff; }
 @media (min-width: 900px) { .home-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 560px) { .kpi-row { grid-template-columns: repeat(2, minmax(0, 1fr)); } .kpi-row > :last-child:nth-child(odd) { grid-column: span 2; } }
+
+/* ---------- Mode bar, welcome, go live (redesign stage 6) ---------- */
+.mode-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 7px 16px; font-size: 0.85rem; border-bottom: 1px solid var(--border); }
+.mode-bar a { font-weight: 600; margin-left: auto; }
+.mode-bar.test { background: var(--warn-soft); color: #7a4d00; }
+.mode-bar.live { background: var(--ok-soft); color: var(--ok); }
+.mode-bar.bad { background: var(--bad-soft); color: var(--bad); }
+@media (min-width: 900px) { .mode-bar { padding: 7px 36px; } }
+.modal.welcome { max-width: 760px; }
+.welcome-body { padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; }
+.welcome-cards { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+.welcome-card { position: relative; display: flex; flex-direction: column; gap: 6px; padding: 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); }
+.welcome-n { position: absolute; top: 10px; right: 12px; font-weight: 700; color: var(--text-3); }
+.go-live { display: flex; flex-direction: column; gap: 12px; border-color: var(--warn); }
+.go-live.is-live { border-color: var(--ok); }
+.gl-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.gl-steps li { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; }
+.gl-steps .tick { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-2); color: var(--text-2); font-weight: 700; font-size: 0.8rem; flex-shrink: 0; }
+.gl-steps li.done .tick { background: var(--ok); color: #fff; }
+.gl-steps li.done b { color: var(--text-2); }

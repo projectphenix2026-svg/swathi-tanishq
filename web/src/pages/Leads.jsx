@@ -65,7 +65,7 @@ export default function Leads() {
           <div className="stack" style={{ padding: 20 }}>{[0, 1, 2].map((i) => <Skeleton key={i} h={56} />)}</div>
         ) : data.leads.length === 0 ? (
           <Empty icon={Flame} title={tab ? 'Nobody here yet' : 'No one to call right now'}>
-            {tab ? 'Leads move here when you mark them.' : 'Keep the “Interested” button on your templates. Everyone who taps it shows up here.'}
+            {tab ? 'Customers move here when you mark them.' : 'Customers who tap “Interested” on a message show up here, so you can call them.'}
           </Empty>
         ) : (
           data.leads.map((l) => (

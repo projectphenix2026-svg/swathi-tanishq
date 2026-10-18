@@ -6,6 +6,7 @@ import { query, NOW } from '../db/index.js';
 import { seal } from '../lib/secretbox.js';
 import { checkMeta, loadConnection, refreshProvider } from '../lib/whatsapp-connection.js';
 import { requireRole } from './auth.js';
+import { removeSamples } from '../lib/samples.js';
 
 const router = express.Router();
 router.use(requireRole('admin'));
@@ -39,8 +40,24 @@ function view(c, req) {
 
 router.get('/', async (req, res) => {
   const { rows: [c] } = await query('SELECT * FROM whatsapp_connection WHERE client_id = $1', [req.clientId]);
-  res.json(view(c, req));
+  res.json({ ...view(c, req), ready: await readiness(req.clientId, c) });
 });
+
+// For the Go live checklist: templates approved by Meta, and a test sent since connecting.
+async function readiness(clientId, c) {
+  const { rows: [t] } = await query(
+    `SELECT count(*) FILTER (WHERE provider_status = 'APPROVED') AS approved,
+            count(*) FILTER (WHERE provider_ref IS NOT NULL AND (provider_status IS NULL OR provider_status = 'PENDING')) AS waiting,
+            count(*) AS total
+       FROM templates WHERE client_id = $1`,
+    [clientId],
+  );
+  const { rows: [test] } = await query(
+    `SELECT max(created_at) AS at FROM campaigns WHERE client_id = $1 AND name LIKE 'Test · %' AND provider = 'meta' AND created_at >= $2`,
+    [clientId, c?.checked_at || '9999'],
+  );
+  return { templates: t, testSentAt: test?.at || null };
+}
 
 // Check the details with Meta and save them. The key may be left blank to keep the saved one.
 router.post('/connect', async (req, res) => {
@@ -85,8 +102,10 @@ router.post('/live', async (req, res) => {
     [req.clientId, live, req.user.id],
   );
   if (!c) return res.status(400).json({ error: 'Connect the WhatsApp account first.' });
+  // Going live: the sample customers from Test mode go away.
+  const removedSamples = live ? await removeSamples(req.clientId) : 0;
   await refreshProvider({ force: true });
-  res.json(view(c, req));
+  res.json({ ...view(c, req), removedSamples });
 });
 
 // Remove the saved details; the app goes back to test mode.

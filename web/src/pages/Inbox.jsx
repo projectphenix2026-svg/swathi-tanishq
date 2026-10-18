@@ -42,8 +42,8 @@ export default function Inbox() {
         {!list ? (
           <div style={{ padding: 20 }}><Spinner /></div>
         ) : list.length === 0 ? (
-          <Empty icon={InboxIcon} title={filter === 'unread' ? 'All caught up' : 'No replies yet'}>
-            {filter === 'unread' ? 'Every reply has been read.' : 'When customers reply to an offer or tap a button, their message shows up here.'}
+          <Empty icon={InboxIcon} title={filter === 'unread' ? 'All caught up' : 'No replies yet'} actions={filter === 'unread' ? null : <Link to="/campaigns/new" className="btn primary">Send a message</Link>}>
+            {filter === 'unread' ? 'Every reply has been read.' : 'When customers reply to a message, you answer them here. Replies within 24 hours are free.'}
           </Empty>
         ) : (
           list.map((c) => (

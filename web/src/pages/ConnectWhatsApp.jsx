@@ -162,25 +162,7 @@ export function ConnectWhatsApp() {
           </div>
         )}
 
-        {c.connected && (
-          c.live ? (
-            askOff ? (
-              <Alert tone="warn" action={<div className="row" style={{ gap: 8 }}><button className="btn" onClick={() => setAskOff(false)}>Keep on</button><button className="btn danger" onClick={() => setLive(false)} disabled={busy === 'live'}>Yes, stop</button></div>}>
-                Stop real sending? Offers will go back to test mode and nothing reaches phones.
-              </Alert>
-            ) : (
-              <div className="row between wrap" style={{ gap: 10 }}>
-                <span className="row" style={{ gap: 8 }}><Check size={18} style={{ color: 'var(--ok)' }} /><b>Real messages are going out from {c.phone || 'this number'}.</b></span>
-                <button className="btn" onClick={() => setAskOff(true)}><Power size={16} />Back to test mode</button>
-              </div>
-            )
-          ) : (
-            <div className="alert warn" style={{ alignItems: 'center' }}>
-              <div style={{ flex: 1 }}><b>Ready when you are.</b> Until you switch this on, the app stays in test mode and nothing reaches customers. Send a test to your own phone first.</div>
-              <button className="btn wa lg" onClick={() => setLive(true)} disabled={busy === 'live'}>{busy === 'live' ? <Spinner /> : <><Power size={18} />Start real sending</>}</button>
-            </div>
-          )
-        )}
+        {c.connected && <p className="subtle">{c.live ? `Real messages go out from ${c.phone || 'this number'}.` : 'Connected. Switch to Live with the Go live checklist above.'}</p>}
       </div>
     </div>
   );

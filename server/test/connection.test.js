@@ -93,10 +93,15 @@ describe('Connect WhatsApp (owner only)', () => {
     expect(bad.status).toBe(403);
   });
 
-  it('switches real sending on and off', async () => {
+  it('switches real sending on and off; going live removes the sample customers', async () => {
     expect(getProvider().name).toBe('mock');
+    expect((await owner.post('/api/customers/samples')).body.samples).toBe(5);
+    expect((await owner.get('/api/customers?q=Priya')).body.customers[0].tags).toContain('sample');
+    expect((await owner.get('/api/whatsapp')).body.ready).toMatchObject({ testSentAt: null });
     const on = await owner.post('/api/whatsapp/live').send({ live: true });
-    expect(on.body.live).toBe(true);
+    expect(on.body).toMatchObject({ live: true, removedSamples: 5 });
+    expect((await owner.get('/api/customers/samples')).body.samples).toBe(0);
+    expect((await owner.post('/api/customers/samples')).status).toBe(400);
     expect(getProvider().name).toBe('meta');
     const settings = await owner.get('/api/dashboard/settings');
     expect(settings.body.provider.name).toBe('meta');

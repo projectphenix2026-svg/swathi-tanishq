@@ -21,7 +21,7 @@ const TE = {
   Home: 'హోమ్', Send: 'పంపండి', 'Send a message': 'సందేశం పంపండి', 'Sent messages': 'పంపిన సందేశాలు', Customers: 'కస్టమర్లు', Replies: 'జవాబులు',
   'Special days': 'ప్రత్యేక రోజులు', Templates: 'టెంప్లేట్‌లు', Interested: 'ఆసక్తి ఉన్నవారు', Chats: 'చాట్‌లు', 'Sales codes': 'సేల్స్ కోడ్‌లు', Settings: 'సెట్టింగ్‌లు',
   Menu: 'మెనూ', 'Sign out': 'సైన్ అవుట్', Owner: 'యజమాని', Staff: 'సిబ్బంది', 'Test mode': 'టెస్ట్ మోడ్', Live: 'లైవ్', 'WhatsApp not connected': 'వాట్సాప్ కనెక్ట్ కాలేదు',
-  'Test mode: nothing is sent': 'టెస్ట్ మోడ్: ఏదీ పంపబడదు', 'WhatsApp messages': 'వాట్సాప్ సందేశాలు', Language: 'భాష',
+  'Test mode: nothing is sent': 'టెస్ట్ మోడ్: ఏదీ పంపబడదు', 'Messages are pretend: nothing reaches real phones.': 'సందేశాలు నిజమైనవి కావు: నిజమైన ఫోన్‌లకు ఏదీ వెళ్లదు.', 'Messages go to real customers.': 'సందేశాలు నిజమైన కస్టమర్లకు వెళ్తాయి.', 'Go live': 'లైవ్‌కు వెళ్లండి', 'Fix in Settings': 'సెట్టింగ్‌లలో సరిచేయండి', 'WhatsApp messages': 'వాట్సాప్ సందేశాలు', Language: 'భాష',
   'Customers who tapped “Interested”. Call them today, while they’re keen.': '“ఆసక్తి ఉంది” నొక్కిన కస్టమర్లు. ఈ రోజే కాల్ చేయండి.',
   // Home
   'Good morning, {name}': 'శుభోదయం, {name}', 'Good afternoon, {name}': 'నమస్కారం, {name}', 'Good evening, {name}': 'శుభ సాయంత్రం, {name}',
@@ -63,7 +63,7 @@ const HI = {
   Home: 'होम', Send: 'भेजें', 'Send a message': 'संदेश भेजें', 'Sent messages': 'भेजे गए संदेश', Customers: 'ग्राहक', Replies: 'जवाब',
   'Special days': 'खास दिन', Templates: 'टेम्पलेट', Interested: 'रुचि वाले', Chats: 'चैट', 'Sales codes': 'सेल्स कोड', Settings: 'सेटिंग्स',
   Menu: 'मेनू', 'Sign out': 'साइन आउट', Owner: 'मालिक', Staff: 'स्टाफ़', 'Test mode': 'टेस्ट मोड', Live: 'लाइव', 'WhatsApp not connected': 'व्हाट्सऐप नहीं जुड़ा',
-  'Test mode: nothing is sent': 'टेस्ट मोड: कुछ नहीं भेजा जाता', 'WhatsApp messages': 'व्हाट्सऐप संदेश', Language: 'भाषा',
+  'Test mode: nothing is sent': 'टेस्ट मोड: कुछ नहीं भेजा जाता', 'Messages are pretend: nothing reaches real phones.': 'संदेश असली नहीं हैं: असली फ़ोन तक कुछ नहीं जाता।', 'Messages go to real customers.': 'संदेश असली ग्राहकों तक जाते हैं।', 'Go live': 'लाइव करें', 'Fix in Settings': 'सेटिंग्स में ठीक करें', 'WhatsApp messages': 'व्हाट्सऐप संदेश', Language: 'भाषा',
   'Customers who tapped “Interested”. Call them today, while they’re keen.': 'जिन ग्राहकों ने “रुचि है” दबाया। आज ही कॉल करें।',
   'Good morning, {name}': 'सुप्रभात, {name}', 'Good afternoon, {name}': 'नमस्ते, {name}', 'Good evening, {name}': 'शुभ संध्या, {name}',
   'Here’s what needs you today.': 'आज आपके लिए ये काम हैं।', 'What to do today': 'आज क्या करना है',

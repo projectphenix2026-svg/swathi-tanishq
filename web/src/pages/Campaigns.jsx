@@ -41,7 +41,7 @@ export default function Campaigns() {
       ) : list.length === 0 ? (
         <div className="card">
           <Empty icon={Send} title="Nothing sent yet" actions={<Link to="/campaigns/new" className="btn primary"><Plus size={18} />Send your first message</Link>}>
-            Pick a template, pick customers, check how it looks and what it costs, and send. It takes a few minutes.
+            Everything you send shows here, with how many read it and replied.
           </Empty>
         </div>
       ) : (
