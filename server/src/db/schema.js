@@ -219,4 +219,6 @@ export const EXTRA_COLUMNS = {
   clients: [['last_export_at', 'TEXT']],
   // How an offer is sent: 'whatsapp' (optionally with SMS backup) or 'sms' (bulk SMS).
   campaigns: [['channel', "TEXT NOT NULL DEFAULT 'whatsapp'"]],
+  // A shop event (festival, sale, store anniversary) that comes back on the same date every year.
+  occasions: [['repeat_yearly', 'INTEGER NOT NULL DEFAULT 0']],
 };

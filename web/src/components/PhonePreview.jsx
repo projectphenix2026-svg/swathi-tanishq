@@ -50,23 +50,47 @@ export function PhonePreview({ body, values, buttons = [], imageUrl, businessNam
   );
 }
 
-function Highlighted({ body, values }) {
-  if (!values) return body;
-  const parts = [];
-  let last = 0;
-  for (const m of body.matchAll(PLACEHOLDER)) {
-    parts.push(body.slice(last, m.index));
-    const key = m[1].toLowerCase();
-    const v = values[key];
-    parts.push(
-      v ? (
-        <span className="var" key={m.index} title={`{{${key}}}`}>{v}</span>
+const MARK = /\u0001(\d+)\u0002/;
+// WhatsApp formatting: *bold*, _italic_, ~strike~ (no space just inside the markers).
+const STYLE = /([*_~])(?=\S)([^\n]*?\S)\1(?!\w)/;
+const TAGS = { '*': 'b', _: 'i', '~': 's' };
+
+/**
+ * The message as WhatsApp shows it: bold, italic, strike and line breaks, with each
+ * customer's own details highlighted (gold) or flagged when missing (red).
+ */
+export function Highlighted({ body, values }) {
+  const vars = [];
+  // Placeholders become markers first, so names like {{offer_ends}} are not read as _italic_.
+  const text = String(body || '').replace(PLACEHOLDER, (_, k) => {
+    vars.push(k.toLowerCase());
+    return `\u0001${vars.length - 1}\u0002`;
+  });
+  let n = 0;
+  const leaf = (str) =>
+    str.split(/(\u0001\d+\u0002)/).map((part) => {
+      const m = part.match(MARK);
+      if (!m) return part;
+      const key = vars[Number(m[1])];
+      const v = values?.[key];
+      if (!values) return `{{${key}}}`;
+      return v ? (
+        <span className="var" key={`v${n++}`} title={`{{${key}}}`}>{v}</span>
       ) : (
-        <span className="var missing" key={m.index} title="No value for this customer">{`{{${key}}}`}</span>
-      ),
-    );
-    last = m.index + m[0].length;
-  }
-  parts.push(body.slice(last));
-  return parts;
+        <span className="var missing" key={`v${n++}`} title="No value for this customer">{`{{${key}}}`}</span>
+      );
+    });
+  const format = (str) => {
+    const out = [];
+    let rest = str;
+    for (let m = rest.match(STYLE); m; m = rest.match(STYLE)) {
+      out.push(...leaf(rest.slice(0, m.index)));
+      const Tag = TAGS[m[1]];
+      out.push(<Tag key={`f${n++}`}>{format(m[2])}</Tag>);
+      rest = rest.slice(m.index + m[0].length);
+    }
+    out.push(...leaf(rest));
+    return out;
+  };
+  return format(text);
 }

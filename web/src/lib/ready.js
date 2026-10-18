@@ -7,36 +7,46 @@ export const READY_MESSAGES = [
     key: 'diwali', emoji: '🪔', pic: 'diya', title: 'Diwali', when: 'Oct–Nov', codeWord: 'DIWALI',
     offer: '20% off making charges',
     sms: 'Hi {{name}}, Diwali offer at {{store}}: {{offer}} till {{offer_ends}}. Code {{offer_code}}. -SWATHI',
-    body: 'Hi {{name}}, Diwali greetings from {{store}}! Light up the festival with our new gold and diamond designs. For you: {{offer}}, till {{offer_ends}}. Show your code {{offer_code}} at billing.',
+    body: "Hi {{name}} 🪔\n\n*Diwali greetings from {{store}}!*\nLight up the festival with our new gold and diamond designs.\n\n*Your offer:* {{offer}}\n*Valid till:* {{offer_ends}}\n*Your code:* {{offer_code}}\n\nShow this code at billing. We look forward to welcoming you.",
   },
   {
     key: 'dhanteras', emoji: '💰', pic: 'moneybag', title: 'Dhanteras', when: '2 days before Diwali', codeWord: 'DHAN',
     offer: 'no making charges on gold coins',
     sms: 'Hi {{name}}, Dhanteras at {{store}}: {{offer}} till {{offer_ends}}. Code {{offer_code}}. -SWATHI',
-    body: 'Hi {{name}}, Dhanteras is the most auspicious day to bring gold home. At {{store}}: {{offer}}, till {{offer_ends}}. Your code: {{offer_code}}. Tap Interested and we will keep your favourite designs ready.',
+    body: "Hi {{name}} ✨\n\n*Dhanteras is the most auspicious day to bring gold home.*\n\n*At {{store}}:* {{offer}}\n*Valid till:* {{offer_ends}}\n*Your code:* {{offer_code}}\n\nTap *Interested* and we will keep your favourite designs ready.",
   },
   {
     key: 'akshaya', emoji: '🌼', pic: 'blossom', title: 'Akshaya Tritiya', when: 'April–May', codeWord: 'AKSHAYA',
     offer: '15% off making charges',
     sms: 'Hi {{name}}, Akshaya Tritiya gold offer at {{store}}: {{offer}} till {{offer_ends}}. Code {{offer_code}}. -SWATHI',
-    body: 'Hi {{name}}, gold bought on Akshaya Tritiya is said to bring lasting prosperity. Book your gold at {{store}} with {{offer}}, valid till {{offer_ends}}. Your code: {{offer_code}}.',
+    body: "Hi {{name}} 🌼\n\nGold bought on *Akshaya Tritiya* is said to bring lasting prosperity.\n\n*Your offer:* {{offer}}\n*Valid till:* {{offer_ends}}\n*Your code:* {{offer_code}}\n\nBook your gold at {{store}} today.",
   },
   {
     key: 'new', emoji: '✨', pic: 'sparkles', title: 'New collection', when: 'Any time', codeWord: 'NEW',
     offer: 'a free gift with every purchase',
     sms: 'Hi {{name}}, our new collection is in at {{store}}. {{offer}} till {{offer_ends}}. -SWATHI',
-    body: 'Hi {{name}}, our new collection has arrived, with pieces that pair beautifully with your {{last_purchase}}. Come and see them at {{store}}: {{offer}} till {{offer_ends}}.',
+    body: "Hi {{name}} ✨\n\n*Our new collection has arrived!*\nPieces that pair beautifully with your {{last_purchase}}.\n\n*Just for you:* {{offer}}\n*Valid till:* {{offer_ends}}\n\nCome and see them at {{store}}.",
   },
   {
     key: 'rate', emoji: '📉', pic: 'chartdown', title: 'Gold rate dropped', when: 'When rates fall', codeWord: 'GOLD',
     offer: 'today’s lower rate locked for 3 days',
     sms: 'Hi {{name}}, gold rates are down this week. {{store}}: {{offer}} till {{offer_ends}}. Code {{offer_code}}. -SWATHI',
-    body: 'Hi {{name}}, good news: gold rates have come down this week, so it is a good time to buy the piece you had in mind. At {{store}}: {{offer}}, till {{offer_ends}}. Your code: {{offer_code}}.',
+    body: "Hi {{name}},\n\n*Good news: gold rates have come down this week.*\nA good time to buy the piece you had in mind.\n\n*At {{store}}:* {{offer}}\n*Valid till:* {{offer_ends}}\n*Your code:* {{offer_code}}\n\nTap *Interested* and we will call you.",
   },
   {
     key: 'wedding', emoji: '💍', pic: 'ring', title: 'Wedding season', when: 'Nov–Feb, Apr–Jun', codeWord: 'BRIDAL',
     offer: '10% off bridal sets',
     sms: 'Hi {{name}}, bridal sets at {{store}}: {{offer}} till {{offer_ends}}. Book a visit. -SWATHI',
-    body: 'Hi {{name}}, planning a wedding in the family? Our bridal sets are here, in gold, diamond and polki. Book a relaxed viewing at {{store}} and get {{offer}} till {{offer_ends}}.',
+    body: "Hi {{name}} 💍\n\n*Planning a wedding in the family?*\nOur bridal sets are here, in gold, diamond and polki.\n\n*Your offer:* {{offer}}\n*Valid till:* {{offer_ends}}\n\nBook a relaxed viewing at {{store}}. Tap *Interested* and we will call you.",
   },
 ].map((m) => ({ ...m, name: `${m.emoji} ${m.title}`, buttons: BUTTONS }));
+
+// The first, one-paragraph versions. A saved copy still using one is updated to the formatted text.
+export const OLD_READY_BODIES = new Set([
+  'Hi {{name}}, Diwali greetings from {{store}}! Light up the festival with our new gold and diamond designs. For you: {{offer}}, till {{offer_ends}}. Show your code {{offer_code}} at billing.',
+  'Hi {{name}}, Dhanteras is the most auspicious day to bring gold home. At {{store}}: {{offer}}, till {{offer_ends}}. Your code: {{offer_code}}. Tap Interested and we will keep your favourite designs ready.',
+  'Hi {{name}}, gold bought on Akshaya Tritiya is said to bring lasting prosperity. Book your gold at {{store}} with {{offer}}, valid till {{offer_ends}}. Your code: {{offer_code}}.',
+  'Hi {{name}}, our new collection has arrived, with pieces that pair beautifully with your {{last_purchase}}. Come and see them at {{store}}: {{offer}} till {{offer_ends}}.',
+  'Hi {{name}}, good news: gold rates have come down this week, so it is a good time to buy the piece you had in mind. At {{store}}: {{offer}}, till {{offer_ends}}. Your code: {{offer_code}}.',
+  'Hi {{name}}, planning a wedding in the family? Our bridal sets are here, in gold, diamond and polki. Book a relaxed viewing at {{store}} and get {{offer}} till {{offer_ends}}.',
+]);

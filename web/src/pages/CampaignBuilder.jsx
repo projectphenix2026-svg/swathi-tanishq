@@ -8,7 +8,7 @@ import { Alert, Avatar, Field, Pic, Spinner, useToast } from '../components/ui.j
 import { PhonePreview } from '../components/PhonePreview.jsx';
 import { ProviderBanner } from './Dashboard.jsx';
 import { ago, dateTime, inr, num, phone, plural, rate } from '../lib/format.js';
-import { READY_MESSAGES } from '../lib/ready.js';
+import { OLD_READY_BODIES, READY_MESSAGES } from '../lib/ready.js';
 import { LANGS, readyIn } from '../lib/ready-lang.js';
 import { toFriendly } from '../lib/friendly.js';
 import { PhotoPicker } from '../components/PhotoPicker.jsx';
@@ -425,9 +425,10 @@ function MessageStep({ t, templates, templateId, setTemplateId, setTemplates, ch
       if (!t) {
         ({ template: t } = await api('/api/templates', { method: 'POST', body: { name: r.name, body: r.body, sms_body: r.sms, buttons: r.buttons, language: r.language, category: 'marketing', status: 'approved' } }));
         setTemplates((list) => [t, ...list]);
-      } else if (!t.sms_body && r.sms) {
-        // Saved before SMS versions existed: add it now.
-        ({ template: t } = await api(`/api/templates/${t.id}`, { method: 'PUT', body: { ...t, sms_body: r.sms } }));
+      } else if ((!t.sms_body && r.sms) || OLD_READY_BODIES.has(t.body)) {
+        // Saved before SMS versions or the formatted text existed (and not edited since): update it.
+        const body = OLD_READY_BODIES.has(t.body) ? r.body : t.body;
+        ({ template: t } = await api(`/api/templates/${t.id}`, { method: 'PUT', body: { ...t, body, sms_body: t.sms_body || r.sms } }));
         setTemplates((list) => list.map((x) => (x.id === t.id ? t : x)));
       }
       setTemplateId(t.id);

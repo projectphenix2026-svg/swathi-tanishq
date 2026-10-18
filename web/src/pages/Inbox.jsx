@@ -6,6 +6,7 @@ import { useAuth } from '../lib/auth.js';
 import { Avatar, Empty, SectionTabs, Spinner, useToast } from '../components/ui.jsx';
 import { useT } from '../lib/i18n.jsx';
 import { ago, dateOnly, phone, timeOnly } from '../lib/format.js';
+import { Highlighted } from '../components/PhonePreview.jsx';
 
 const QUICK = ['Thank you! We will call you shortly.', 'Yes, the offer is valid all week.', 'You are welcome to visit us any day, 10 am – 9 pm.'];
 
@@ -162,7 +163,7 @@ function Thread({ contactId, onChange }) {
                 {m.direction === 'outbound' && (m.campaign_name || m.sent_by_name) && (
                   <span className="tag">{m.campaign_name ? `Offer: ${m.campaign_name}` : `Reply by ${m.sent_by_name}`}</span>
                 )}
-                {m.body}
+                <Highlighted body={m.body} values={{}} />
                 {m.buttons?.length > 0 && (
                   <span style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6 }}>
                     {m.buttons.map((b, i) => (

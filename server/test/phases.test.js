@@ -156,6 +156,29 @@ describe('Phase 3: occasions', () => {
     expect((await runOccasion(o, { force: true })).queued).toBe(1);
   });
 
+  it('sends a yearly shop event on the same date every year, and a one-off event only once', async () => {
+    await contact('Event', '+919000022222');
+    const t = await template('Hi {{name}}, it is our shop anniversary, come and celebrate.');
+    const { rows: [yearly] } = await query(
+      `INSERT INTO occasions (client_id, name, kind, festival_date, days_before, template_id, repeat_yearly) VALUES ($1, 'Shop anniversary', 'festival', '2025-12-01', '[0]', $2, 1) RETURNING *`,
+      [clientId, t.id],
+    );
+    const { rows: [once] } = await query(
+      `INSERT INTO occasions (client_id, name, kind, festival_date, days_before, template_id) VALUES ($1, 'Sale', 'festival', '2025-12-01', '[0]', $2) RETURNING *`,
+      [clientId, t.id],
+    );
+    const dec1 = new Date('2027-12-01T12:00:00+05:30');
+    expect((await runOccasion(yearly, { now: dec1, force: true })).queued).toBeGreaterThan(0);
+    expect((await runOccasion(once, { now: dec1, force: true })).queued).toBe(0);
+    expect((await runOccasion(yearly, { now: new Date('2027-12-02T12:00:00+05:30'), force: true })).queued).toBe(0);
+    const list = await upcoming(clientId, yearly, 10, new Date('2027-11-25T12:00:00+05:30'));
+    expect(list[0]).toMatchObject({ occasionDate: '2027-12-01', before: 0 });
+    // Saved through the API, the switch is kept.
+    const agent = await login('admin@example.com');
+    const r = await agent.post('/api/occasions').send({ name: 'New Year', kind: 'festival', festival_date: '2027-01-01', days_before: [0], template_id: t.id, repeat_yearly: true });
+    expect(r.body.occasion.repeat_yearly).toBe(true);
+  });
+
   it('greets 29 February birthdays on 28 February in other years', async () => {
     await contact('Leap', '+919811122233', { birthday: '2000-02-29' });
     const t = await template('Hi {{name}}, happy birthday, here is a little gift.', { category: 'utility' });

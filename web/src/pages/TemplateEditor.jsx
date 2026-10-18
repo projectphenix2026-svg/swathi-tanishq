@@ -59,6 +59,19 @@ export default function TemplateEditor() {
     });
   }
 
+  // WhatsApp formatting: wraps the selected words in *bold* or _italic_ (or adds empty markers).
+  function wrap(mark) {
+    const el = textRef.current;
+    const start = el?.selectionStart ?? shown.length;
+    const end = el?.selectionEnd ?? shown.length;
+    const picked = shown.slice(start, end).trim() || (mark === '*' ? 'bold words' : 'slanted words');
+    set({ body: fromFriendly(shown.slice(0, start) + mark + picked + mark + shown.slice(end)) });
+    requestAnimationFrame(() => {
+      el?.focus();
+      el?.setSelectionRange(start + 1, start + 1 + picked.length);
+    });
+  }
+
   function setButton(i, patch) {
     set({ buttons: t.buttons.map((b, j) => (j === i ? { ...b, ...patch } : b)) });
   }
@@ -136,7 +149,12 @@ export default function TemplateEditor() {
                   </button>
                 ))}
               </div>
-              <textarea ref={textRef} className="textarea" rows={7} value={shown} onChange={(e) => set({ body: fromFriendly(e.target.value) })} placeholder="Hi [Customer name], ..." />
+              <div className="row wrap" style={{ gap: 6, alignItems: 'center' }}>
+                <button type="button" className="btn sm" onClick={() => wrap('*')} title="Bold: select words, then click"><b>B</b> Bold</button>
+                <button type="button" className="btn sm" onClick={() => wrap('_')} title="Slanted: select words, then click"><i>I</i> Slanted</button>
+                <span className="hint">Select words and click to make them stand out. Press Enter for a new line. The phone shows how it looks.</span>
+              </div>
+              <textarea ref={textRef} className="textarea" rows={10} value={shown} onChange={(e) => set({ body: fromFriendly(e.target.value) })} placeholder="Hi [Customer name], ..." />
               <div className="row between">
                 <span className="hint">Tap a detail above to add it where your cursor is. Each customer gets their own.</span>
                 <span className="subtle num" style={{ color: t.body.length > 1024 ? 'var(--bad)' : undefined }}>{t.body.length} / 1024</span>

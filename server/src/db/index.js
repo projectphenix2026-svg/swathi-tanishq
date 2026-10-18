@@ -8,7 +8,7 @@ import { SCHEMA, CONNECTION_TABLE, MEDIA_TABLE, EXTRA_COLUMNS } from './schema.j
 let impl = null;
 
 const JSON_COLS = new Set(['buttons', 'template_buttons', 'audience', 'variables', 'template_values', 'tags', 'days_before']);
-const BOOL_COLS = new Set(['whatsapp_opt_in', 'sms_opt_in', 'enabled', 'sms_fallback']);
+const BOOL_COLS = new Set(['whatsapp_opt_in', 'sms_opt_in', 'enabled', 'sms_fallback', 'repeat_yearly']);
 
 /** SQL for "now" and "N units ago" as ISO text, matching how times are stored. */
 export const NOW = `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`;
