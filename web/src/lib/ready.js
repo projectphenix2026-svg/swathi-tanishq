@@ -79,7 +79,7 @@ export const READY_WISHES = {
   },
   anniversary: {
     name: '💐 Anniversary wish', pic: 'ring',
-    body: 'Happy anniversary, {{name}}! 💐\n\nWishing you both many more happy years together, from all of us at {{store}}.\n\n*Your anniversary gift:* {{offer}}\n*Valid till:* {{offer_ends}}',
+    body: 'Happy anniversary, {{name}}! 💐\n\nWishing you both many more happy years together, from all of us at {{store}}.\n\n*Your anniversary gift:* {{offer}}\n*Valid till:* {{offer_ends}}\n\nWe look forward to seeing you both.',
     sms: 'Happy anniversary {{name}}! Gift at {{store}}: {{offer}} till {{offer_ends}}. -SWATHI',
     offer: '10% off making charges',
   },
@@ -90,7 +90,7 @@ export const READY_WISHES = {
   },
   festival: {
     name: '✨ Festival greeting', pic: 'sparkles',
-    body: 'Hi {{name}} ✨\n\n*Warm wishes from {{store}}!*\nMay this festival bring joy and prosperity to your home.\n\n*Festive offer:* {{offer}}\n*Valid till:* {{offer_ends}}',
+    body: 'Hi {{name}} ✨\n\n*Warm wishes from {{store}}!*\nMay this festival bring joy and prosperity to your home.\n\n*Festive offer:* {{offer}}\n*Valid till:* {{offer_ends}}\n\nVisit us soon.',
     sms: 'Festival wishes from {{store}}, {{name}}! Offer: {{offer}} till {{offer_ends}}. -SWATHI',
     offer: '15% off making charges',
   },

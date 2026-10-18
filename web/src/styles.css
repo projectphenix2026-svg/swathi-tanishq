@@ -723,3 +723,15 @@ a.chart-card:hover { border-color: var(--brand); }
   .tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; }
   .tab { white-space: normal; text-align: center; font-size: 0.85rem; padding: 6px 8px; }
 }
+
+/* ---------- Template search (redesign stage 8) ---------- */
+.tpl-chosen { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1.5px solid var(--brand); border-radius: 12px; background: var(--brand-50); }
+.tpl-search-btn { display: flex; align-items: center; gap: 12px; padding: 16px; border: 1.5px dashed var(--border-strong); border-radius: 12px; background: var(--surface); cursor: pointer; font: inherit; color: var(--text); text-align: left; }
+.tpl-search-btn:hover { border-color: var(--brand); color: var(--brand); }
+.modal.tpl-modal { max-width: 680px; display: flex; flex-direction: column; }
+.tpl-modal-tools { padding: 12px 20px; display: flex; flex-direction: column; gap: 10px; border-bottom: 1px solid var(--border); }
+.tpl-results { overflow-y: auto; max-height: 55vh; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.tpl-result { display: flex; gap: 10px; align-items: flex-start; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); cursor: pointer; font: inherit; color: inherit; text-align: left; }
+.tpl-result:hover, .tpl-result.on { border-color: var(--brand); background: var(--brand-50); }
+.tpl-text.short { -webkit-line-clamp: 2; margin-top: 4px; }
+.fill-in { display: flex; flex-direction: column; gap: 10px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); }
