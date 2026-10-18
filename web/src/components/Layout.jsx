@@ -87,7 +87,7 @@ export function Layout() {
       <nav className="bottom-nav" aria-label="Main">
         {LINKS.filter((l) => l.main).map(({ to, label, pic, end, badge, also }) => (
           <NavLink key={to} to={to} end={end} className={({ isActive }) => (isActive || also?.some((p) => location.pathname.startsWith(p)) ? 'active' : '')}>
-            <Pic name={pic} size={26} />
+            <Pic name={pic} size={24} plain />
             {label}
             {badge && counts[badge] > 0 && <span className="dot">{counts[badge]}</span>}
           </NavLink>
@@ -125,7 +125,7 @@ function SideLink({ link: { to, label, pic, end, badge, also }, counts, pathname
   const sub = also?.some((p) => pathname.startsWith(p));
   return (
     <NavLink to={to} end={end} className={({ isActive }) => (isActive || sub ? 'active' : '')}>
-      <Pic name={pic} size={24} />
+      <Pic name={pic} size={22} plain />
       {label}
       {badge && counts[badge] > 0 && <span className={`count ${badge === 'leads' ? 'hot' : ''}`}>{counts[badge]}</span>}
     </NavLink>

@@ -490,11 +490,15 @@ code, .code { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; f
 @media (max-width: 720px) { .today-item { padding: 14px; } }
 /* On phones the empty "Choose a conversation" panel is not needed under the list. */
 @media (max-width: 759px) { .thread.hide-mobile { display: none; } }
-/* Realistic 3D picture icons */
-.pic { display: block; flex-shrink: 0; object-fit: contain; user-select: none; }
-.bottom-nav a:not(.active) .pic, .nav a:not(.active) .pic { filter: saturate(0.75); opacity: 0.85; }
-.bottom-nav a.active .pic { transform: scale(1.08); }
-.ready-card .emoji .pic { filter: drop-shadow(0 2px 3px rgba(0,0,0,.12)); }
+/* Solid app icons: white shape on a coloured circle (Material Symbols) */
+.ico { display: inline-grid; place-items: center; border-radius: 50%; flex-shrink: 0; background: var(--ico-bg); box-shadow: inset 0 -2px 0 rgba(0,0,0,.08); }
+.ico i { display: block; width: 56%; height: 56%; background: #fff; mask-size: contain; mask-repeat: no-repeat; mask-position: center; -webkit-mask-size: contain; -webkit-mask-repeat: no-repeat; -webkit-mask-position: center; }
+.ico.plain { background: none; box-shadow: none; }
+.ico.plain i { width: 100%; height: 100%; background: currentColor; }
+.tone-maroon { --ico-bg: #7a1f3d; } .tone-gold { --ico-bg: #c08a1e; } .tone-green { --ico-bg: #1f8f4e; }
+.tone-blue { --ico-bg: #2a6fdb; } .tone-slate { --ico-bg: #5f6b7a; } .tone-orange { --ico-bg: #e0731f; }
+.tone-pink { --ico-bg: #c2477a; } .tone-purple { --ico-bg: #7c4dbd; }
+.ready-card.on .ico { box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px var(--ico-bg); }
 /* Phones: the Send button (with its cost) gets its own full-width line. */
 @media (max-width: 759px) {
   .action-bar { flex-wrap: wrap; }

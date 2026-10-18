@@ -30,9 +30,24 @@ export function ToastProvider({ children }) {
 }
 
 /* ---------- Bits ---------- */
-/** Realistic 3D picture icons (Microsoft Fluent Emoji, in /emoji), the same on every phone. */
-export function Pic({ name, size = 28, alt = '' }) {
-  return <img className="pic" src={`/emoji/${name}.png`} width={size} height={size} alt={alt} decoding="async" />;
+// Solid app icons (Google Material Symbols, filled, in /icons): a white shape on a coloured
+// circle, like payment and banking apps. `plain` draws just the shape in the text colour (menus).
+const ICONS = {
+  home: ['home', 'maroon'], megaphone: ['campaign', 'maroon'], people: ['group', 'blue'], speech: ['chat', 'green'],
+  cake: ['cake', 'gold'], phone: ['call', 'green'], memo: ['edit_note', 'blue'], ticket: ['confirmation_number', 'gold'],
+  gear: ['settings', 'slate'], diya: ['local_fire_department', 'orange'], moneybag: ['currency_rupee', 'gold'],
+  blossom: ['local_florist', 'pink'], sparkles: ['new_releases', 'purple'], chartdown: ['trending_down', 'blue'],
+  ring: ['diamond', 'maroon'], check: ['check_circle', 'green'], hourglass: ['hourglass_top', 'gold'], mobile: ['smartphone', 'blue'],
+  chart: ['bar_chart', 'blue'], gem: ['diamond', 'gold'], inbox: ['inbox', 'blue'], eyes: ['visibility', 'blue'],
+};
+export function Pic({ name, size = 28, plain = false, label }) {
+  const [glyph, tone] = ICONS[name] || [name, 'maroon'];
+  const mask = `url(/icons/${glyph}.svg)`;
+  return (
+    <span className={`ico tone-${tone} ${plain ? 'plain' : ''}`} style={{ width: size, height: size }} role={label ? 'img' : undefined} aria-label={label} aria-hidden={label ? undefined : true}>
+      <i style={{ maskImage: mask, WebkitMaskImage: mask }} />
+    </span>
+  );
 }
 
 export function Spinner({ size = 18 }) {
