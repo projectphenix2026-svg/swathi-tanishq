@@ -28,7 +28,7 @@
     // mock = test mode (nothing is sent) | meta | twilio
     "MESSAGING_PROVIDER": "mock",
     "COST_PER_MESSAGE_INR": "0.8631",
-    "PUBLIC_BASE_URL": "https://swathi-tanishq.projectphenix2026.workers.dev",
+    "PUBLIC_BASE_URL": "https://swathi-tanishq.pages.dev",
     "SMS_MODE": "preview",
     "OCCASION_CHECK_MINUTES": "15",
     "STATUS_POLL_SECONDS": "0"
