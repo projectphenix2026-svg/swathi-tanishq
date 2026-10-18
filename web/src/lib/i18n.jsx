@@ -1,8 +1,10 @@
 // Screen language for the everyday screens: English, Telugu, Hindi. Each person's choice is
 // remembered on their device. t('English text', { count }) returns the translation (or the
 // English text when there is none); {name} placeholders are filled from the second argument.
-// Owner-only settings stay in English. Please have a native speaker read these once.
-import { createContext, useContext, useMemo, useState } from 'react';
+// Please have a native speaker read these once.
+import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import SCREENS from './i18n-screens.json';
+import { translateScreens } from './screen-translate.js';
 
 export const SCREEN_LANGS = [
   { code: 'en', label: 'English', short: 'EN' },
@@ -91,7 +93,8 @@ const HI = {
   'Code from the customer’s message': 'ग्राहक के संदेश का कोड', 'Check code': 'कोड देखें', 'Bill amount (₹)': 'बिल की रकम (₹)',
 };
 
-const DICT = { te: TE, hi: HI };
+// Every screen's text (i18n-screens.json), with the hand-placed t() words above taking priority.
+const DICT = { te: { ...SCREENS.te, ...TE }, hi: { ...SCREENS.hi, ...HI } };
 
 const LangCtx = createContext({ lang: 'en', setLang: () => {}, t: (s) => s });
 
@@ -118,6 +121,10 @@ export function LangProvider({ children }) {
       document.documentElement.lang = code;
     };
     return { lang, setLang, t };
+  }, [lang]);
+  // The rest of each screen follows the same language.
+  useEffect(() => {
+    translateScreens(lang === 'en' ? null : DICT[lang]);
   }, [lang]);
   return <LangCtx.Provider value={value}>{children}</LangCtx.Provider>;
 }
