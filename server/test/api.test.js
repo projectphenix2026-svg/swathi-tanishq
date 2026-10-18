@@ -144,6 +144,12 @@ describe('API flow', () => {
     expect(report.body.report).toMatchObject({ total: 1, sent: 1, failed: 0 });
     expect(report.body.campaign.status).toBe('completed');
     expect(provider.outbox[0].to).toBe('+919876543210');
+    // Home: 8 weeks of messages, the last message step by step, customers by city.
+    const home = await agent.get('/api/dashboard');
+    expect(home.body.weeks).toHaveLength(8);
+    expect(home.body.weeks[7]).toMatchObject({ sent: 1 });
+    expect(home.body.lastMessage).toMatchObject({ name: 'Diwali', sent: 1, bought: null });
+    expect(home.body.cities.find((c) => c.city === 'Hyderabad').n).toBeGreaterThan(0);
   });
 
   it('refuses to send when the audience changed since review', async () => {

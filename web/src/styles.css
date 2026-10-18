@@ -628,3 +628,48 @@ code, .code { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; f
 .wish-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
 .wish-card { display: flex; flex-direction: column; gap: 10px; }
 .wish-card.off { opacity: 0.85; }
+
+/* ---------- Home (redesign stage 5) ---------- */
+.kpi-row { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+.kpi-tile { padding: 14px 16px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.kpi-label { font-size: 0.78rem; font-weight: 600; color: var(--text-2); }
+.kpi-big { font-size: 1.6rem; font-weight: 700; line-height: 1.2; color: var(--text); }
+.chg { display: inline-flex; align-items: center; gap: 2px; font-weight: 600; }
+.chg.up { color: var(--ok); }
+.chg.down { color: var(--bad); }
+.home-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+.chart-card { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.chart-card h3 { font-size: 0.98rem; }
+a.chart-card:hover { border-color: var(--brand); }
+.legend-row { display: inline-flex; align-items: center; gap: 6px; font-size: 0.8rem; color: var(--text-2); }
+.legend-row .sw { width: 10px; height: 10px; border-radius: 3px; display: inline-block; margin-left: 6px; }
+.sw.sent, .bar.sent { background: #a3335a; }
+.sw.read, .bar.read { background: #b8862a; }
+.wk-chart { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; height: 150px; align-items: end; border-bottom: 1px solid var(--border); padding-bottom: 0; }
+.wk { display: flex; flex-direction: column; height: 100%; justify-content: flex-end; min-width: 0; }
+.wk-bars { flex: 1; display: flex; gap: 2px; align-items: flex-end; justify-content: center; }
+.wk .bar { width: 40%; max-width: 14px; border-radius: 4px 4px 0 0; min-height: 0; }
+.wk-lbl { font-size: 0.66rem; color: var(--text-3); text-align: center; padding-top: 4px; white-space: nowrap; overflow: hidden; }
+.hbars { display: flex; flex-direction: column; gap: 6px; }
+.hbar { display: grid; grid-template-columns: 90px minmax(0, 1fr) auto; gap: 8px; align-items: center; font-size: 0.85rem; }
+.hbar-lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); }
+.hbar-track { height: 10px; background: var(--surface-2); border-radius: 5px; overflow: hidden; }
+.hbar-fill { display: block; height: 100%; background: #a3335a; border-radius: 0 5px 5px 0; }
+.hbar-val { font-weight: 600; white-space: nowrap; }
+.up-row { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 8px; font-size: 0.86rem; }
+.up-date { font-weight: 600; }
+.today-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.today-chip { flex: 1 1 260px; display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); color: inherit; text-decoration: none; }
+.today-chip b { flex: 1; min-width: 0; font-size: 0.9rem; }
+.today-chip:hover { border-color: var(--brand); text-decoration: none; }
+.today-chip.urgent { background: var(--bad-soft); border-color: #f3c3bd; }
+.getting-started { display: flex; flex-direction: column; gap: 10px; }
+.gs-steps { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.gs-step { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; color: inherit; text-decoration: none; font-weight: 600; font-size: 0.9rem; }
+.gs-step .tick { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-2); color: var(--text-2); font-size: 0.8rem; flex-shrink: 0; }
+.gs-step.done { color: var(--text-3); }
+.gs-step.done .tick { background: var(--ok); color: #fff; }
+.gs-step.next { border-color: var(--brand); background: var(--brand-50); }
+.gs-step.next .tick { background: var(--brand); color: #fff; }
+@media (min-width: 900px) { .home-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .kpi-row { grid-template-columns: repeat(2, minmax(0, 1fr)); } .kpi-row > :last-child:nth-child(odd) { grid-column: span 2; } }
