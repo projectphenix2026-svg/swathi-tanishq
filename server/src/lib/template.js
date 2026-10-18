@@ -2,7 +2,7 @@
 // Placeholders are written as {{name}}, {{offer}} and so on.
 
 export const VARIABLES = [
-  { key: 'name', label: 'First name', source: 'customer', example: 'Priya' },
+  { key: 'name', label: 'Customer name', source: 'customer', example: 'Priya' },
   { key: 'full_name', label: 'Full name', source: 'customer', example: 'Priya Sharma' },
   { key: 'city', label: 'City', source: 'customer', example: 'Hyderabad' },
   { key: 'last_purchase', label: 'Last purchase', source: 'customer', example: 'gold bangles' },
@@ -12,7 +12,7 @@ export const VARIABLES = [
   { key: 'store', label: 'Store', source: 'campaign', example: 'Swathi Tanishq, Kukatpally' },
   { key: 'days_left', label: 'Days to go', source: 'occasion', example: '7' },
   // Made for each customer when the message is created; staff enter it at billing.
-  { key: 'offer_code', label: 'Offer code', source: 'generated', example: 'PRIYA-DIWALI-4821' },
+  { key: 'offer_code', label: 'Bill code', source: 'generated', example: 'PRIYA-DIWALI-4821' },
 ];
 
 const KNOWN = new Set(VARIABLES.map((v) => v.key));

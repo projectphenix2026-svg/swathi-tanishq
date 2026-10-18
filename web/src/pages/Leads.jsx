@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Check, Flame, MessageCircle, Phone, ShoppingBag, ThumbsDown, X } from 'lucide-react';
 import { api } from '../lib/api.js';
-import { Avatar, Empty, Skeleton, useToast } from '../components/ui.jsx';
+import { Avatar, Empty, SectionTabs, Skeleton, useToast } from '../components/ui.jsx';
 import { ago, num, phone } from '../lib/format.js';
 
 const TABS = [
@@ -40,10 +40,11 @@ export default function Leads() {
     <div className="page" style={{ maxWidth: 980 }}>
       <div className="page-head">
         <div>
-          <h1>Hot leads</h1>
+          <h1>Replies</h1>
           <p>Customers who tapped “Interested” or asked for a call. Call them today, while they’re keen.</p>
         </div>
       </div>
+      <div style={{ marginBottom: 16 }}><SectionTabs tabs={[{ to: '/inbox', label: 'Messages' }, { to: '/leads', label: 'Call back list' }]} /></div>
       <div className="chips" style={{ marginBottom: 16 }}>
         {TABS.map((t) => (
           <button key={t.key} className={`chip ${tab === t.key ? 'on' : ''}`} onClick={() => { setTab(t.key); setData(null); }}>
@@ -56,7 +57,7 @@ export default function Leads() {
           <div className="stack" style={{ padding: 20 }}>{[0, 1, 2].map((i) => <Skeleton key={i} h={56} />)}</div>
         ) : data.leads.length === 0 ? (
           <Empty icon={Flame} title={tab ? 'Nobody here yet' : 'No one to call right now'}>
-            {tab ? 'Leads move here when you mark them.' : 'Add a quick-reply button like “Interested” or “Call me back” to a template. Everyone who taps it shows up here.'}
+            {tab ? 'Leads move here when you mark them.' : 'Add a quick-reply button like “Interested” or “Call me back” to a saved message. Everyone who taps it shows up here.'}
           </Empty>
         ) : (
           data.leads.map((l) => (

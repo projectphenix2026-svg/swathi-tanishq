@@ -9,8 +9,8 @@ import { dateOnly, num, phone } from '../lib/format.js';
 const FILTERS = [
   { key: 'all', label: 'All', count: 'total' },
   { key: 'opted_in', label: 'Can receive WhatsApp', count: 'opted_in' },
-  { key: 'no_opt_in', label: 'No opt-in', count: 'no_opt_in' },
-  { key: 'opted_out', label: 'Opted out', count: 'opted_out' },
+  { key: 'no_opt_in', label: 'Not agreed yet', count: 'no_opt_in' },
+  { key: 'opted_out', label: 'Said STOP', count: 'opted_out' },
 ];
 const PAGE = 50;
 
@@ -173,7 +173,7 @@ function EditCustomer({ c, onClose, onSaved }) {
   };
 
   const consentLine = useMemo(() => {
-    if (c.opted_out_at) return `Opted out on ${dateOnly(c.opted_out_at)}`;
+    if (c.opted_out_at) return `Said STOP on ${dateOnly(c.opted_out_at)}`;
     if (c.whatsapp_opt_in) return `Agreed on ${dateOnly(c.opt_in_at)}${c.opt_in_source ? ` · ${c.opt_in_source}` : ''}`;
     return 'No WhatsApp consent recorded';
   }, [c]);

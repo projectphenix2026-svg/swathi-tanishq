@@ -4,12 +4,14 @@ import { AlertTriangle, ArrowLeft, ArrowRight, CalendarClock, Check, Filter, Sea
 import { VARIABLES, extractVariables, render, valuesFor } from '@shared/template.js';
 import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.js';
-import { Alert, Avatar, Field, Spinner, useToast } from '../components/ui.jsx';
+import { Alert, Avatar, Field, Pic, Spinner, useToast } from '../components/ui.jsx';
 import { PhonePreview } from '../components/PhonePreview.jsx';
 import { ProviderBanner } from './Dashboard.jsx';
 import { dateTime, inr, num, phone, plural, rate } from '../lib/format.js';
+import { READY_MESSAGES } from '../lib/ready.js';
+import { toFriendly } from '../lib/friendly.js';
 
-const STEPS = ['Who', 'Message', 'When', 'Review'];
+const STEPS = ['Who gets it', 'Message', 'When', 'Check & send'];
 const CAMPAIGN_VARS = VARIABLES.filter((v) => v.source === 'campaign');
 const VAR_LABEL = Object.fromEntries(VARIABLES.map((v) => [v.key, v.label.toLowerCase()]));
 
@@ -62,6 +64,11 @@ export default function CampaignBuilder() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [step]);
 
+  // The shop name arrives after the page opens; use it for {{store}} unless staff typed something.
+  useEffect(() => {
+    if (settings?.businessName) setVariables((x) => (x.store ? x : { ...x, store: settings.businessName }));
+  }, [settings?.businessName]);
+
   useEffect(() => {
     if (template && !name) setName(`${template.name} · ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`);
   }, [template, name]);
@@ -75,7 +82,7 @@ export default function CampaignBuilder() {
     preview && preview.eligible === 0 ? 'No customers in this group can receive WhatsApp yet.' : audience.mode === 'selected' && !audience.contactIds.length ? 'Pick at least one customer.' : null,
     !template ? 'Choose a message.' : neededCampaignVars.find((v) => !String(variables[v.key] || '').trim()) ? `Fill in the ${neededCampaignVars.find((v) => !String(variables[v.key] || '').trim()).label.toLowerCase()}.` : sendCount === 0 ? 'None of these customers have the details this message needs.' : null,
     when.mode === 'later' && (!when.at || new Date(when.at).getTime() < Date.now()) ? 'Pick a time in the future.' : null,
-    !name.trim() ? 'Give the campaign a name.' : sendCount >= 500 && !bigOk ? 'Tick the box to confirm this large send.' : null,
+    !name.trim() ? 'Give this offer a name.' : sendCount >= 500 && !bigOk ? 'Tick the box to confirm this large send.' : null,
   ][step];
 
   async function send() {
@@ -86,6 +93,7 @@ export default function CampaignBuilder() {
         body: {
           name, templateId, audience, variables,
           scheduledAt: when.mode === 'later' ? new Date(when.at).toISOString() : null,
+          undoSeconds: when.mode === 'now' ? 20 : 0,
           expectedCount: sendCount,
           smsFallback: when.sms,
         },
@@ -93,10 +101,10 @@ export default function CampaignBuilder() {
       toast(
         r.pendingApproval
           ? 'Sent to the owner for approval. It goes out once approved.'
-          : when.mode === 'later' ? `Scheduled for ${dateTime(when.at)}` : `Sending to ${plural(r.queued, 'customer')}`,
+          : when.mode === 'later' ? `Will go out ${dateTime(when.at)}` : 'Starting within a minute. You can still undo.',
         r.pendingApproval ? 'info' : 'ok',
       );
-      navigate(`/campaigns/${r.campaign.id}`);
+      navigate(`/campaigns/${r.campaign.id}`, { state: { undo: when.mode === 'now' && !r.pendingApproval } });
     } catch (e) {
       toast(e.message, 'bad');
       if (e.data?.preview) setPreview(e.data.preview);
@@ -107,11 +115,11 @@ export default function CampaignBuilder() {
 
   return (
     <div className="page">
-      <Link to="/campaigns" className="back"><ArrowLeft size={16} />Campaigns</Link>
+      <Link to="/campaigns" className="back"><ArrowLeft size={16} />Send offer</Link>
       <div className="page-head">
         <div>
-          <h1>New campaign</h1>
-          <p>Four short steps. The preview and cost update as you go.</p>
+          <h1>Send an offer</h1>
+          <p>Four short steps. You see the message and the cost as you go.</p>
         </div>
       </div>
 
@@ -129,7 +137,7 @@ export default function CampaignBuilder() {
           {step === 0 && <WhoStep audience={audience} setAudience={setAudience} picked={picked} setPicked={setPicked} preview={preview} summary={summary} />}
           {step === 1 && (
             <MessageStep
-              templates={templates} templateId={templateId} setTemplateId={setTemplateId}
+              templates={templates} templateId={templateId} setTemplateId={setTemplateId} setTemplates={setTemplates}
               neededVars={neededCampaignVars} variables={variables} setVariables={setVariables} preview={preview}
             />
           )}
@@ -138,7 +146,7 @@ export default function CampaignBuilder() {
             <ReviewStep
               name={name} setName={setName} template={template} audience={audience} picked={picked} when={when}
               sendCount={sendCount} cost={cost} preview={preview} variables={variables} neededVars={neededCampaignVars}
-              bigOk={bigOk} setBigOk={setBigOk} settings={settings} goTo={setStep}
+              bigOk={bigOk} setBigOk={setBigOk} settings={settings} goTo={setStep} previewAs={previewAs}
             />
           )}
 
@@ -161,7 +169,7 @@ export default function CampaignBuilder() {
                 </button>
               ) : (
                 <button className="btn wa lg" onClick={send} disabled={Boolean(stepError) || sending}>
-                  {sending ? <Spinner /> : <><Send size={18} />{when.mode === 'later' ? 'Schedule' : `Send to ${num(sendCount)}`}</>}
+                  {sending ? <Spinner /> : <><Send size={18} />{when.mode === 'later' ? `Schedule for ${plural(sendCount, 'customer')}` : `Send to ${plural(sendCount, 'customer')} for ${inr(cost)}`}</>}
                 </button>
               )}
             </div>
@@ -198,17 +206,17 @@ function CostCard({ preview, sendCount, cost, loading, hasTemplate }) {
   return (
     <div className="card card-pad stack" style={{ gap: 10 }}>
       <div className="row between">
-        <span className="muted">Estimated cost</span>
+        <span className="muted">WhatsApp will charge about</span>
         {loading && <Spinner size={16} />}
       </div>
       <div className="cost">{inr(cost)}</div>
-      <div className="subtle num">{num(sendCount)} × {rate(preview?.costPerMessage ?? 0.8631)} per message (Meta marketing rate, before GST)</div>
+      <div className="subtle num">{num(sendCount)} × {rate(preview?.costPerMessage ?? 0.8631)} per message (WhatsApp’s charge, plus 18% GST)</div>
       {preview && (preview.no_opt_in > 0 || preview.opted_out > 0 || (hasTemplate && preview.eligible > preview.sendable)) && (
         <>
           <div className="divider" />
           <div className="stack-sm subtle">
-            {preview.no_opt_in > 0 && <span>{plural(preview.no_opt_in, 'customer')} left out: no WhatsApp opt-in</span>}
-            {preview.opted_out > 0 && <span>{plural(preview.opted_out, 'customer')} left out: opted out</span>}
+            {preview.no_opt_in > 0 && <span>{plural(preview.no_opt_in, 'customer')} left out: have not agreed to WhatsApp messages</span>}
+            {preview.opted_out > 0 && <span>{plural(preview.opted_out, 'customer')} left out: said STOP</span>}
             {hasTemplate && preview.atCap > 0 && <span>{plural(preview.atCap, 'customer')} left out: already got this week’s offers</span>}
             {hasTemplate && preview.eligible - preview.sendable - (preview.atCap || 0) > 0 && (
               <span>{plural(preview.eligible - preview.sendable - (preview.atCap || 0), 'customer')} left out: missing details for this message</span>
@@ -224,15 +232,15 @@ function CostCard({ preview, sendCount, cost, loading, hasTemplate }) {
 function WhoStep({ audience, setAudience, picked, setPicked, preview, summary }) {
   const opts = [
     { mode: 'all', icon: Users, title: 'Everyone who can receive WhatsApp', text: summary ? `${num(summary.opted_in)} customers` : '' },
-    { mode: 'filter', icon: Filter, title: 'A group', text: 'By city, tag, interest or last purchase' },
-    { mode: 'selected', icon: UserCheck, title: 'Customers I pick', text: 'Good for a test send to your own phone first' },
+    { mode: 'filter', icon: Filter, title: 'Some customers', text: 'For example only Hyderabad, or only bridal buyers' },
+    { mode: 'selected', icon: UserCheck, title: 'Customers I pick', text: 'Choose people by name' },
   ];
   const set = (patch) => setAudience((a) => ({ ...a, ...patch }));
   const toggle = (list, v) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
 
   return (
     <div className="card card-pad stack">
-      <h2>Who should get this?</h2>
+      <h2>Who gets it?</h2>
       <div className="options">
         {opts.map((o) => (
           <button key={o.mode} className={`option ${audience.mode === o.mode ? 'on' : ''}`} onClick={() => set({ mode: o.mode })}>
@@ -257,7 +265,7 @@ function WhoStep({ audience, setAudience, picked, setPicked, preview, summary })
             </Field>
           )}
           {summary.tags.length > 0 && (
-            <Field label="Tag">
+            <Field label="Group (tag)">
               <div className="chips">
                 {summary.tags.map((t) => (
                   <button key={t.tag} className={`chip ${audience.tags.includes(t.tag) ? 'on' : ''}`} onClick={() => set({ tags: toggle(audience.tags, t.tag) })}>
@@ -267,7 +275,7 @@ function WhoStep({ audience, setAudience, picked, setPicked, preview, summary })
               </div>
             </Field>
           )}
-          <Field label="Interest or last purchase contains" hint="e.g. “bridal” or “diamond”">
+          <Field label="Bought or likes" hint="e.g. “bridal” or “diamond”">
             <div className="input-icon"><Search size={16} /><input className="input" value={audience.search} onChange={(e) => set({ search: e.target.value })} /></div>
           </Field>
         </div>
@@ -280,7 +288,7 @@ function WhoStep({ audience, setAudience, picked, setPicked, preview, summary })
       {preview && (
         <Alert tone={preview.eligible ? 'ok' : 'warn'} icon={preview.eligible ? Users : AlertTriangle}>
           <b>{plural(preview.eligible, 'customer')}</b> can receive this
-          {preview.matched > preview.eligible ? ` (${num(preview.matched - preview.eligible)} more match but have not opted in or have opted out)` : ''}.
+          {preview.matched > preview.eligible ? ` (${num(preview.matched - preview.eligible)} more match but have not agreed to WhatsApp or said STOP)` : ''}.
         </Alert>
       )}
     </div>
@@ -311,7 +319,7 @@ function PickCustomers({ picked, onChange }) {
       )}
       <div className="input-icon"><Search size={16} /><input className="input" placeholder="Search by name or number" value={q} onChange={(e) => setQ(e.target.value)} autoFocus /></div>
       <div className="card" style={{ overflow: 'hidden' }}>
-        {results.length === 0 && <p className="subtle" style={{ padding: 14 }}>No opted-in customers match.</p>}
+        {results.length === 0 && <p className="subtle" style={{ padding: 14 }}>No customers who agreed to WhatsApp match.</p>}
         {results.map((c) => (
           <label key={c.id} className="list-item" style={{ cursor: 'pointer' }}>
             <input type="checkbox" checked={ids.has(c.id)} onChange={() => onChange(ids.has(c.id) ? picked.filter((p) => p.id !== c.id) : [...picked, c])} style={{ width: 18, height: 18, accentColor: 'var(--brand)' }} />
@@ -325,43 +333,79 @@ function PickCustomers({ picked, onChange }) {
 }
 
 /* ---------- Step 2: Message ---------- */
-function MessageStep({ templates, templateId, setTemplateId, neededVars, variables, setVariables, preview }) {
+function MessageStep({ templates, templateId, setTemplateId, setTemplates, neededVars, variables, setVariables, preview }) {
+  const toast = useToast();
+  const [busyKey, setBusyKey] = useState(null);
   const usesCode = extractVariables(templates?.find((t) => t.id === templateId)?.body || '').includes('offer_code');
   if (!templates) return <div className="card card-pad"><Spinner /></div>;
-  if (!templates.length) {
-    return (
-      <div className="card card-pad stack">
-        <h2>What should it say?</h2>
-        <Alert>You have no ready-to-send templates yet. <Link to="/templates/new">Write one</Link>; it takes two minutes.</Alert>
-      </div>
-    );
+
+  // A ready-made message is saved once (as a saved message), then reused.
+  async function pickReady(m) {
+    setBusyKey(m.key);
+    try {
+      let t = templates.find((x) => x.name === m.name);
+      if (!t) {
+        ({ template: t } = await api('/api/templates', { method: 'POST', body: { name: m.name, body: m.body, buttons: m.buttons, category: 'marketing', status: 'approved' } }));
+        setTemplates((list) => [t, ...list]);
+      }
+      setTemplateId(t.id);
+      setVariables((x) => ({ ...x, offer: x.offer || m.offer, offer_ends: x.offer_ends || inAWeek(), code_prefix: x.code_prefix || m.codeWord }));
+    } catch (e) {
+      toast(e.message, 'bad');
+    } finally {
+      setBusyKey(null);
+    }
   }
+
+  const readyNames = new Set(READY_MESSAGES.map((m) => m.name));
+  const own = templates.filter((t) => !readyNames.has(t.name));
+  const chosenName = templates.find((t) => t.id === templateId)?.name;
   const missing = Object.entries(preview?.missing || {}).filter(([k]) => !CAMPAIGN_VARS.some((v) => v.key === k));
   return (
     <div className="stack">
       <div className="card card-pad stack">
-        <div className="row between">
+        <div>
           <h2>What should it say?</h2>
-          <Link to="/templates/new" className="btn ghost sm">New template</Link>
+          <p className="subtle">Tap a ready-made message. Each customer’s name and details are added for you.</p>
         </div>
-        <div className="options">
-          {templates.map((t) => (
-            <button key={t.id} className={`option ${templateId === t.id ? 'on' : ''}`} onClick={() => setTemplateId(t.id)}>
-              <span className="radio" />
-              <span style={{ minWidth: 0 }}>
-                <span className="option-title">{t.name}</span>
-                <span className="subtle" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{t.body}</span>
-              </span>
+        <div className="ready-grid">
+          {READY_MESSAGES.map((m) => (
+            <button key={m.key} type="button" className={`ready-card ${chosenName === m.name ? 'on' : ''}`} onClick={() => pickReady(m)} disabled={Boolean(busyKey)} aria-pressed={chosenName === m.name}>
+              <span className="emoji" aria-hidden="true">{busyKey === m.key ? <Spinner /> : <Pic name={m.pic} size={44} />}</span>
+              <b>{m.title}</b>
+              <span>{m.when}</span>
             </button>
           ))}
         </div>
       </div>
 
+      <div className="card card-pad stack">
+        <div className="row between">
+          <h3>Or one of your saved messages</h3>
+          <Link to="/templates/new" className="btn ghost sm">Write my own</Link>
+        </div>
+        {own.length === 0 ? (
+          <p className="subtle">None yet. Messages you write yourself show up here.</p>
+        ) : (
+          <div className="options">
+            {own.map((t) => (
+              <button key={t.id} className={`option ${templateId === t.id ? 'on' : ''}`} onClick={() => setTemplateId(t.id)}>
+                <span className="radio" />
+                <span style={{ minWidth: 0 }}>
+                  <span className="option-title">{t.name}</span>
+                  <span className="subtle" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{toFriendly(t.body)}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
       {neededVars.length > 0 && (
         <div className="card card-pad stack">
           <div>
-            <h2>This campaign’s offer</h2>
-            <p className="subtle">Same for everyone in this campaign. Personal details come from each customer.</p>
+            <h2>This offer</h2>
+            <p className="subtle">Same for everyone who gets this offer. Personal details come from each customer.</p>
           </div>
           <div className="form-grid two">
             {neededVars.map((v) => (
@@ -376,10 +420,10 @@ function MessageStep({ templates, templateId, setTemplateId, neededVars, variabl
       {usesCode && (
         <div className="card card-pad stack">
           <div>
-            <h2>Offer codes</h2>
-            <p className="subtle">Every customer gets their own code, like {exampleCode('Priya', variables.code_prefix)}. Staff enter it at billing under Offer codes, so you see real sales from this campaign.</p>
+            <h2>Bill codes</h2>
+            <p className="subtle">Every customer gets their own code, like {exampleCode('Priya', variables.code_prefix)}. Staff type it in under Bill codes when the customer buys, so you see real sales from this offer.</p>
           </div>
-          <Field label="Code word" hint="Letters and numbers, up to 10. E.g. DIWALI, BRIDAL, AT26.">
+          <Field label="Word in the code" hint="Letters and numbers, up to 10. E.g. DIWALI, BRIDAL.">
             <input className="input" style={{ maxWidth: 240, textTransform: 'uppercase' }} value={variables.code_prefix || ''} maxLength={10} onChange={(e) => setVariables((x) => ({ ...x, code_prefix: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '') }))} placeholder="OFFER" />
           </Field>
         </div>
@@ -424,7 +468,7 @@ function WhenStep({ when, setWhen, template, preview, settings }) {
           <b>SMS backup</b>
           <span className="hint" style={{ display: 'block' }}>
             {!smsReady
-              ? 'This message has no SMS version yet. Add one on the template page to use SMS backup.'
+              ? 'This message has no SMS version yet. Add one on the saved message page to use SMS backup.'
               : `Customers who are not on WhatsApp and agreed to SMS get the SMS version instead${settings?.sms?.live ? ` (${rate(settings.sms.costPerSms)} each)` : ' (preview only until DLT registration is done)'}.`}
             {smsReady && smsCustomers === 0 && ' None of the first customers here have SMS consent yet.'}
           </span>
@@ -440,7 +484,7 @@ function exampleCode(name, prefix) {
 }
 
 /* ---------- Step 4: Review ---------- */
-function ReviewStep({ name, setName, template, audience, picked, when, sendCount, cost, preview, variables, neededVars, bigOk, setBigOk, settings, goTo }) {
+function ReviewStep({ name, setName, template, audience, picked, when, sendCount, cost, preview, variables, neededVars, bigOk, setBigOk, settings, goTo, previewAs }) {
   const who = audience.mode === 'all'
     ? 'Everyone who can receive WhatsApp'
     : audience.mode === 'selected'
@@ -451,7 +495,8 @@ function ReviewStep({ name, setName, template, audience, picked, when, sendCount
       <ProviderBanner settings={settings} compact />
       <div className="card card-pad stack">
         <h2>Check and send</h2>
-        <Field label="Campaign name" hint="Only staff see this, in reports.">
+        <TestSend template={template} variables={variables} previewAs={previewAs} />
+        <Field label="Name for this offer" hint="Only staff see this, in reports.">
           <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
         </Field>
         <dl className="summary-list" style={{ margin: 0 }}>
@@ -460,15 +505,15 @@ function ReviewStep({ name, setName, template, audience, picked, when, sendCount
           {neededVars.map((v) => <div key={v.key}><dt>{v.label}</dt><dd>{variables[v.key]}</dd></div>)}
           <div><dt>When</dt><dd>{when.mode === 'now' ? 'Right away' : dateTime(when.at)} <button className="btn ghost sm" onClick={() => goTo(2)}>Change</button></dd></div>
           <div><dt>Customers</dt><dd className="num">{num(sendCount)}</dd></div>
-          <div><dt>Estimated cost</dt><dd className="num">{inr(cost)} <span className="subtle">+ GST</span></dd></div>
+          <div><dt>WhatsApp charge</dt><dd className="num">about {inr(cost)} <span className="subtle">+ GST</span></dd></div>
         </dl>
         {preview && preview.matched > sendCount && (
-          <p className="subtle">{plural(preview.matched - sendCount, 'customer')} in this group will not get it (no opt-in, opted out, or missing details).</p>
+          <p className="subtle">{plural(preview.matched - sendCount, 'customer')} in this group will not get it (not agreed to WhatsApp, said STOP, or missing details).</p>
         )}
         {when.sms && <p className="subtle">SMS backup is on for customers who are not on WhatsApp.</p>}
         {preview && settings?.role !== 'admin' && sendCount >= preview.approvalThreshold && (
           <Alert tone="info" icon={ShieldCheck}>
-            This goes to {num(sendCount)} customers, so the owner must approve it first. You’ll find it under Campaigns as “Waiting for approval”.
+            This goes to {num(sendCount)} customers, so the owner must approve it first. You’ll find it under Send offer as “Waiting for owner’s OK”.
           </Alert>
         )}
         {sendCount >= 500 && (
@@ -480,6 +525,57 @@ function ReviewStep({ name, setName, template, audience, picked, when, sendCount
       </div>
     </div>
   );
+}
+
+/** "Send a test to my phone": the exact message one customer would get, sent to a staff phone. */
+function TestSend({ template, variables, previewAs }) {
+  const toast = useToast();
+  const [phoneNo, setPhoneNo] = useState(() => {
+    try {
+      return localStorage.getItem('st_test_phone') || '';
+    } catch {
+      return '';
+    }
+  });
+  const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(null);
+  async function go() {
+    setBusy(true);
+    try {
+      try {
+        localStorage.setItem('st_test_phone', phoneNo);
+      } catch {
+        // Private window: the number just isn't remembered.
+      }
+      const r = await api('/api/campaigns/test', { method: 'POST', body: { templateId: template.id, variables, phone: phoneNo, asContactId: previewAs?.id } });
+      setSent(r);
+      toast(`Test sent to ${r.phone}`);
+    } catch (e) {
+      toast(e.message, 'bad');
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="alert info" style={{ alignItems: 'flex-start' }}>
+      <Pic name="mobile" size={36} />
+      <div className="stack-sm" style={{ flex: 1, minWidth: 0 }}>
+        <b>Send a test to my phone first</b>
+        <span className="subtle">You get exactly what {previewAs?.name || 'the customer'} will get. Costs one message.</span>
+        <div className="row wrap" style={{ gap: 8 }}>
+          <input className="input" style={{ maxWidth: 220 }} inputMode="tel" placeholder="Your WhatsApp number" value={phoneNo} onChange={(e) => setPhoneNo(e.target.value)} aria-label="Your WhatsApp number" />
+          <button className="btn" onClick={go} disabled={busy || !phoneNo.trim() || !template}>{busy ? <Spinner /> : 'Send test'}</button>
+        </div>
+        {sent && <span className="subtle">Sent to {sent.phone}. Check WhatsApp on that phone.</span>}
+      </div>
+    </div>
+  );
+}
+
+function inAWeek() {
+  const d = new Date();
+  d.setDate(d.getDate() + 7);
+  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
 }
 
 function toLocalInput(d) {

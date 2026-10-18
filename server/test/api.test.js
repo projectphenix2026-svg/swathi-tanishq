@@ -127,6 +127,32 @@ describe('API flow', () => {
     expect(res.status).toBe(409);
   });
 
+  it('sends a test to a staff phone as one customer would see it, and leaves that phone out of normal sends', async () => {
+    const before = await agent.post('/api/campaigns/preview').send({ audience: { mode: 'all' }, templateId, variables: { offer: '10% off' } });
+    const priya = before.body.sample.find((c) => c.name === 'Priya');
+    const res = await agent.post('/api/campaigns/test').send({ templateId, variables: { offer: '10% off' }, phone: '90000 11111', asContactId: priya.id });
+    expect(res.status).toBe(201);
+    expect(res.body.phone).toBe('+91 90000 11111');
+    await drain();
+    expect(provider.outbox.at(-1)).toMatchObject({ to: '+919000011111', body: 'Hi Priya, pieces to pair with your gold chain are in. 10% off this week.' });
+    const after = await agent.post('/api/campaigns/preview').send({ audience: { mode: 'all' }, templateId, variables: { offer: '10% off' } });
+    expect(after.body.eligible).toBe(before.body.eligible);
+    expect((await agent.post('/api/campaigns/test').send({ templateId, phone: '123' })).status).toBe(400);
+  });
+
+  it('“Send now” waits a few seconds so it can be undone', async () => {
+    const res = await agent.post('/api/campaigns').send({
+      name: 'Undo me', templateId, audience: { mode: 'filter', cities: ['warangal'] }, variables: { offer: '5% off' }, expectedCount: 1, undoSeconds: 20,
+    });
+    expect(res.status).toBe(201);
+    const id = res.body.campaign.id;
+    expect((await agent.get(`/api/campaigns/${id}`)).body.campaign.status).toBe('scheduled');
+    const undo = await agent.post(`/api/campaigns/${id}/cancel`);
+    expect(undo.body.cancelled).toBe(1);
+    await drain();
+    expect(provider.outbox.some((m) => m.body?.includes('5% off'))).toBe(false);
+  });
+
   it('puts customer replies in the inbox, and STOP opts them out', async () => {
     await request(createApp()).post('/webhooks/twilio').type('form').send({
       MessageSid: 'SMin1', SmsStatus: 'received', From: 'whatsapp:+919876543210', Body: 'Is the offer valid on Sunday?', ProfileName: 'Priya',

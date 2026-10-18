@@ -456,3 +456,42 @@ code, .code { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; f
 @media (min-width: 760px) { .lead-actions { grid-column: auto; justify-content: flex-end; } }
 .sms-bubble { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 10px 12px; font-size: 0.9rem; white-space: pre-wrap; }
 .pill-list { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* ---------- Simple layout: menu group, section tabs, ticks, today list, ready-made messages ---------- */
+.nav-group { margin: 14px 12px 4px; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3); }
+.section-tabs { display: flex; gap: 6px; padding: 4px; background: var(--surface-2); border-radius: 12px; width: fit-content; max-width: 100%; overflow-x: auto; }
+.section-tabs a { padding: 9px 16px; border-radius: 9px; font-weight: 600; color: var(--text-2); text-decoration: none; white-space: nowrap; display: inline-flex; align-items: center; gap: 8px; }
+.section-tabs a.active { background: var(--surface); color: var(--brand); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.section-tabs .count { background: var(--bad); color: #fff; font-size: 0.72rem; border-radius: 10px; padding: 0 7px; line-height: 20px; }
+.ticks { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; white-space: nowrap; font-size: 0.86rem; }
+.ticks .t { letter-spacing: -0.28em; font-weight: 800; padding-right: 0.28em; }
+.ticks.sent .t, .ticks.reached .t { color: var(--text-3); }
+.ticks.read .t { color: var(--read); }
+.ticks.bad { color: var(--bad); }
+.ticks.wait { color: var(--text-2); }
+.today { display: flex; flex-direction: column; }
+.today-item { display: flex; align-items: center; gap: 14px; padding: 16px 18px; border-top: 1px solid var(--border); text-decoration: none; color: inherit; }
+.today-item:first-child { border-top: 0; }
+.today-item .emoji { font-size: 1.6rem; line-height: 1; width: 36px; text-align: center; flex-shrink: 0; }
+.today-item .what { flex: 1; min-width: 0; }
+.today-item .what b { display: block; font-size: 1.02rem; }
+.today-item.done { opacity: 0.85; }
+.ready-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.ready-card { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 14px; border-radius: 14px; border: 1.5px solid var(--border); background: var(--surface); cursor: pointer; text-align: left; font: inherit; color: inherit; min-height: 104px; }
+.ready-card:hover { border-color: var(--brand); }
+.ready-card.on { border-color: var(--brand); background: var(--brand-50); }
+.ready-card .emoji { font-size: 1.7rem; line-height: 1; }
+.ready-card b { font-size: 0.98rem; }
+.ready-card span { font-size: 0.8rem; color: var(--text-2); }
+.var-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.var-chip { border: 1.5px dashed var(--brand); background: var(--brand-50); color: var(--brand); border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 0.86rem; font-weight: 600; cursor: pointer; }
+.undo-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: space-between; }
+.big-send { width: 100%; justify-content: center; font-size: 1.05rem; padding: 16px 18px; height: auto; }
+@media (max-width: 720px) { .today-item { padding: 14px; } }
+/* On phones the empty "Choose a conversation" panel is not needed under the list. */
+@media (max-width: 759px) { .thread.hide-mobile { display: none; } }
+/* Realistic 3D picture icons */
+.pic { display: block; flex-shrink: 0; object-fit: contain; user-select: none; }
+.bottom-nav a:not(.active) .pic, .nav a:not(.active) .pic { filter: saturate(0.75); opacity: 0.85; }
+.bottom-nav a.active .pic { transform: scale(1.08); }
+.ready-card .emoji .pic { filter: drop-shadow(0 2px 3px rgba(0,0,0,.12)); }

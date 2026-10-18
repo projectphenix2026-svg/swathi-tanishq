@@ -7,8 +7,8 @@ import { dateOnly, rate } from '../lib/format.js';
 
 const ROLE_TEXT = {
   admin: 'Everything, including staff, settings and approving big sends',
-  manager: 'Customers, templates, campaigns and occasions',
-  viewer: 'Reports, inbox, hot leads and offer codes; cannot send campaigns',
+  manager: 'Customers, saved messages, offers and wishes',
+  viewer: 'Reports, replies, call back list and bill codes; cannot send offers',
 };
 
 export default function Settings() {
@@ -93,7 +93,7 @@ function Limits({ isAdmin, settings }) {
         <Field label="Offers per customer per week" hint="Marketing messages only; birthday and anniversary greetings don’t count. 0 = no limit. Two a week keeps the WhatsApp number’s quality rating healthy.">
           <input className="input" type="number" min="0" max="14" value={cap} onChange={(e) => setCap(e.target.value)} disabled={!isAdmin} />
         </Field>
-        <Field label="Needs an admin’s approval from" hint="Campaigns to this many customers or more, created by managers, wait for an admin to approve.">
+        <Field label="Needs an admin’s approval from" hint="Offers to this many customers or more, created by managers, wait for an admin to approve.">
           <input className="input" type="number" min="1" value={threshold} onChange={(e) => setThreshold(e.target.value)} disabled={!isAdmin} />
         </Field>
       </div>

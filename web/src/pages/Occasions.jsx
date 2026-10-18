@@ -4,7 +4,7 @@ import { CakeSlice, CalendarHeart, Gift, Heart, Pencil, Plus, Send, Sparkles } f
 import { VARIABLES, extractVariables, valuesFor } from '@shared/template.js';
 import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.js';
-import { Alert, Empty, Field, Modal, Skeleton, Spinner, useToast } from '../components/ui.jsx';
+import { Alert, Empty, Field, Modal, SectionTabs, Skeleton, Spinner, useToast } from '../components/ui.jsx';
 import { PhonePreview } from '../components/PhonePreview.jsx';
 import { dateOnly, inr, num, pct, plural } from '../lib/format.js';
 
@@ -60,11 +60,12 @@ export default function Occasions() {
     <div className="page">
       <div className="page-head">
         <div>
-          <h1>Occasions</h1>
-          <p>Birthday, anniversary and festival greetings go out every morning on their own.</p>
+          <h1>Send offer</h1>
+          <p>Birthday, anniversary and festival wishes go out every morning on their own. Nobody has to press anything.</p>
         </div>
         {canEdit && <button className="btn primary" onClick={() => setEditing({ kind: 'festival' })}><Plus size={18} />Add festival</button>}
       </div>
+      <div style={{ marginBottom: 16 }}><SectionTabs tabs={[{ to: '/campaigns', label: 'Offers sent' }, { to: '/occasions', label: 'Automatic wishes' }]} /></div>
 
       {!data ? (
         <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))' }}>{[0, 1].map((i) => <div key={i} className="card card-pad"><Skeleton h={18} w="40%" /><Skeleton h={60} style={{ marginTop: 12 }} /></div>)}</div>
@@ -96,7 +97,7 @@ export default function Occasions() {
           )}
 
           {data.occasions.length === 0 && missingKinds.length === 0 && (
-            <div className="card"><Empty icon={Gift} title="No occasions yet">Set up birthday, anniversary or festival greetings once; the app sends them every day.</Empty></div>
+            <div className="card"><Empty icon={Gift} title="No wishes set up yet">Set up birthday, anniversary or festival greetings once; the app sends them every day.</Empty></div>
           )}
 
           <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))' }}>
@@ -249,7 +250,7 @@ function OccasionEditor({ initial, templates, businessName, onClose, onSaved }) 
                 {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             ) : (
-              <Alert>No ready templates yet. <Link to="/templates/new">Write one first.</Link></Alert>
+              <Alert>No saved messages yet. <Link to="/templates/new">Write one first.</Link></Alert>
             )}
           </Field>
           {needed.length > 0 && (

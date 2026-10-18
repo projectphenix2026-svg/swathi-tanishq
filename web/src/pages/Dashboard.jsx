@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CakeSlice, Check, ChevronRight, Eye, FileText, Flame, IndianRupee, MessageCircle, Plus, Send, ShieldCheck, Smartphone, TestTube2, Ticket, Users } from 'lucide-react';
+import { Check, ChevronRight, Eye, FileText, IndianRupee, Plus, Send, Smartphone, Ticket, Users } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.js';
-import { Alert, CampaignStatus, Kpi, Skeleton } from '../components/ui.jsx';
-import { dateTime, greeting, inr, num, pct } from '../lib/format.js';
+import { Alert, CampaignStatus, Kpi, Pic, Skeleton } from '../components/ui.jsx';
+import { dateTime, greeting, inr, num, pct, plural } from '../lib/format.js';
 
 export default function Dashboard() {
   const { user, settings } = useAuth();
   const [d, setD] = useState(null);
+  const [showNumbers, setShowNumbers] = useState(false);
 
   useEffect(() => {
     api('/api/dashboard').then(setD).catch(() => setD({ error: true }));
@@ -22,9 +23,9 @@ export default function Dashboard() {
       <div className="page-head">
         <div>
           <h1>{greeting()}, {first}</h1>
-          <p>Here’s how your WhatsApp messages are doing this month.</p>
+          <p>Here’s what needs you today.</p>
         </div>
-        <Link to="/campaigns/new" className="btn primary lg"><Plus size={19} />New campaign</Link>
+        <Link to="/campaigns/new" className="btn primary lg"><Plus size={19} />Send an offer</Link>
       </div>
 
       <div className="stack">
@@ -36,36 +37,33 @@ export default function Dashboard() {
           <Alert tone="bad">Could not load the dashboard. Refresh the page to try again.</Alert>
         ) : (
           <>
-            <div className="grid kpis">
-              <Kpi icon={Users} label="Customers you can message" value={num(d.customers.reachable)} sub={`of ${num(d.customers.total)} saved`} />
-              <Kpi icon={Send} tone="wa" label="Sent this month" value={num(d.month.sent)} sub={d.month.failed ? `${num(d.month.failed)} could not be sent` : 'No failures'} />
-              <Kpi icon={Eye} tone="info" label="Read rate" value={`${pct(d.month.read, d.month.sent)}%`} sub={`${num(d.month.read)} customers opened it`} />
-              <Kpi icon={IndianRupee} tone="gold" label="Spent this month" value={inr(d.month.spend)} sub="WhatsApp charges, before GST" />
-            </div>
-
-            <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
-              {d.new_leads > 0 && (
-                <ActionCard to="/leads" icon={Flame} tone="tone-bad" title={`${num(d.new_leads)} hot ${d.new_leads === 1 ? 'lead' : 'leads'} to call`} text="They tapped “Interested”. Call today." />
-              )}
-              {d.inbox.unread > 0 && (
-                <ActionCard to="/inbox" icon={MessageCircle} tone="tone-wa" title={`${num(d.inbox.unread)} new ${d.inbox.unread === 1 ? 'reply' : 'replies'}`} text="Answer them while they’re interested." />
-              )}
-              {d.pending_approval > 0 && (
-                <ActionCard to="/campaigns" icon={ShieldCheck} tone="tone-gold" title={`${num(d.pending_approval)} ${d.pending_approval === 1 ? 'campaign needs' : 'campaigns need'} approval`} text="Big sends wait for the owner." />
-              )}
-              <ActionCard to="/offers" icon={Ticket} tone="tone-brand" title={`${inr(d.revenue)} from offer codes`} text={`${num(d.redeemed)} codes used this month`} />
-              <ActionCard to="/occasions" icon={CakeSlice} tone="tone-gold" title={d.occasions_on ? `${num(d.greetings_today)} greetings today` : 'Set up birthday greetings'} text={d.occasions_on ? `${num(d.occasions_on)} occasion${d.occasions_on === 1 ? '' : 's'} switched on` : 'They go out every morning on their own.'} />
-            </div>
+            <Today d={d} />
 
             {!setupDone && <GettingStarted d={d} />}
 
             <div className="card">
+              <button className="card-head" onClick={() => setShowNumbers((x) => !x)} style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer', borderBottom: showNumbers ? undefined : 'none' }} aria-expanded={showNumbers}>
+                <h2>This month in numbers</h2>
+                <span className="btn ghost sm">{showNumbers ? 'Hide' : 'See numbers'}</span>
+              </button>
+              {showNumbers && (
+                <div className="grid kpis" style={{ padding: 16 }}>
+                  <Kpi icon={Users} label="Customers you can message" value={num(d.customers.reachable)} sub={`of ${num(d.customers.total)} saved`} />
+                  <Kpi icon={Send} tone="wa" label="Messages sent" value={num(d.month.sent)} sub={d.month.failed ? `${num(d.month.failed)} couldn’t be reached` : 'All reached WhatsApp'} />
+                  <Kpi icon={Eye} tone="info" label="Read" value={`${pct(d.month.read, d.month.sent)}%`} sub={`${num(d.month.read)} customers opened it`} />
+                  <Kpi icon={IndianRupee} tone="gold" label="Paid to WhatsApp" value={inr(d.month.spend)} sub="plus 18% GST" />
+                  <Kpi icon={Ticket} tone="brand" label="Bought with a code" value={num(d.redeemed)} sub={`${inr(d.revenue)} in bills`} />
+                </div>
+              )}
+            </div>
+
+            <div className="card">
               <div className="card-head">
-                <h2>Recent campaigns</h2>
+                <h2>Recent offers</h2>
                 <Link to="/campaigns" className="btn ghost sm">See all <ChevronRight size={16} /></Link>
               </div>
               {d.recent.length === 0 ? (
-                <p className="muted" style={{ padding: 20 }}>No campaigns yet. Your first one takes about 5 minutes.</p>
+                <p className="muted" style={{ padding: 20 }}>No offers sent yet. Your first one takes about 5 minutes.</p>
               ) : (
                 d.recent.map((c) => (
                   <Link key={c.id} to={`/campaigns/${c.id}`} className="list-item" style={{ textDecoration: 'none', color: 'inherit' }}>
@@ -74,12 +72,9 @@ export default function Dashboard() {
                         <b style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</b>
                         <CampaignStatus status={c.status} />
                       </div>
-                      <div className="subtle">{dateTime(c.scheduled_at || c.created_at)} · {num(c.total)} customers</div>
+                      <div className="subtle">{dateTime(c.scheduled_at || c.created_at)} · sent to {plural(c.total, 'customer')}, {num(c.read)} read it</div>
                     </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <b className="num">{pct(c.read, c.total)}%</b>
-                      <div className="subtle">read</div>
-                    </div>
+                    <ChevronRight size={18} className="muted" />
                   </Link>
                 ))
               )}
@@ -91,11 +86,47 @@ export default function Dashboard() {
   );
 }
 
+/** Home: what needs doing today, in plain sentences, most urgent first. */
+function Today({ d }) {
+  const last = d.recent.find((c) => c.status !== 'cancelled' && !c.name.startsWith('Test · '));
+  const items = [
+    d.new_leads > 0 && { to: '/leads', pic: 'phone', title: `${plural(d.new_leads, 'customer')} said Interested`, text: 'Call them today, while they’re keen.', action: 'Call' },
+    d.inbox.unread > 0 && { to: '/inbox', pic: 'speech', title: `${plural(d.inbox.unread, 'new reply', 'new replies')}`, text: 'Answer them from here. Replies within 24 hours are free.', action: 'Answer' },
+    d.pending_approval > 0 && { to: '/campaigns', pic: 'hourglass', title: `${plural(d.pending_approval, 'offer')} ${d.pending_approval === 1 ? 'waits' : 'wait'} for the owner’s OK`, text: 'Big sends by staff go out once the owner approves.', action: 'Check' },
+    d.occasions_on
+      ? { to: '/occasions', pic: 'cake', title: d.greetings_today ? `${plural(d.greetings_today, 'wish', 'wishes')} went out today` : 'No birthdays or anniversaries today', text: 'Wishes go out every morning on their own.', done: true }
+      : { to: '/occasions', pic: 'cake', title: 'Switch on birthday wishes', text: 'Set it once. They go out every morning on their own.', action: 'Set up' },
+    last && { to: `/campaigns/${last.id}`, pic: 'megaphone', title: `Your “${last.name}”: ${num(last.total)} sent, ${num(last.read)} read it`, text: d.redeemed ? `This month ${plural(d.redeemed, 'customer')} bought with their code (${inr(d.revenue)}).` : 'When a customer buys with their code, it shows here.', done: true },
+  ].filter(Boolean);
+  const nothingToDo = !d.new_leads && !d.inbox.unread && !d.pending_approval;
+  return (
+    <div className="card">
+      <div className="card-head"><h2>What to do today</h2></div>
+      <div className="today">
+        {nothingToDo && (
+          <div className="today-item">
+            <span className="emoji" aria-hidden="true"><Pic name="check" size={36} /></span>
+            <div className="what"><b>Nothing waiting for you</b><span className="subtle">A good day to send an offer.</span></div>
+            <Link to="/campaigns/new" className="btn primary sm">Send offer</Link>
+          </div>
+        )}
+        {items.map((it) => (
+          <Link key={it.title} to={it.to} className={`today-item ${it.done ? 'done' : ''}`}>
+            <span className="emoji" aria-hidden="true"><Pic name={it.pic} size={36} /></span>
+            <div className="what"><b>{it.title}</b><span className="subtle">{it.text}</span></div>
+            {it.action ? <span className="btn primary sm">{it.action}</span> : <ChevronRight size={18} className="muted" />}
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function GettingStarted({ d }) {
   const steps = [
-    { done: d.customers.total > 0, title: 'Add your customers', text: 'Upload an Excel or CSV file, or type numbers in.', to: '/customers/add', icon: Users },
-    { done: d.templates > 0, title: 'Write a message template', text: 'Use their name and last purchase so it feels personal.', to: '/templates/new', icon: FileText },
-    { done: d.recent.length > 0, title: 'Send your first campaign', text: 'Pick who, check the preview and cost, then send.', to: '/campaigns/new', icon: Send },
+    { done: d.customers.total > 0, title: 'Add your customers', text: 'From phone contacts, an Excel file, or type them in.', to: '/customers/add', icon: Users },
+    { done: d.templates > 0, title: 'Pick a ready-made message', text: 'Diwali, wedding season, new collection… each customer’s name is added for you.', to: '/campaigns/new', icon: FileText },
+    { done: d.recent.length > 0, title: 'Send your first offer', text: 'See exactly how it looks and what it costs before you send.', to: '/campaigns/new', icon: Send },
   ];
   const next = steps.findIndex((s) => !s.done);
   return (
@@ -125,7 +156,7 @@ export function ProviderBanner({ settings, compact }) {
   const p = settings.provider;
   if (p.name === 'mock') {
     return (
-      <Alert tone="warn" icon={TestTube2}>
+      <Alert tone="warn" icon={null}>
         <b>Test mode.</b> Nothing is sent to real phones. Messages pretend to be delivered and then read within about a minute, so you can try everything safely.
       </Alert>
     );
@@ -149,19 +180,4 @@ export function ProviderBanner({ settings, compact }) {
     return <Alert tone="warn"><b>{p.label} is connected in test form.</b> Send a small test first.</Alert>;
   }
   return null;
-}
-
-function ActionCard({ to, icon: Icon, tone, title, text }) {
-  return (
-    <Link to={to} className="card card-pad row between" style={{ textDecoration: 'none', color: 'inherit' }}>
-      <div className="row" style={{ minWidth: 0 }}>
-        <span className={`kpi-icon ${tone}`} style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0 }}><Icon size={20} /></span>
-        <div style={{ minWidth: 0 }}>
-          <h3>{title}</h3>
-          <p className="muted" style={{ fontSize: '0.88rem' }}>{text}</p>
-        </div>
-      </div>
-      <ChevronRight size={20} className="muted" />
-    </Link>
-  );
 }

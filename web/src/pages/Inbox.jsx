@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, Check, CheckCheck, Clock, ExternalLink, FlaskConical, Inbox as InboxIcon, Lock, Phone, Reply, SendHorizontal } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.js';
-import { Avatar, Empty, Spinner, useToast } from '../components/ui.jsx';
+import { Avatar, Empty, SectionTabs, Spinner, useToast } from '../components/ui.jsx';
 import { ago, dateOnly, phone, timeOnly } from '../lib/format.js';
 
 const QUICK = ['Thank you! We will call you shortly.', 'Yes, the offer is valid all week.', 'You are welcome to visit us any day, 10 am – 9 pm.'];
@@ -28,8 +28,9 @@ export default function Inbox() {
     <div className="inbox">
       <section className="convo-list" style={{ display: showList ? undefined : 'none' }} data-desktop-show>
         <div style={{ padding: '18px 16px 12px', borderBottom: '1px solid var(--border)' }}>
-          <h1 style={{ fontSize: '1.3rem' }}>Inbox</h1>
-          <p className="subtle" style={{ marginBottom: 10 }}>Replies from customers, newest first.</p>
+          <h1 style={{ fontSize: '1.3rem' }}>Replies</h1>
+          <p className="subtle" style={{ marginBottom: 10 }}>What customers wrote back, newest first.</p>
+          <div style={{ marginBottom: 10 }}><SectionTabs tabs={[{ to: '/inbox', label: 'Messages' }, { to: '/leads', label: 'Call back list' }]} /></div>
           <div className="chips">
             <button className={`chip ${filter === 'all' ? 'on' : ''}`} onClick={() => setFilter('all')}>All</button>
             <button className={`chip ${filter === 'unread' ? 'on' : ''}`} onClick={() => setFilter('unread')}>Unread</button>
@@ -39,7 +40,7 @@ export default function Inbox() {
           <div style={{ padding: 20 }}><Spinner /></div>
         ) : list.length === 0 ? (
           <Empty icon={InboxIcon} title={filter === 'unread' ? 'All caught up' : 'No replies yet'}>
-            {filter === 'unread' ? 'Every reply has been read.' : 'When customers reply to a campaign or tap a button, their message shows up here.'}
+            {filter === 'unread' ? 'Every reply has been read.' : 'When customers reply to an offer or tap a button, their message shows up here.'}
           </Empty>
         ) : (
           list.map((c) => (
@@ -141,7 +142,7 @@ function Thread({ contactId, onChange }) {
           <b>{contact.name || phone(contact.phone)}</b>
           <div className="subtle num">{phone(contact.phone)}{contact.city ? ` · ${contact.city}` : ''}{contact.last_purchase ? ` · bought ${contact.last_purchase}` : ''}</div>
         </div>
-        {optedOut && <span className="badge bad">Opted out</span>}
+        {optedOut && <span className="badge bad">Said STOP</span>}
         {settings?.provider.name === 'mock' && (
           <button className="btn sm" onClick={simulate} title="Test mode: pretend the customer replied"><FlaskConical size={15} /><span className="hide-mobile">Customer reply</span></button>
         )}
@@ -157,7 +158,7 @@ function Thread({ contactId, onChange }) {
               {showDay && <span className="wa-day">{day}</span>}
               <div className={`msg ${m.direction === 'inbound' ? 'in' : 'out'}`}>
                 {m.direction === 'outbound' && (m.campaign_name || m.sent_by_name) && (
-                  <span className="tag">{m.campaign_name ? `Campaign: ${m.campaign_name}` : `Reply by ${m.sent_by_name}`}</span>
+                  <span className="tag">{m.campaign_name ? `Offer: ${m.campaign_name}` : `Reply by ${m.sent_by_name}`}</span>
                 )}
                 {m.body}
                 {m.buttons?.length > 0 && (
@@ -185,7 +186,7 @@ function Thread({ contactId, onChange }) {
         {optedOut ? (
           <div className="row subtle" style={{ gap: 8 }}><Lock size={16} />This customer replied STOP, so no more messages can be sent.</div>
         ) : !windowOpen ? (
-          <div className="row subtle" style={{ gap: 8 }}><Clock size={16} />More than 24 hours since they last wrote. WhatsApp only allows a free reply within 24 hours; reach them with a campaign template instead.</div>
+          <div className="row subtle" style={{ gap: 8 }}><Clock size={16} />More than 24 hours since they last wrote. WhatsApp only allows a free reply within 24 hours; reach them with a saved message (send an offer) template instead.</div>
         ) : (
           <>
             <div className="chips no-scrollbar" style={{ flexWrap: 'nowrap', overflowX: 'auto' }}>

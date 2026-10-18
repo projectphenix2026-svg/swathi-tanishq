@@ -4,35 +4,25 @@ import { ArrowLeft, BadgeCheck, Check, ChevronDown, ExternalLink, MessageSquareT
 import { VARIABLES, extractVariables, render, validateTemplate } from '@shared/template.js';
 import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.js';
-import { Alert, Field, Spinner, useToast } from '../components/ui.jsx';
+import { Alert, Field, Pic, Spinner, useToast } from '../components/ui.jsx';
 import { PhonePreview } from '../components/PhonePreview.jsx';
+import { READY_MESSAGES } from '../lib/ready.js';
+import { detailLabel, fromFriendly, toFriendly } from '../lib/friendly.js';
 
 const EXAMPLES = Object.fromEntries(VARIABLES.map((v) => [v.key, v.example]));
-
-const STARTERS = [
-  {
-    name: 'New arrivals for past buyers',
-    body: 'Hi {{name}}, thank you for choosing your {{last_purchase}} from us. New pieces that pair beautifully with it have just arrived, and this week you get {{offer}}. Valid till {{offer_ends}}.',
-    buttons: [{ type: 'url', text: 'See the designs', url: 'https://' }, { type: 'quick_reply', text: 'Not now' }],
-  },
-  {
-    name: 'Festival offer by city',
-    body: 'Hello {{name}}, our {{city}} store is ready for the festive season with designs picked for {{interests}} lovers. Visit before {{offer_ends}} for {{offer}}.',
-    buttons: [{ type: 'phone', text: 'Call the store', phone: '+91' }, { type: 'quick_reply', text: 'Interested' }],
-  },
-];
 
 const BUTTON_TYPES = [
   { key: 'url', label: 'Open website', icon: ExternalLink },
   { key: 'phone', label: 'Call store', icon: Phone },
-  { key: 'quick_reply', label: 'Quick reply', icon: Reply },
+  { key: 'quick_reply', label: 'Reply button', icon: Reply },
 ];
 
 export default function TemplateEditor() {
   const { id } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
-  const { settings } = useAuth();
+  const { settings, user } = useAuth();
+  const isOwner = user?.role === 'admin';
   const textRef = useRef(null);
   const [t, setT] = useState(id ? null : { name: '', body: '', buttons: [], image_url: '', status: 'approved', provider_ref: '', category: 'marketing', sms_body: '', sms_dlt_template_id: '' });
   const [busy, setBusy] = useState(false);
@@ -47,20 +37,21 @@ export default function TemplateEditor() {
     }
   }, [id, navigate, toast]);
 
-  const errors = useMemo(() => (t ? validateTemplate(t) : []), [t]);
+  // Same checks as the server, in shop words: [Customer name] instead of {{name}}.
+  const errors = useMemo(() => (t ? validateTemplate(t) : []).map(plainError), [t]);
   const vars = useMemo(() => (t ? extractVariables(t.body) : []), [t]);
 
   if (!t) return <div className="page"><Spinner /></div>;
 
   const set = (patch) => setT((x) => ({ ...x, ...patch }));
 
+  const shown = toFriendly(t.body);
   function insert(key) {
     const el = textRef.current;
-    const token = `{{${key}}}`;
-    const start = el?.selectionStart ?? t.body.length;
-    const end = el?.selectionEnd ?? t.body.length;
-    const body = t.body.slice(0, start) + token + t.body.slice(end);
-    set({ body });
+    const token = `[${detailLabel(key)}]`;
+    const start = el?.selectionStart ?? shown.length;
+    const end = el?.selectionEnd ?? shown.length;
+    set({ body: fromFriendly(shown.slice(0, start) + token + shown.slice(end)) });
     requestAnimationFrame(() => {
       el?.focus();
       el?.setSelectionRange(start + token.length, start + token.length);
@@ -77,7 +68,7 @@ export default function TemplateEditor() {
     setBusy(true);
     try {
       const r = await api(id ? `/api/templates/${id}` : '/api/templates', { method: id ? 'PUT' : 'POST', body: t });
-      toast('Template saved');
+      toast('Message saved');
       navigate(id ? '/templates' : `/campaigns/new?template=${r.template.id}`);
     } catch (e) {
       toast(e.message, 'bad');
@@ -87,10 +78,10 @@ export default function TemplateEditor() {
   }
 
   async function remove() {
-    if (!confirm('Delete this template?')) return;
+    if (!confirm('Delete this saved message?')) return;
     try {
       await api(`/api/templates/${id}`, { method: 'DELETE' });
-      toast('Template deleted');
+      toast('Message deleted');
       navigate('/templates');
     } catch (e) {
       toast(e.message, 'bad');
@@ -107,11 +98,11 @@ export default function TemplateEditor() {
 
   return (
     <div className="page">
-      <Link to="/templates" className="back"><ArrowLeft size={16} />Templates</Link>
+      <Link to="/templates" className="back"><ArrowLeft size={16} />Saved messages</Link>
       <div className="page-head">
         <div>
-          <h1>{id ? 'Edit template' : 'New template'}</h1>
-          <p>Write it once; each customer gets their own name, purchase and offer filled in.</p>
+          <h1>{id ? 'Edit message' : 'Write a message'}</h1>
+          <p>Write it once. Each customer gets their own name, last purchase and offer filled in.</p>
         </div>
       </div>
 
@@ -119,14 +110,13 @@ export default function TemplateEditor() {
         <div className="stack">
           {!id && !t.body && (
             <div className="card card-pad stack" style={{ gap: 10 }}>
-              <b>Start from an example</b>
-              <div className="options" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
-                {STARTERS.map((s) => (
-                  <button key={s.name} className="option" onClick={() => setT((x) => ({ ...x, ...s }))}>
-                    <div>
-                      <div className="option-title">{s.name}</div>
-                      <div className="subtle" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{s.body}</div>
-                    </div>
+              <b>Start from a ready-made message</b>
+              <div className="ready-grid">
+                {READY_MESSAGES.map((m) => (
+                  <button key={m.key} type="button" className="ready-card" onClick={() => setT((x) => ({ ...x, name: m.name, body: m.body, buttons: m.buttons }))}>
+                    <span className="emoji" aria-hidden="true"><Pic name={m.pic} size={44} /></span>
+                    <b>{m.title}</b>
+                    <span>{m.when}</span>
                   </button>
                 ))}
               </div>
@@ -134,20 +124,20 @@ export default function TemplateEditor() {
           )}
 
           <div className="card card-pad stack">
-            <Field label="Template name" hint="Only staff see this.">
+            <Field label="Name" hint="Only staff see this.">
               <input className="input" value={t.name} onChange={(e) => set({ name: e.target.value })} placeholder="e.g. Diwali offer for past buyers" />
             </Field>
             <Field label="Message" error={tried ? errors.find((e) => /message|placeholder|1,024/i.test(e)) : null}>
               <div className="chips" style={{ marginBottom: 4 }}>
                 {VARIABLES.map((v) => (
-                  <button key={v.key} type="button" className="chip" onClick={() => insert(v.key)} title={`Insert {{${v.key}}}`} style={{ height: 30, fontSize: '0.8rem' }}>
+                  <button key={v.key} type="button" className="chip" onClick={() => insert(v.key)} title={`Add ${v.label}`} style={{ height: 30, fontSize: '0.8rem' }}>
                     <Plus size={13} />{v.label}
                   </button>
                 ))}
               </div>
-              <textarea ref={textRef} className="textarea" rows={7} value={t.body} onChange={(e) => set({ body: e.target.value })} placeholder="Hi {{name}}, ..." />
+              <textarea ref={textRef} className="textarea" rows={7} value={shown} onChange={(e) => set({ body: fromFriendly(e.target.value) })} placeholder="Hi [Customer name], ..." />
               <div className="row between">
-                <span className="hint">Tap a chip to add a personal detail where your cursor is.</span>
+                <span className="hint">Tap a detail above to add it where your cursor is. Each customer gets their own.</span>
                 <span className="subtle num" style={{ color: t.body.length > 1024 ? 'var(--bad)' : undefined }}>{t.body.length} / 1024</span>
               </div>
             </Field>
@@ -157,7 +147,7 @@ export default function TemplateEditor() {
             <div className="row between">
               <div>
                 <h3>Buttons</h3>
-                <p className="subtle">Up to 2. Every tap tells you who is interested.</p>
+                <p className="subtle">Up to 2. Customers who tap “Interested” go to your Call back list.</p>
               </div>
               <button className="btn sm" disabled={t.buttons.length >= 2} onClick={() => set({ buttons: [...t.buttons, { type: 'url', text: '', url: 'https://' }] })}>
                 <Plus size={16} />Add button
@@ -189,9 +179,9 @@ export default function TemplateEditor() {
             ))}
           </div>
 
-          <div className="card">
+          {isOwner && <div className="card">
             <button className="card-head" onClick={() => setAdvanced((a) => !a)} style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer', borderBottom: advanced ? undefined : 'none' }}>
-              <h3>More options</h3>
+              <h3>Advanced (owner only)</h3>
               <ChevronDown size={18} style={{ transform: advanced ? 'rotate(180deg)' : undefined }} />
             </button>
             {advanced && (
@@ -221,10 +211,10 @@ export default function TemplateEditor() {
                 </Field>
               </div>
             )}
-          </div>
+          </div>}
 
-          <SmsCard t={t} set={set} />
-          {id && <MetaCard t={t} onChange={(u) => setT((x) => ({ ...x, provider_ref: u.provider_ref || '', provider_status: u.provider_status, provider_reason: u.provider_reason }))} canSubmit={settings?.metaTemplatesReady} />}
+          {isOwner && <SmsCard t={t} set={set} />}
+          {isOwner && id && <MetaCard t={t} onChange={(u) => setT((x) => ({ ...x, provider_ref: u.provider_ref || '', provider_status: u.provider_status, provider_reason: u.provider_reason }))} canSubmit={settings?.metaTemplatesReady} />}
 
           {tried && errors.length > 0 && (
             <Alert tone="bad"><b>Please fix:</b><ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>{errors.map((e) => <li key={e}>{e}</li>)}</ul></Alert>
@@ -232,12 +222,12 @@ export default function TemplateEditor() {
 
           <div className="action-bar">
             {id ? <button className="btn ghost danger" onClick={remove}><Trash2 size={17} />Delete</button> : <span />}
-            <button className="btn primary lg" onClick={save} disabled={busy}>{busy ? <Spinner /> : id ? 'Save changes' : 'Save and use in a campaign'}</button>
+            <button className="btn primary lg" onClick={save} disabled={busy}>{busy ? <Spinner /> : id ? 'Save changes' : 'Save and send as an offer'}</button>
           </div>
         </div>
 
         <div className="stack sticky">
-          <PhonePreview body={t.body} values={EXAMPLES} buttons={t.buttons} imageUrl={t.image_url} businessName={settings?.businessName} caption="Example values shown in gold" />
+          <PhonePreview body={t.body} values={EXAMPLES} buttons={t.buttons} imageUrl={t.image_url} businessName={settings?.businessName} caption="How Priya would see it (example details in gold)" />
           <div className="card card-pad stack" style={{ gap: 10 }}>
             <h3>Will customers care?</h3>
             {rules.map((r) => (
@@ -252,6 +242,10 @@ export default function TemplateEditor() {
       </div>
     </div>
   );
+}
+
+function plainError(e) {
+  return e.replace(/\{\{\s*(\w+)\s*\}\}/g, (all, k) => `[${detailLabel(k)}]`).replace(/placeholders?/gi, 'personal detail');
 }
 
 /** SMS parts: 160 characters, or 70 when the text has characters like ₹ or Telugu. */

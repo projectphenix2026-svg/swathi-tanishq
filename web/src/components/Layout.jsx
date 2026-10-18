@@ -1,25 +1,26 @@
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { CakeSlice, FileText, Flame, Gem, Home, LogOut, Menu, MessageCircle, Send, Settings, Ticket, Users, X } from 'lucide-react';
+import { Gem, LogOut, Menu, X } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.js';
-import { Avatar } from './ui.jsx';
+import { Avatar, Pic } from './ui.jsx';
 
+// Four places for everyday work; the rest sits under More.
 const LINKS = [
-  { to: '/', label: 'Home', icon: Home, end: true, main: true },
-  { to: '/campaigns', label: 'Campaigns', icon: Send, main: true },
-  { to: '/occasions', label: 'Occasions', icon: CakeSlice },
-  { to: '/customers', label: 'Customers', icon: Users, main: true },
-  { to: '/templates', label: 'Templates', icon: FileText },
-  { to: '/inbox', label: 'Inbox', icon: MessageCircle, badge: 'unread', main: true },
-  { to: '/leads', label: 'Hot leads', icon: Flame, badge: 'leads' },
-  { to: '/offers', label: 'Offer codes', icon: Ticket },
-  { to: '/settings', label: 'Settings', icon: Settings },
+  { to: '/', label: 'Home', pic: 'home', end: true, main: true },
+  { to: '/campaigns', label: 'Send offer', pic: 'megaphone', main: true, also: ['/occasions'] },
+  { to: '/customers', label: 'Customers', pic: 'people', main: true },
+  { to: '/inbox', label: 'Replies', pic: 'speech', badge: 'replies', main: true, also: ['/leads'] },
+  { to: '/occasions', label: 'Birthday & festival wishes', pic: 'cake' },
+  { to: '/leads', label: 'Call back list', pic: 'phone', badge: 'leads' },
+  { to: '/templates', label: 'Saved messages', pic: 'memo' },
+  { to: '/offers', label: 'Bill codes', pic: 'ticket' },
+  { to: '/settings', label: 'Settings', pic: 'gear' },
 ];
 
 export function Layout() {
   const { user, logout, settings } = useAuth();
-  const [counts, setCounts] = useState({ unread: 0, leads: 0 });
+  const [counts, setCounts] = useState({ unread: 0, leads: 0, replies: 0 });
   const [more, setMore] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
@@ -28,7 +29,7 @@ export function Layout() {
     let alive = true;
     const load = () =>
       Promise.all([api('/api/inbox/unread-count'), api('/api/leads?status=new')])
-        .then(([i, l]) => alive && setCounts({ unread: i.unread, leads: l.counts?.new || 0 }))
+        .then(([i, l]) => alive && setCounts({ unread: i.unread, leads: l.counts?.new || 0, replies: i.unread + (l.counts?.new || 0) }))
         .catch(() => {});
     load();
     const t = setInterval(load, 15000);
@@ -41,8 +42,8 @@ export function Layout() {
   useEffect(() => setMore(false), [location.pathname]);
 
   const signOut = () => logout().then(() => navigate('/login'));
-  const moreActive = LINKS.some((l) => !l.main && location.pathname.startsWith(l.to));
-  const moreCount = LINKS.filter((l) => !l.main && l.badge).reduce((n, l) => n + (counts[l.badge] || 0), 0);
+  const moreActive = ['/templates', '/offers', '/settings'].some((p) => location.pathname.startsWith(p));
+  
 
   return (
     <div className="shell">
@@ -55,13 +56,9 @@ export function Layout() {
           </div>
         </div>
         <nav className="nav" aria-label="Main">
-          {LINKS.map(({ to, label, icon: Icon, end, badge }) => (
-            <NavLink key={to} to={to} end={end}>
-              <Icon size={19} />
-              {label}
-              {badge && counts[badge] > 0 && <span className={`count ${badge === 'leads' ? 'hot' : ''}`}>{counts[badge]}</span>}
-            </NavLink>
-          ))}
+          {LINKS.filter((l) => l.main).map((l) => <SideLink key={l.to} link={l} counts={counts} pathname={location.pathname} />)}
+          <div className="nav-group">More</div>
+          {LINKS.filter((l) => !l.main).map((l) => <SideLink key={l.to} link={l} counts={counts} pathname={location.pathname} />)}
         </nav>
         <div className="sidebar-foot">
           {settings && <ProviderPill settings={settings} />}
@@ -88,9 +85,9 @@ export function Layout() {
       </div>
 
       <nav className="bottom-nav" aria-label="Main">
-        {LINKS.filter((l) => l.main).map(({ to, label, icon: Icon, end, badge }) => (
-          <NavLink key={to} to={to} end={end}>
-            <Icon size={21} />
+        {LINKS.filter((l) => l.main).map(({ to, label, pic, end, badge, also }) => (
+          <NavLink key={to} to={to} end={end} className={({ isActive }) => (isActive || also?.some((p) => location.pathname.startsWith(p)) ? 'active' : '')}>
+            <Pic name={pic} size={26} />
             {label}
             {badge && counts[badge] > 0 && <span className="dot">{counts[badge]}</span>}
           </NavLink>
@@ -98,8 +95,7 @@ export function Layout() {
         <button className={`more-btn ${moreActive ? 'active' : ''}`} onClick={() => setMore(true)} aria-haspopup="dialog">
           <Menu size={21} />
           More
-          {moreCount > 0 && <span className="dot hot">{moreCount}</span>}
-        </button>
+                  </button>
       </nav>
 
       {more && (
@@ -110,9 +106,9 @@ export function Layout() {
               <button className="icon-btn" onClick={() => setMore(false)} aria-label="Close"><X size={20} /></button>
             </div>
             <div className="more-grid">
-              {LINKS.filter((l) => !l.main).map(({ to, label, icon: Icon, badge }) => (
+              {LINKS.filter((l) => !l.main).map(({ to, label, pic, badge }) => (
                 <NavLink key={to} to={to} className="more-item">
-                  <span className="kpi-icon tone-brand" style={{ width: 44, height: 44, borderRadius: 14 }}><Icon size={22} /></span>
+                  <Pic name={pic} size={44} />
                   {label}
                   {badge && counts[badge] > 0 && <span className="count hot">{counts[badge]}</span>}
                 </NavLink>
@@ -122,6 +118,17 @@ export function Layout() {
         </div>
       )}
     </div>
+  );
+}
+
+function SideLink({ link: { to, label, pic, end, badge, also }, counts, pathname }) {
+  const sub = also?.some((p) => pathname.startsWith(p));
+  return (
+    <NavLink to={to} end={end} className={({ isActive }) => (isActive || sub ? 'active' : '')}>
+      <Pic name={pic} size={24} />
+      {label}
+      {badge && counts[badge] > 0 && <span className={`count ${badge === 'leads' ? 'hot' : ''}`}>{counts[badge]}</span>}
+    </NavLink>
   );
 }
 
