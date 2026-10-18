@@ -1,25 +1,27 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CakeSlice, CalendarHeart, Gift, Heart, Pencil, Plus, Send, Sparkles, Star } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, ChevronLeft, ChevronRight, Pencil, Plus, Send } from 'lucide-react';
 import { VARIABLES, extractVariables, valuesFor } from '@shared/template.js';
 import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.js';
-import { Alert, Empty, Field, Modal, SectionTabs, Skeleton, Spinner, useToast } from '../components/ui.jsx';
-import { PhonePreview } from '../components/PhonePreview.jsx';
-import { dateOnly, inr, num, pct, plural } from '../lib/format.js';
+import { Alert, Field, Modal, Pic, Skeleton, Spinner, useToast } from '../components/ui.jsx';
+import { Highlighted, PhonePreview } from '../components/PhonePreview.jsx';
+import { dateOnly, num, plural } from '../lib/format.js';
+import { READY_WISHES } from '../lib/ready.js';
+import { toFriendly } from '../lib/friendly.js';
 
+// Special days: a calendar of who has a birthday, anniversary or family day and which festivals
+// fall when, today's list with "Send now", and the automatic wishes (on/off, set up in 3 steps).
 const KINDS = {
-  birthday: { label: 'Birthday', icon: CakeSlice, tone: 'tone-gold', hint: 'Uses each customer’s birthday from your list.' },
-  anniversary: { label: 'Anniversary', icon: Heart, tone: 'tone-brand', hint: 'Uses each customer’s wedding anniversary.' },
-  festival: { label: 'Festival or event', icon: Sparkles, tone: 'tone-wa', hint: 'Any date you choose: a festival, a sale, the shop’s anniversary, a new collection launch.' },
-  thank_you: { label: 'After a purchase', icon: Star, tone: 'tone-gold', hint: 'A thank-you with a “Rate us on Google” button, the day after a sales code is used.' },
+  birthday: { label: 'Birthdays', one: 'birthday', pic: 'cake', hint: 'Each customer’s birthday.' },
+  anniversary: { label: 'Wedding anniversaries', one: 'anniversary', pic: 'ring', hint: 'Each customer’s wedding anniversary.' },
+  personal: { label: 'Family days', one: 'family day', pic: 'blossom', hint: 'Spouse’s and child’s birthdays and other days saved on customers.' },
+  festival: { label: 'Festivals and shop events', one: 'event', pic: 'sparkles', hint: 'Any date you choose: Diwali, a sale, the shop’s anniversary.' },
+  thank_you: { label: 'After a purchase', one: 'purchase', pic: 'handshake', hint: 'A thank-you with a “Rate us on Google” button, after a sales code is used.' },
 };
-// "After a purchase": how many days after the sales code was used.
-const AFTER = [
-  { d: 1, label: 'The next day' },
-  { d: 2, label: '2 days after' },
-  { d: 3, label: '3 days after' },
-];
+const AFTER = [{ d: 1, label: 'The next day' }, { d: 2, label: '2 days after' }, { d: 3, label: '3 days after' }];
+const WHEN = [{ d: 7, label: 'A week before' }, { d: 3, label: '3 days before' }, { d: 1, label: 'The day before' }, { d: 0, label: 'On the day' }];
+const HOURS = [8, 9, 10, 11, 12, 16, 17, 18, 19];
 const THANK_YOU_NAME = '⭐ Thank you + Google review';
 const thankYouMessage = (link) => ({
   name: THANK_YOU_NAME,
@@ -29,120 +31,120 @@ const thankYouMessage = (link) => ({
   buttons: [{ type: 'url', text: 'Rate us on Google', url: link }],
   sms_body: `Thank you for shopping at {{store}}, {{name}}! Please rate us on Google: ${link} -SWATHI`,
 });
-const WHEN = [
-  { d: 7, label: 'A week before' },
-  { d: 3, label: '3 days before' },
-  { d: 1, label: 'The day before' },
-  { d: 0, label: 'On the day' },
-];
-const HOURS = [8, 9, 10, 11, 12, 16, 17, 18, 19];
-
-// Quick ideas for "Add festival or event". Festivals that move each year carry this year's date
+// Quick ideas for a new festival or event. Festivals that move each year carry this year's date
 // (check it before switching on); fixed-date days repeat every year.
 const EVENT_IDEAS = [
-  { name: 'Dhanteras', date: '2026-11-06' },
-  { name: 'Diwali', date: '2026-11-08' },
-  { name: 'Christmas', md: '12-25' },
-  { name: 'New Year', md: '01-01' },
-  { name: 'Sankranti', md: '01-14' },
-  { name: 'Republic Day sale', md: '01-26' },
-  { name: 'Valentine’s Day', md: '02-14' },
-  { name: 'Women’s Day', md: '03-08' },
-  { name: 'Independence Day sale', md: '08-15' },
-  { name: 'Shop anniversary', md: '' },
-  { name: 'Gold exhibition', date: '' },
-  { name: 'New collection launch', date: '' },
+  { name: 'Dhanteras', date: '2026-11-06' }, { name: 'Diwali', date: '2026-11-08' },
+  { name: 'Christmas', md: '12-25' }, { name: 'New Year', md: '01-01' }, { name: 'Sankranti', md: '01-14' },
+  { name: 'Republic Day sale', md: '01-26' }, { name: 'Valentine’s Day', md: '02-14' }, { name: 'Women’s Day', md: '03-08' },
+  { name: 'Independence Day sale', md: '08-15' }, { name: 'Shop anniversary', md: '' },
+  { name: 'Gold exhibition', date: '' }, { name: 'New collection launch', date: '' },
 ];
-/** The next date (today or later) for a month-day like '12-25'. */
-function nextOn(md, today) {
-  const y = Number(today.slice(0, 4));
-  return `${y}-${md}` >= today ? `${y}-${md}` : `${y + 1}-${md}`;
-}
-const todayIndia = () => new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10);
 const CAMPAIGN_VARS = VARIABLES.filter((v) => v.source === 'campaign');
 const EXAMPLE_CUSTOMER = { name: 'Priya Sharma', city: 'Hyderabad', last_purchase: 'gold bangles', interests: 'bridal' };
+const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const FAMILY = { spouse_birthday: 'spouse’s birthday', child_birthday: 'child’s birthday' };
 
+const addDays = (date, n) => {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+};
+const nextOn = (md, today) => (`${today.slice(0, 4)}-${md}` >= today ? `${today.slice(0, 4)}-${md}` : `${Number(today.slice(0, 4)) + 1}-${md}`);
+const hourText = (h) => `${((h + 11) % 12) + 1} ${h < 12 ? 'am' : 'pm'}`;
 function whenText(days, kind) {
   if (kind === 'thank_you') return [...days].sort((a, b) => a - b).map((d) => (d === 1 ? 'the day after a purchase' : `${d} days after a purchase`)).join(' and ');
   return [...days].sort((a, b) => b - a).map((d) => (d === 0 ? 'on the day' : d === 1 ? 'the day before' : `${d} days before`)).join(' and ');
 }
-function hourText(h) {
-  return `${((h + 11) % 12) + 1} ${h < 12 ? 'am' : 'pm'}`;
+/** The Monday on or before the 1st of the month, so the grid starts on a Monday. */
+function gridStart(month) {
+  const first = new Date(`${month}-01T00:00:00Z`);
+  return addDays(`${month}-01`, -((first.getUTCDay() + 6) % 7));
 }
+const monthName = (month) => new Date(`${month}-01T00:00:00Z`).toLocaleDateString('en-IN', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+const shiftMonth = (month, n) => {
+  const d = new Date(`${month}-01T00:00:00Z`);
+  d.setUTCMonth(d.getUTCMonth() + n);
+  return d.toISOString().slice(0, 7);
+};
 
 export default function Occasions() {
   const { settings } = useAuth();
   const canEdit = settings?.role !== 'viewer';
+  const toast = useToast();
   const [data, setData] = useState(null);
   const [templates, setTemplates] = useState([]);
   const [editing, setEditing] = useState(null);
-  const toast = useToast();
+  const [month, setMonth] = useState(null);
+  const [cal, setCal] = useState(null);
+  const [picked, setPicked] = useState(null);
 
-  const load = () => api('/api/occasions').then(setData).catch(() => setData({ occasions: [], dates: {} }));
+  const load = () => api('/api/occasions').then((r) => {
+    setData(r);
+    setMonth((m) => m || r.today.date.slice(0, 7));
+    setPicked((p) => p || r.today.date);
+  }).catch(() => setData({ occasions: [], dates: {}, today: { date: new Date().toISOString().slice(0, 10), hour: 0 } }));
   useEffect(() => {
     load();
-    api('/api/templates').then((r) => setTemplates(r.templates.filter((t) => t.status === 'approved'))).catch(() => {});
+    api('/api/templates').then((r) => setTemplates(r.templates.filter((x) => x.status === 'approved'))).catch(() => {});
   }, []);
+  useEffect(() => {
+    if (!month) return;
+    setCal(null);
+    api(`/api/occasions/calendar?from=${gridStart(month)}&days=42`).then(setCal).catch(() => setCal({ days: {} }));
+  }, [month, data]);
 
   async function toggle(o) {
     try {
       await api(`/api/occasions/${o.id}/enabled`, { method: 'PATCH', body: { enabled: !o.enabled } });
-      toast(o.enabled ? `${o.name} greetings paused` : `${o.name} greetings switched on`);
+      toast(o.enabled ? `${o.name} switched off` : `${o.name} switched on`);
+      load();
+    } catch (e) {
+      toast(e.message, 'bad');
+    }
+  }
+  async function runNow(o) {
+    try {
+      const r = await api(`/api/occasions/${o.id}/run`, { method: 'POST' });
+      toast(r.queued ? `${plural(r.queued, 'wish', 'wishes')} on the way` : 'Nobody new to wish: they already got today’s wish.');
       load();
     } catch (e) {
       toast(e.message, 'bad');
     }
   }
 
-  const missingKinds = data ? ['birthday', 'anniversary', 'thank_you'].filter((k) => !data.occasions.some((o) => o.kind === k)) : [];
+  const occ = data?.occasions || [];
+  const first = (kind) => occ.find((o) => o.kind === kind);
+  const kinds = ['birthday', 'anniversary', 'personal', ...(settings?.salesCodes ? ['thank_you'] : [])];
 
   return (
     <div className="page">
-      <div className="page-head">
+      <div className="page-head compact">
         <div>
           <h1>Special days</h1>
-          <p>Birthday, anniversary, festival and shop-event wishes go out on their own. Add any event you like, on any date.</p>
+          <p>Birthdays, anniversaries, family days and festivals. Wishes go out by themselves, or send them yourself on the day.</p>
         </div>
         {canEdit && <button className="btn primary" onClick={() => setEditing({ kind: 'festival' })}><Plus size={18} />Add festival or event</button>}
       </div>
 
       {!data ? (
-        <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))' }}>{[0, 1].map((i) => <div key={i} className="card card-pad"><Skeleton h={18} w="40%" /><Skeleton h={60} style={{ marginTop: 12 }} /></div>)}</div>
+        <div className="card card-pad"><Skeleton h={260} /></div>
       ) : (
         <div className="stack">
-          {data.dates.total > 0 && (data.dates.with_birthday === 0 || data.dates.with_anniversary === 0) && (
-            <Alert tone="warn" icon={CalendarHeart}>
-              {num(data.dates.with_birthday)} of {num(data.dates.total)} customers have a birthday saved and {num(data.dates.with_anniversary)} an anniversary.
-              Add these dates (Excel import or customer form) so they get greetings.
-            </Alert>
-          )}
+          <div className="days-top">
+            <CalendarCard month={month} setMonth={setMonth} cal={cal} today={data.today.date} picked={picked} setPicked={setPicked} />
+            <DayPanel
+              date={picked} today={data.today} cal={cal} first={first} canEdit={canEdit}
+              onSetUp={(kind) => setEditing({ kind })} onRun={runNow}
+            />
+          </div>
 
-          {canEdit && missingKinds.length > 0 && (
-            <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
-              {missingKinds.map((k) => {
-                const K = KINDS[k];
-                return (
-                  <button key={k} className="card card-pad option" style={{ alignItems: 'center' }} onClick={() => setEditing({ kind: k })}>
-                    <span className={`kpi-icon ${K.tone}`} style={{ width: 44, height: 44, borderRadius: 12 }}><K.icon size={22} /></span>
-                    <span style={{ flex: 1 }}>
-                      <span className="option-title">{k === 'thank_you' ? 'Set up thank-you + Google review' : `Set up ${K.label.toLowerCase()} greetings`}</span>
-                      <span className="subtle" style={{ display: 'block' }}>{K.hint}</span>
-                    </span>
-                    <Plus size={18} />
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
-          {data.occasions.length === 0 && missingKinds.length === 0 && (
-            <div className="card"><Empty icon={Gift} title="No wishes set up yet">Set up birthday, anniversary or festival greetings once; the app sends them every day.</Empty></div>
-          )}
-
-          <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))' }}>
-            {data.occasions.map((o) => (
-              <OccasionCard key={o.id} o={o} canEdit={canEdit} onToggle={() => toggle(o)} onEdit={() => setEditing(o)} />
+          <h2 style={{ marginTop: 6 }}>Automatic wishes</h2>
+          <div className="wish-grid">
+            {kinds.map((k) => (
+              <KindCard key={k} kind={k} o={first(k)} data={data} canEdit={canEdit} onToggle={toggle} onEdit={(o) => setEditing(o || { kind: k })} />
             ))}
+            <EventsCard events={occ.filter((o) => o.kind === 'festival')} canEdit={canEdit} onToggle={toggle} onEdit={(o) => setEditing(o)} onAdd={() => setEditing({ kind: 'festival' })} />
           </div>
         </div>
       )}
@@ -151,7 +153,10 @@ export default function Occasions() {
         <OccasionEditor
           initial={editing}
           templates={templates}
+          setTemplates={setTemplates}
           businessName={settings?.businessName}
+          smsOn={settings?.sms?.live}
+          today={data?.today?.date}
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null);
@@ -163,108 +168,205 @@ export default function Occasions() {
   );
 }
 
-function OccasionCard({ o, canEdit, onToggle, onEdit }) {
-  const K = KINDS[o.kind];
-  const [next, setNext] = useState(null);
-  useEffect(() => {
-    api(`/api/occasions/${o.id}/upcoming?days=30`).then((r) => setNext(r.upcoming)).catch(() => setNext([]));
-  }, [o.id, o.updated_at]);
-  const total = next?.reduce((n, u) => n + u.count, 0) || 0;
+function CalendarCard({ month, setMonth, cal, today, picked, setPicked }) {
+  if (!month) return null;
+  const start = gridStart(month);
+  const cells = Array.from({ length: 42 }, (_, i) => addDays(start, i));
   return (
-    <div className="card card-pad occasion-card" style={{ opacity: o.enabled ? 1 : 0.75 }}>
-      <div className="head">
-        <span className={`glyph ${K.tone}`}><K.icon size={24} /></span>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <h3>{o.name}</h3>
-          <p className="subtle">
-            {o.kind === 'festival' ? (o.repeat_yearly ? `Every year on ${dateOnly(o.festival_date).replace(/ \d{4}$/, '')} · ` : `${dateOnly(o.festival_date)} · `) : ''}Sends {whenText(o.days_before, o.kind)}, at {hourText(o.send_hour)}
-          </p>
-        </div>
-        {canEdit && (
-          <label className="switch" title={o.enabled ? 'Switch off' : 'Switch on'}>
-            <input type="checkbox" checked={o.enabled} onChange={onToggle} aria-label={`${o.name} greetings on`} />
-            <span />
-          </label>
-        )}
+    <div className="card card-pad cal-card">
+      <div className="row between" style={{ marginBottom: 10 }}>
+        <h2>{monthName(month)}</h2>
+        <span className="row" style={{ gap: 4 }}>
+          <button className="btn ghost sm" onClick={() => { setMonth(today.slice(0, 7)); setPicked(today); }}>Today</button>
+          <button className="icon-btn sm" onClick={() => setMonth(shiftMonth(month, -1))} aria-label="Previous month"><ChevronLeft size={18} /></button>
+          <button className="icon-btn sm" onClick={() => setMonth(shiftMonth(month, 1))} aria-label="Next month"><ChevronRight size={18} /></button>
+        </span>
       </div>
-      <div className="stat-row">
-        <span><b>{num(o.sent_30d)}</b> sent in 30 days</span>
-        <span><b>{pct(o.read_30d, o.sent_30d)}%</b> read</span>
-        <span><b>{num(o.redeemed)}</b> used in store · <b>{inr(o.revenue)}</b></span>
-      </div>
-      <div>
-        <div className="label" style={{ marginBottom: 6 }}>Next 30 days {next && <span className="subtle">· {plural(total, 'greeting')}</span>}</div>
-        {!next ? (
-          <Skeleton h={40} />
-        ) : next.length === 0 ? (
-          <p className="subtle">Nobody in the next 30 days.</p>
-        ) : (
-          <div className="timeline-mini">
-            {next.slice(0, 4).map((u) => (
-              <div className="item" key={`${u.sendOn}-${u.before}`}>
-                <span className="date">{dateOnly(u.sendOn).replace(/ \d{4}$/, '')}</span>
-                <span className="badge neutral">{u.before === 0 ? 'on the day' : `${u.before} d before`}</span>
-                <span className="muted" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {u.names.join(', ')}{u.count > u.names.length ? ` +${u.count - u.names.length}` : ''}
-                </span>
-              </div>
-            ))}
-            {next.length > 4 && <span className="subtle">and {plural(next.length - 4, 'more day')}</span>}
-          </div>
-        )}
-      </div>
-      <div className="row between">
-        <span className="subtle">Message: {o.template_name}{o.sms_fallback ? ' · SMS backup on' : ''}</span>
-        {canEdit && <button className="btn sm" onClick={onEdit}><Pencil size={15} />Edit</button>}
+      <div className="cal-grid" role="grid" aria-label={monthName(month)}>
+        {WEEKDAYS.map((w) => <span key={w} className="cal-head">{w}</span>)}
+        {cells.map((d) => {
+          const day = cal?.days?.[d];
+          const out = d.slice(0, 7) !== month;
+          const people = day ? day.birthday.length + day.anniversary.length + day.personal.length : 0;
+          return (
+            <button
+              key={d}
+              type="button"
+              className={`cal-cell ${out ? 'out' : ''} ${d === today ? 'today' : ''} ${d === picked ? 'on' : ''}`}
+              onClick={() => setPicked(d)}
+              aria-label={`${dateOnly(d)}${people ? `, ${plural(people, 'special day')}` : ''}`}
+            >
+              <span className="cal-num">{Number(d.slice(8))}</span>
+              {day?.events.map((e) => <em key={e.id} className="ev">{e.name}</em>)}
+              {day?.birthday.length > 0 && <em className="b">{plural(day.birthday.length, 'birthday')}</em>}
+              {day?.anniversary.length > 0 && <em className="a">{plural(day.anniversary.length, 'anniversary', 'anniversaries')}</em>}
+              {day?.personal.length > 0 && <em className="p">{plural(day.personal.length, 'family day')}</em>}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-function OccasionEditor({ initial, templates, businessName, onClose, onSaved }) {
+/** The chosen day: who has what, and whether their wish goes by itself, has gone, or can be sent now. */
+function DayPanel({ date, today, cal, first, canEdit, onSetUp, onRun }) {
+  const day = cal?.days?.[date];
+  const isToday = date === today.date;
+  const groups = day ? [
+    ['birthday', day.birthday],
+    ['anniversary', day.anniversary],
+    ['personal', day.personal],
+  ].filter(([, list]) => list.length) : [];
+  return (
+    <div className="card card-pad day-panel">
+      <h2>{isToday ? 'Today' : dateOnly(date)}</h2>
+      {!cal ? <Spinner /> : !groups.length && !day?.events.length ? (
+        <p className="subtle">No birthdays, anniversaries or events{isToday ? ' today' : ' on this day'}.</p>
+      ) : (
+        <div className="stack-sm">
+          {day.events.map((e) => <div key={e.id} className="day-group"><Pic name="sparkles" size={26} /><b>{e.name}</b></div>)}
+          {groups.map(([kind, list]) => {
+            const o = first(kind);
+            const at = o && o.enabled ? (isToday && today.hour >= o.send_hour ? 'Sent this morning' : `Goes out at ${hourText(o.send_hour)}`) : null;
+            return (
+              <div key={kind} className="day-group">
+                <Pic name={KINDS[kind].pic} size={26} />
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <b>{plural(list.length, KINDS[kind].one, kind === 'anniversary' ? 'anniversaries' : undefined)}</b>
+                  <div className="subtle">{list.slice(0, 6).map((p) => `${p.name}${p.kind ? ` (${p.label || FAMILY[p.kind] || 'special day'})` : ''}`).join(', ')}{list.length > 6 ? ` and ${num(list.length - 6)} more` : ''}</div>
+                  {at && <div className="subtle" style={{ color: 'var(--ok)' }}>{at}</div>}
+                </div>
+                {canEdit && (o ? (o.enabled && isToday && today.hour < o.send_hour && <button className="btn sm" onClick={() => onRun(o)}><Send size={14} />Send now</button>) : (
+                  <button className="btn sm" onClick={() => onSetUp(kind)}>Set up wishes</button>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function KindCard({ kind, o, data, canEdit, onToggle, onEdit }) {
+  const K = KINDS[kind];
+  const saved = kind === 'birthday' ? data.dates?.with_birthday : kind === 'anniversary' ? data.dates?.with_anniversary : null;
+  return (
+    <div className={`card card-pad wish-card ${o?.enabled ? '' : 'off'}`}>
+      <div className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
+        <Pic name={K.pic} size={36} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <b>{K.label}</b>
+          <div className="subtle">{o ? `${whenText(o.days_before, kind)}, ${hourText(o.send_hour)} · ${o.template_name}` : K.hint}</div>
+          {saved !== null && saved !== undefined && <div className="subtle">{plural(saved, 'customer')} {saved === 1 ? 'has' : 'have'} this date saved</div>}
+          {o && <div className="subtle">{num(o.sent_30d)} sent in 30 days</div>}
+        </div>
+        {o && canEdit && (
+          <label className="switch" title={o.enabled ? 'Switch off' : 'Switch on'}>
+            <input type="checkbox" checked={o.enabled} onChange={() => onToggle(o)} aria-label={`${K.label} on`} />
+            <span />
+          </label>
+        )}
+      </div>
+      {canEdit && (
+        <button className={`btn sm ${o ? 'ghost' : 'primary'}`} style={{ alignSelf: 'flex-start' }} onClick={() => onEdit(o)}>
+          {o ? <><Pencil size={14} />Change</> : <><Plus size={14} />Set up</>}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function EventsCard({ events, canEdit, onToggle, onEdit, onAdd }) {
+  return (
+    <div className="card card-pad wish-card">
+      <div className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
+        <Pic name="sparkles" size={36} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <b>{KINDS.festival.label}</b>
+          <div className="subtle">{events.length ? `${plural(events.length, 'event')}` : KINDS.festival.hint}</div>
+        </div>
+      </div>
+      {events.map((o) => (
+        <div key={o.id} className="row" style={{ gap: 8 }}>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <b style={{ fontSize: '0.9rem' }}>{o.name}</b>
+            <span className="subtle"> · {o.repeat_yearly ? `every year, ${dateOnly(o.festival_date).replace(/ \d{4}$/, '')}` : dateOnly(o.festival_date)}</span>
+          </span>
+          {canEdit && <button className="icon-btn sm" onClick={() => onEdit(o)} aria-label={`Change ${o.name}`}><Pencil size={14} /></button>}
+          {canEdit && (
+            <label className="switch"><input type="checkbox" checked={o.enabled} onChange={() => onToggle(o)} aria-label={`${o.name} on`} /><span /></label>
+          )}
+        </div>
+      ))}
+      {canEdit && <button className="btn sm primary" style={{ alignSelf: 'flex-start' }} onClick={onAdd}><Plus size={14} />Add festival or event</button>}
+    </div>
+  );
+}
+
+/* ---------- Setting up a wish: which day, which template, when ---------- */
+function OccasionEditor({ initial, templates, setTemplates, businessName, smsOn, today, onClose, onSaved }) {
   const toast = useToast();
   const isNew = !initial.id;
+  const kind = initial.kind;
+  const steps = kind === 'festival' ? ['Day', 'Template', 'When'] : ['Template', 'When'];
+  const [step, setStep] = useState(0);
   const [o, setO] = useState({
-    name: initial.name || (initial.kind === 'festival' ? '' : KINDS[initial.kind].label),
-    kind: initial.kind,
+    name: initial.name || (kind === 'festival' ? '' : KINDS[kind].label),
+    kind,
     festival_date: initial.festival_date ? String(initial.festival_date).slice(0, 10) : '',
-    days_before: initial.days_before || (initial.kind === 'festival' ? [3, 0] : initial.kind === 'thank_you' ? [1] : [0]),
+    repeat_yearly: Boolean(initial.repeat_yearly),
+    days_before: initial.days_before || (kind === 'festival' ? [3, 0] : kind === 'thank_you' ? [1] : [0]),
     send_hour: initial.send_hour ?? 10,
-    template_id: initial.template_id || (initial.kind === 'thank_you' ? templates.find((t) => t.name === THANK_YOU_NAME)?.id : templates[0]?.id) || '',
-    variables: initial.variables || {},
+    template_id: initial.template_id || '',
+    variables: { store: businessName || '', ...(initial.variables || {}) },
     sms_fallback: Boolean(initial.sms_fallback),
     enabled: initial.enabled ?? true,
-    repeat_yearly: Boolean(initial.repeat_yearly),
   });
   const [busy, setBusy] = useState(false);
-  const [list, setList] = useState(templates);
   const [reviewLink, setReviewLink] = useState('');
   const set = (patch) => setO((x) => ({ ...x, ...patch }));
-  const template = list.find((t) => t.id === Number(o.template_id));
-  const isThanks = o.kind === 'thank_you';
-  const hasThanksMessage = list.some((t) => t.name === THANK_YOU_NAME);
+  const template = templates.find((t) => t.id === Number(o.template_id));
+  const wish = READY_WISHES[kind];
+  const needed = useMemo(() => (template ? CAMPAIGN_VARS.filter((v) => v.key !== 'store' && extractVariables(template.body).includes(v.key)) : []), [template]);
+  const values = { ...valuesFor(EXAMPLE_CUSTOMER, o.variables), days_left: String(Math.max(...o.days_before)) };
+  const stepName = steps[step];
 
-  async function createThankYou() {
-    if (!/^https?:\/\/\S+\.\S+/.test(reviewLink.trim())) return toast('Paste your Google review link (it starts with https://).', 'bad');
+  async function useWish() {
     try {
-      const r = await api('/api/templates', { method: 'POST', body: thankYouMessage(reviewLink.trim()) });
-      setList((x) => [...x, r.template]);
-      set({ template_id: r.template.id, variables: { store: businessName || '', ...o.variables } });
-      toast('Thank-you message created');
+      let t = templates.find((x) => x.name === wish.name);
+      if (!t) {
+        ({ template: t } = await api('/api/templates', { method: 'POST', body: { name: wish.name, body: wish.body, sms_body: wish.sms, buttons: [], category: 'marketing', status: 'approved' } }));
+        setTemplates((list) => [t, ...list]);
+      }
+      set({ template_id: t.id, variables: { ...o.variables, offer: o.variables.offer || wish.offer || '', offer_ends: o.variables.offer_ends || '' } });
     } catch (e) {
       toast(e.message, 'bad');
     }
   }
-  const needed = useMemo(() => (template ? CAMPAIGN_VARS.filter((v) => extractVariables(template.body).includes(v.key)) : []), [template]);
-  const values = { ...valuesFor(EXAMPLE_CUSTOMER, { store: businessName || '', ...o.variables }), days_left: String(Math.max(...o.days_before)), offer_code: `PRIYA-${o.kind === 'birthday' ? 'BDAY' : o.kind === 'anniversary' ? 'ANNIV' : o.kind === 'thank_you' ? 'THANKS' : 'FEST'}-4821` };
+  async function createThankYou() {
+    if (!/^https?:\/\/\S+\.\S+/.test(reviewLink.trim())) return toast('Paste your Google review link (it starts with https://).', 'bad');
+    try {
+      const r = await api('/api/templates', { method: 'POST', body: thankYouMessage(reviewLink.trim()) });
+      setTemplates((list) => [r.template, ...list]);
+      set({ template_id: r.template.id });
+    } catch (e) {
+      toast(e.message, 'bad');
+    }
+  }
 
-  const toggleDay = (d) => set({ days_before: o.days_before.includes(d) ? o.days_before.filter((x) => x !== d) : [...o.days_before, d] });
+  const error = {
+    Day: !o.name.trim() ? 'Give the event a name.' : !o.festival_date ? 'Pick the date.' : null,
+    Template: !o.template_id ? 'Pick a template.' : needed.find((v) => !String(o.variables[v.key] || '').trim()) ? `Fill in the ${needed.find((v) => !String(o.variables[v.key] || '').trim()).label.toLowerCase()}.` : null,
+    When: !o.days_before.length ? 'Pick when to send.' : null,
+  }[stepName];
 
   async function save() {
     setBusy(true);
     try {
       await api(isNew ? '/api/occasions' : `/api/occasions/${initial.id}`, { method: isNew ? 'POST' : 'PUT', body: o });
-      toast(isNew ? `${o.name} greetings switched on` : 'Saved');
+      toast(isNew ? `${o.name} switched on` : 'Saved');
       onSaved();
     } catch (e) {
       toast(e.message, 'bad');
@@ -272,95 +374,127 @@ function OccasionEditor({ initial, templates, businessName, onClose, onSaved }) 
       setBusy(false);
     }
   }
+  const toggleDay = (d) => set({ days_before: o.days_before.includes(d) ? o.days_before.filter((x) => x !== d) : [...o.days_before, d] });
+  const others = templates.filter((t) => t.name !== wish?.name);
 
   return (
     <Modal
-      title={isNew ? (o.kind === 'festival' ? 'New festival or event' : `New ${KINDS[o.kind].label.toLowerCase()} greeting`) : `Edit ${o.name}`}
+      title={isNew ? (kind === 'festival' ? 'New festival or event' : `Set up ${KINDS[kind].label.toLowerCase()}`) : `Change ${o.name}`}
       onClose={onClose}
-      width={880}
-      footer={<><button className="btn" onClick={onClose}>Cancel</button><button className="btn primary" onClick={save} disabled={busy || !o.days_before.length || !o.template_id || !o.name.trim() || (o.kind === 'festival' && !o.festival_date)}>{busy ? <Spinner /> : isNew ? 'Switch on' : 'Save'}</button></>}
+      width={900}
+      footer={(
+        <div className="row between" style={{ width: '100%', gap: 8 }}>
+          <span className="subtle" style={{ color: error ? 'var(--warn)' : undefined }}>{error || `Step ${step + 1} of ${steps.length}`}</span>
+          <span className="row" style={{ gap: 8 }}>
+            {step > 0 ? <button className="btn ghost" onClick={() => setStep(step - 1)}><ArrowLeft size={16} />Back</button> : <button className="btn ghost" onClick={onClose}>Cancel</button>}
+            {step < steps.length - 1 ? (
+              <button className="btn primary" disabled={Boolean(error)} onClick={() => setStep(step + 1)}>Next<ArrowRight size={16} /></button>
+            ) : (
+              <button className="btn primary" disabled={Boolean(error) || busy} onClick={save}>{busy ? <Spinner /> : <><Check size={16} />{isNew ? 'Switch on' : 'Save'}</>}</button>
+            )}
+          </span>
+        </div>
+      )}
     >
-      <div className="two-col" style={{ gridTemplateColumns: 'minmax(0,1fr) 300px' }}>
-        <div className="stack">
-          {o.kind === 'festival' && isNew && (
-            <Field label="Pick an idea, or type your own below">
-              <div className="chips">
-                {EVENT_IDEAS.map((e) => (
-                  <button
-                    key={e.name}
-                    type="button"
-                    className={`chip ${o.name === e.name ? 'on' : ''}`}
-                    onClick={() => set({ name: e.name, festival_date: e.md ? nextOn(e.md, todayIndia()) : e.date || o.festival_date, repeat_yearly: e.md !== undefined })}
-                  >
-                    {e.name}
+      <div className="stepper" style={{ marginBottom: 14 }}>
+        {steps.map((s, i) => (
+          <button key={s} className={`step ${i === step ? 'on' : i < step ? 'done' : ''}`} onClick={() => i < step && setStep(i)} disabled={i >= step}>
+            <span className="bar" /><span className="lbl">{i < step ? <Check size={14} strokeWidth={3} /> : `${i + 1}.`} {s}</span>
+          </button>
+        ))}
+      </div>
+      <div className="two-col" style={{ gridTemplateColumns: 'minmax(0,1fr) 280px' }}>
+        <div className="stack" style={{ minWidth: 0 }}>
+          {stepName === 'Day' && (
+            <>
+              {isNew && (
+                <Field label="Pick an idea, or type your own below">
+                  <div className="chips">
+                    {EVENT_IDEAS.map((e) => (
+                      <button key={e.name} type="button" className={`chip ${o.name === e.name ? 'on' : ''}`}
+                        onClick={() => set({ name: e.name, festival_date: e.md ? nextOn(e.md, today) : e.date || o.festival_date, repeat_yearly: e.md !== undefined })}>
+                        {e.name}
+                      </button>
+                    ))}
+                  </div>
+                </Field>
+              )}
+              <Field label="Event name"><input id="ev-name" className="input" value={o.name} onChange={(e) => set({ name: e.target.value })} placeholder="e.g. Shop anniversary sale" /></Field>
+              <Field label="Date" hint={o.repeat_yearly ? 'Sent on this date every year.' : 'Festival dates change each year; please check.'}>
+                <input id="ev-date" className="input" type="date" value={o.festival_date} onChange={(e) => set({ festival_date: e.target.value })} style={{ maxWidth: 220 }} />
+              </Field>
+              <label className="check consent">
+                <span className="switch"><input type="checkbox" checked={o.repeat_yearly} onChange={(e) => set({ repeat_yearly: e.target.checked })} /><span /></span>
+                <span><b>Same date every year</b><span className="hint" style={{ display: 'block' }}>For the shop’s anniversary, Christmas or New Year.</span></span>
+              </label>
+            </>
+          )}
+
+          {stepName === 'Template' && (
+            <>
+              <div className="tpl-grid">
+                {wish && (
+                  <button type="button" className={`tpl-card ${template?.name === wish.name ? 'on' : ''}`} onClick={useWish}>
+                    <span className="row" style={{ gap: 8 }}><Pic name={wish.pic} size={28} /><b>{wish.name.replace(/^\W+\s*/u, '')}</b><span className="badge neutral" style={{ marginLeft: 'auto' }}>Ready-made</span></span>
+                    <span className="tpl-text"><Highlighted body={toFriendly(wish.body)} /></span>
+                  </button>
+                )}
+                {others.map((t) => (
+                  <button key={t.id} type="button" className={`tpl-card ${Number(o.template_id) === t.id ? 'on' : ''}`} onClick={() => set({ template_id: t.id })}>
+                    <span className="row" style={{ gap: 8 }}><Pic name="memo" size={28} /><b style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</b></span>
+                    <span className="tpl-text"><Highlighted body={toFriendly(t.body)} /></span>
                   </button>
                 ))}
+                <Link to="/templates/new" className="tpl-card tpl-new"><Plus size={18} />New template</Link>
               </div>
-            </Field>
+              {kind === 'thank_you' && !templates.some((t) => t.name === THANK_YOU_NAME) && (
+                <div className="card card-pad stack-sm" style={{ background: 'var(--surface-2)' }}>
+                  <b>Ready-made thank-you with a Google review button</b>
+                  <span className="subtle">Paste the shop’s Google review link (Google Business Profile → Ask for reviews → copy link).</span>
+                  <div className="row wrap" style={{ gap: 8 }}>
+                    <input id="review-link" className="input" style={{ flex: '1 1 240px' }} placeholder="https://g.page/r/..." value={reviewLink} onChange={(e) => setReviewLink(e.target.value)} inputMode="url" />
+                    <button type="button" className="btn primary" onClick={createThankYou}>Create it</button>
+                  </div>
+                </div>
+              )}
+              {needed.length > 0 && (
+                <div className="form-grid two">
+                  {needed.map((v) => (
+                    <Field key={v.key} label={v.label} hint={`e.g. ${v.example}`}>
+                      <input id={`occ-${v.key}`} className="input" value={o.variables[v.key] || ''} onChange={(e) => set({ variables: { ...o.variables, [v.key]: e.target.value } })} />
+                    </Field>
+                  ))}
+                </div>
+              )}
+            </>
           )}
-          <div className="form-grid two">
-            <Field label={o.kind === 'festival' ? 'Event name' : 'Name'}>
-              <input className="input" value={o.name} onChange={(e) => set({ name: e.target.value })} placeholder={o.kind === 'festival' ? 'e.g. Shop anniversary sale' : undefined} />
-            </Field>
-            {o.kind === 'festival' && (
-              <Field label="Date" hint={o.repeat_yearly ? 'Sent on this date every year.' : 'Festival dates change each year; please check.'}>
-                <input className="input" type="date" value={o.festival_date} onChange={(e) => set({ festival_date: e.target.value })} />
+
+          {stepName === 'When' && (
+            <>
+              <Field label={kind === 'thank_you' ? 'When after the purchase' : 'When'} hint={kind === 'thank_you' ? 'Counted from the day the sales code was used.' : 'Pick one or more. A week before is good for gift reminders.'}>
+                <div className="chips">
+                  {(kind === 'thank_you' ? AFTER : WHEN).map((w) => (
+                    <button key={w.d} type="button" className={`chip ${o.days_before.includes(w.d) ? 'on' : ''}`} onClick={() => toggleDay(w.d)}>{w.label}</button>
+                  ))}
+                </div>
               </Field>
-            )}
-          </div>
-          {o.kind === 'festival' && (
-            <label className="check">
-              <span className="switch"><input type="checkbox" checked={o.repeat_yearly} onChange={(e) => set({ repeat_yearly: e.target.checked })} /><span /></span>
-              <span><b>Same date every year</b><span className="hint" style={{ display: 'block' }}>For the shop’s anniversary, Christmas or New Year. Leave off for festivals whose date changes.</span></span>
-            </label>
+              <Field label="Time (India)">
+                <div className="chips">
+                  {HOURS.map((h) => <button key={h} type="button" className={`chip ${o.send_hour === h ? 'on' : ''}`} onClick={() => set({ send_hour: h })}>{hourText(h)}</button>)}
+                </div>
+              </Field>
+              {smsOn && (
+                <label className="check consent">
+                  <span className="switch"><input type="checkbox" checked={o.sms_fallback} onChange={(e) => set({ sms_fallback: e.target.checked })} /><span /></span>
+                  <span><b>SMS if not on WhatsApp</b></span>
+                </label>
+              )}
+              <Alert tone="info">Each customer gets this wish once per {kind === 'festival' ? 'event' : 'year'}. It does not count towards the weekly message limit.</Alert>
+            </>
           )}
-          {isThanks && !hasThanksMessage && (
-            <div className="card card-pad stack-sm" style={{ background: 'var(--surface-2)' }}>
-              <b>Ready-made thank-you message</b>
-              <span className="subtle">Paste the shop’s Google review link (Google Business Profile → Ask for reviews → copy link). It becomes a “Rate us on Google” button.</span>
-              <div className="row wrap" style={{ gap: 8 }}>
-                <input className="input" style={{ flex: '1 1 240px' }} placeholder="https://g.page/r/..." value={reviewLink} onChange={(e) => setReviewLink(e.target.value)} inputMode="url" />
-                <button type="button" className="btn primary" onClick={createThankYou}>Create the message</button>
-              </div>
-            </div>
-          )}
-          <Field label="When to send" hint={isThanks ? 'Counted from the day the sales code was used at the counter.' : 'Pick one or more. A week before is the best time for gift reminders.'}>
-            <div className="chips">
-              {(isThanks ? AFTER : WHEN).map((w) => (
-                <button key={w.d} type="button" className={`chip ${o.days_before.includes(w.d) ? 'on' : ''}`} onClick={() => toggleDay(w.d)}>{w.label}</button>
-              ))}
-            </div>
-          </Field>
-          <Field label="Time (India)">
-            <div className="chips">
-              {HOURS.map((h) => <button key={h} type="button" className={`chip ${o.send_hour === h ? 'on' : ''}`} onClick={() => set({ send_hour: h })}>{hourText(h)}</button>)}
-            </div>
-          </Field>
-          <Field label="Message" hint={templates.length ? 'Tip: use {{days_left}} for “in 7 days” and {{offer_code}} for a code they show at billing.' : undefined}>
-            {list.length ? (
-              <select className="select" value={o.template_id} onChange={(e) => set({ template_id: Number(e.target.value) })}>
-                {list.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
-            ) : (
-              <Alert>No templates yet. <Link to="/templates/new">Write one first.</Link></Alert>
-            )}
-          </Field>
-          {needed.length > 0 && (
-            <div className="form-grid two">
-              {needed.map((v) => (
-                <Field key={v.key} label={v.label} hint={`e.g. ${v.example}`}>
-                  <input className="input" value={o.variables[v.key] || ''} onChange={(e) => set({ variables: { ...o.variables, [v.key]: e.target.value } })} />
-                </Field>
-              ))}
-            </div>
-          )}
-          <label className="check">
-            <span className="switch"><input type="checkbox" checked={o.sms_fallback} onChange={(e) => set({ sms_fallback: e.target.checked })} /><span /></span>
-            <span><b>SMS backup</b><span className="hint" style={{ display: 'block' }}>If a customer is not on WhatsApp and agreed to SMS, send the SMS version.</span></span>
-          </label>
         </div>
-        <div className="stack">
-          <PhonePreview body={template?.body} values={values} buttons={template?.buttons || []} businessName={businessName} caption="Example: Priya" />
+        <div className="hide-mobile">
+          <PhonePreview body={template?.body} values={values} buttons={template?.buttons || []} businessName={businessName} caption={template ? 'Example: Priya' : 'Pick a template to see it here'} />
         </div>
       </div>
     </Modal>

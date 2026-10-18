@@ -76,7 +76,7 @@ beforeAll(async () => {
 afterAll(() => closeDb());
 
 beforeEach(async () => {
-  for (const t of ['redemptions', 'leads', 'messages', 'campaigns', 'occasions', 'templates', 'contacts']) await query(`DELETE FROM ${t}`);
+  for (const t of ['redemptions', 'leads', 'messages', 'campaigns', 'occasions', 'templates', 'contact_dates', 'contacts']) await query(`DELETE FROM ${t}`);
   await query('UPDATE clients SET weekly_cap = 2, approval_threshold = 500');
   provider = fakeWhatsApp();
   setProvider(provider);
@@ -177,6 +177,24 @@ describe('Phase 3: occasions', () => {
     const agent = await login('admin@example.com');
     const r = await agent.post('/api/occasions').send({ name: 'New Year', kind: 'festival', festival_date: '2027-01-01', days_before: [0], template_id: t.id, repeat_yearly: true });
     expect(r.body.occasion.repeat_yearly).toBe(true);
+  });
+
+  it('sends family-day wishes and shows every special day on the calendar', async () => {
+    const c = await contact('Family', '+919000033333', { birthday: '1904-12-05' });
+    await query(`INSERT INTO contact_dates (client_id, contact_id, kind, label, date) VALUES ($1, $2, 'spouse_birthday', NULL, '1980-12-06')`, [clientId, c.id]);
+    const t = await template('Hi {{name}}, warm wishes to your family on this special day.');
+    const { rows: [o] } = await query(
+      `INSERT INTO occasions (client_id, name, kind, days_before, template_id) VALUES ($1, 'Family days', 'personal', '[0]', $2) RETURNING *`,
+      [clientId, t.id],
+    );
+    const dec6 = new Date('2027-12-06T12:00:00+05:30');
+    expect((await runOccasion(o, { now: dec6, force: true })).queued).toBe(1);
+    expect((await runOccasion(o, { now: new Date('2027-12-07T12:00:00+05:30'), force: true })).queued).toBe(0);
+    expect((await upcoming(clientId, o, 10, new Date('2027-12-01T12:00:00+05:30')))[0]).toMatchObject({ occasionDate: '2027-12-06', count: 1 });
+    const agent = await login('admin@example.com');
+    const cal = await agent.get('/api/occasions/calendar?from=2027-12-04&days=4');
+    expect(cal.body.days['2027-12-05'].birthday.map((x) => x.name)).toContain('Family');
+    expect(cal.body.days['2027-12-06'].personal).toMatchObject([{ name: 'Family', kind: 'spouse_birthday' }]);
   });
 
   it('greets 29 February birthdays on 28 February in other years', async () => {

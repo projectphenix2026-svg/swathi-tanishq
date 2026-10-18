@@ -1,12 +1,13 @@
 import express from 'express';
 import { query } from '../db/index.js';
 import { requireRole } from './auth.js';
-import { runOccasion, upcoming, indiaNow } from '../lib/occasions.js';
+import { runOccasion, upcoming, indiaNow, calendar, addDays } from '../lib/occasions.js';
 
 const router = express.Router();
 const canEdit = requireRole('admin', 'manager');
 // thank_you = "After a purchase": a thank-you (with a Google review button) N days after a sales code is used.
-const KINDS = ['birthday', 'anniversary', 'festival', 'thank_you'];
+// personal = "Family days": a spouse's or child's birthday, or any other day saved on the customer.
+const KINDS = ['birthday', 'anniversary', 'festival', 'thank_you', 'personal'];
 
 router.get('/', async (req, res) => {
   const { rows } = await query(
@@ -29,6 +30,14 @@ router.get('/', async (req, res) => {
     [req.clientId],
   );
   res.json({ occasions: rows, dates, today: indiaNow() });
+});
+
+// The Special days calendar: up to 6 weeks from a start date.
+router.get('/calendar', async (req, res) => {
+  const today = indiaNow().date;
+  const from = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.from || '')) ? req.query.from : today;
+  const days = Math.min(Math.max(Number(req.query.days) || 42, 1), 62);
+  res.json({ today, from, to: addDays(from, days - 1), days: await calendar(req.clientId, from, days) });
 });
 
 router.get('/:id/upcoming', async (req, res) => {
@@ -72,8 +81,8 @@ router.patch('/:id/enabled', canEdit, async (req, res) => {
   res.json({ occasion: o });
 });
 
-// Send today's greetings now instead of waiting for the send time (admins only).
-router.post('/:id/run', requireRole('admin'), async (req, res) => {
+// Send today's greetings now instead of waiting for the send time.
+router.post('/:id/run', canEdit, async (req, res) => {
   const o = await find(req.clientId, req.params.id);
   if (!o) return res.status(404).json({ error: 'Occasion not found.' });
   res.json(await runOccasion(o, { force: true }));
