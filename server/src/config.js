@@ -16,6 +16,8 @@ export const config = {
   webOrigin: env.WEB_ORIGIN || 'http://localhost:5173',
 
   jwtSecret: env.JWT_SECRET || '',
+  // Encrypts the shop's WhatsApp key in the database (falls back to JWT_SECRET).
+  settingsKey: env.SETTINGS_KEY || '',
   adminEmail: env.ADMIN_EMAIL || '',
   adminPassword: env.ADMIN_PASSWORD || '',
   adminName: env.ADMIN_NAME || 'Admin',

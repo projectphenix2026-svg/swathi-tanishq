@@ -1,4 +1,5 @@
 import { cloneElement, createContext, isValidElement, useCallback, useContext, useEffect, useId, useRef, useState } from 'react';
+import { NavLink } from 'react-router-dom';
 import { AlertCircle, CheckCircle2, Info, Loader2, X } from 'lucide-react';
 import { avatarColors, initials } from '../lib/format.js';
 
@@ -29,6 +30,26 @@ export function ToastProvider({ children }) {
 }
 
 /* ---------- Bits ---------- */
+// Solid app icons (Google Material Symbols, filled, in /icons): a white shape on a coloured
+// circle, like payment and banking apps. `plain` draws just the shape in the text colour (menus).
+const ICONS = {
+  home: ['home', 'maroon'], megaphone: ['campaign', 'maroon'], people: ['group', 'blue'], speech: ['chat', 'green'],
+  cake: ['cake', 'gold'], phone: ['call', 'green'], memo: ['edit_note', 'blue'], ticket: ['confirmation_number', 'gold'],
+  gear: ['settings', 'slate'], diya: ['local_fire_department', 'orange'], moneybag: ['currency_rupee', 'gold'],
+  blossom: ['local_florist', 'pink'], sparkles: ['new_releases', 'purple'], chartdown: ['trending_down', 'blue'],
+  ring: ['diamond', 'maroon'], check: ['check_circle', 'green'], hourglass: ['hourglass_top', 'gold'], mobile: ['smartphone', 'blue'],
+  chart: ['bar_chart', 'blue'], gem: ['diamond', 'gold'], inbox: ['inbox', 'blue'], eyes: ['visibility', 'blue'],
+};
+export function Pic({ name, size = 28, plain = false, label }) {
+  const [glyph, tone] = ICONS[name] || [name, 'maroon'];
+  const mask = `url(/icons/${glyph}.svg)`;
+  return (
+    <span className={`ico tone-${tone} ${plain ? 'plain' : ''}`} style={{ width: size, height: size }} role={label ? 'img' : undefined} aria-label={label} aria-hidden={label ? undefined : true}>
+      <i style={{ maskImage: mask, WebkitMaskImage: mask }} />
+    </span>
+  );
+}
+
 export function Spinner({ size = 18 }) {
   return <Loader2 size={size} className="spin" aria-label="Loading" />;
 }
@@ -55,7 +76,7 @@ export function Empty({ icon: Icon, title, children, actions }) {
 export function Alert({ tone = 'info', icon: Icon = Info, children, action }) {
   return (
     <div className={`alert ${tone}`}>
-      <Icon size={18} />
+      {Icon && <Icon size={18} />}
       <div style={{ flex: 1 }}>{children}</div>
       {action}
     </div>
@@ -104,37 +125,52 @@ export function Modal({ title, onClose, children, footer, width }) {
 
 /* ---------- Status pills ---------- */
 const CAMPAIGN = {
-  pending_approval: ['warn', 'Waiting for approval'],
-  scheduled: ['info', 'Scheduled'],
-  sending: ['warn', 'Sending'],
-  completed: ['ok', 'Completed'],
-  cancelled: ['neutral', 'Cancelled'],
+  pending_approval: ['warn', 'Waiting for owner’s OK'],
+  scheduled: ['info', 'Going out later'],
+  sending: ['warn', 'Sending now'],
+  completed: ['ok', 'Done'],
+  cancelled: ['neutral', 'Stopped'],
 };
 export function CampaignStatus({ status }) {
   const [tone, label] = CAMPAIGN[status] || ['neutral', status];
   return <span className={`badge ${tone}`}>{label}</span>;
 }
 
+// WhatsApp's own ticks: everyone with a phone already knows them.
 const MESSAGE = {
-  queued: ['neutral', 'Waiting'],
-  retrying: ['warn', 'Retrying'],
-  sending: ['warn', 'Sending'],
-  sent: ['info', 'Sent'],
-  delivered: ['ok', 'Delivered'],
-  read: ['ok', 'Read'],
-  failed: ['bad', 'Failed'],
-  cancelled: ['neutral', 'Skipped'],
-  preview: ['info', 'SMS preview'],
+  queued: ['wait', '', 'Waiting to go'],
+  retrying: ['wait', '', 'Trying again'],
+  sending: ['wait', '', 'Going now'],
+  sent: ['sent', '✓', 'Sent'],
+  delivered: ['reached', '✓✓', 'Reached phone'],
+  read: ['read', '✓✓', 'Read'],
+  failed: ['bad', '', 'Couldn’t reach'],
+  cancelled: ['wait', '', 'Not sent'],
+  preview: ['wait', '', 'SMS (trial, not sent)'],
 };
 export function MessageStatus({ status }) {
-  const [tone, label] = MESSAGE[status] || ['neutral', status];
-  return <span className={`badge ${tone}`}>{label}</span>;
+  const [tone, ticks, label] = MESSAGE[status] || ['wait', '', status];
+  return <span className={`ticks ${tone}`}>{ticks && <span className="t" aria-hidden="true">{ticks}</span>}{label}</span>;
+}
+
+/** Tabs that join two related pages, e.g. Replies | Call back list. */
+export function SectionTabs({ tabs }) {
+  return (
+    <nav className="section-tabs" aria-label="Sections">
+      {tabs.map((t) => (
+        <NavLink key={t.to} to={t.to} end>
+          {t.label}
+          {t.count > 0 && <span className="count">{t.count}</span>}
+        </NavLink>
+      ))}
+    </nav>
+  );
 }
 
 export function OptInBadge({ c }) {
-  if (c.opted_out_at) return <span className="badge bad">Opted out</span>;
-  if (c.whatsapp_opt_in) return <span className="badge ok">Can receive</span>;
-  return <span className="badge warn">No opt-in</span>;
+  if (c.opted_out_at) return <span className="badge bad">Said STOP</span>;
+  if (c.whatsapp_opt_in) return <span className="badge ok">Agreed to WhatsApp</span>;
+  return <span className="badge warn">Not agreed yet</span>;
 }
 
 /** Label + control + hint/error. A single input, select or textarea child is linked to the label automatically. */

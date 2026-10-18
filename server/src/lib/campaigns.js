@@ -21,7 +21,11 @@ export function audienceWhere(clientId, audience = {}, params = []) {
   const mode = audience.mode || 'all';
   if (mode === 'selected') {
     where.push(`c.id IN (SELECT value FROM json_each(${p((audience.contactIds || []).map(Number))}))`);
-  } else if (mode === 'filter') {
+  } else {
+    // Staff test phones (see POST /api/campaigns/test) only get messages when picked by hand.
+    where.push(`NOT EXISTS (SELECT 1 FROM json_each(c.tags) t WHERE t.value = '${TEST_PHONE_TAG}')`);
+  }
+  if (mode === 'filter') {
     const cities = (audience.cities || []).map((s) => String(s).toLowerCase()).filter(Boolean);
     if (cities.length) where.push(`lower(c.city) IN (SELECT value FROM json_each(${p(cities)}))`);
     const tags = (audience.tags || []).filter(Boolean);
@@ -34,7 +38,9 @@ export function audienceWhere(clientId, audience = {}, params = []) {
   return { where: where.join(' AND '), params };
 }
 
-export const ELIGIBLE = 'c.whatsapp_opt_in = 1 AND c.opted_out_at IS NULL';
+export const TEST_PHONE_TAG = 'test-phone';
+
+export const ELIGIBLE ='c.whatsapp_opt_in = 1 AND c.opted_out_at IS NULL';
 
 // Customer fields behind each placeholder; offer_code and days_left are filled in at send time.
 const CUSTOMER_KEYS = { name: 'name', full_name: 'name', city: 'city', last_purchase: 'last_purchase', interests: 'interests' };

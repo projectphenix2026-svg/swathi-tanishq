@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, CheckCheck, Eye, Flame, IndianRupee, MessageCircle, MessageSquareText, RefreshCw, Send, ShieldCheck, Ticket, XCircle } from 'lucide-react';
+import { Link, useLocation, useParams } from 'react-router-dom';
+import { AlertCircle, ArrowLeft, Check, CheckCheck, Flame, IndianRupee, MessageCircle, MessageSquareText, RefreshCw, ShieldCheck, Ticket, Undo2, XCircle } from 'lucide-react';
 import { useAuth } from '../lib/auth.js';
 import { api } from '../lib/api.js';
 import { Alert, CampaignStatus, Kpi, MessageStatus, Skeleton, Spinner, useToast } from '../components/ui.jsx';
@@ -10,8 +10,8 @@ import { dateTime, inr, num, pct, phone, plural } from '../lib/format.js';
 const TABS = [
   { key: '', label: 'Everyone' },
   { key: 'read', label: 'Read' },
-  { key: 'delivered', label: 'Delivered' },
-  { key: 'failed', label: 'Failed' },
+  { key: 'delivered', label: 'Reached phone' },
+  { key: 'failed', label: 'Couldn’t reach' },
   { key: 'pending', label: 'Waiting' },
   { key: 'sms', label: 'SMS' },
 ];
@@ -25,6 +25,8 @@ export default function CampaignReport() {
   const [cancelling, setCancelling] = useState(false);
   const [approving, setApproving] = useState(false);
   const { settings } = useAuth();
+  const location = useLocation();
+  const [undone, setUndone] = useState(false);
 
   const load = useCallback(() => {
     api(`/api/campaigns/${id}`).then(setData).catch((e) => setData({ error: e.message }));
@@ -35,8 +37,11 @@ export default function CampaignReport() {
     load();
   }, [load]);
 
-  // Refresh while messages are still going out or statuses are still arriving.
-  const live = data?.campaign && (['scheduled', 'sending'].includes(data.campaign.status) || data.report.sent > data.report.read);
+  // Refresh while messages are still going out, and for 15 minutes after the last one, while
+  // most delivered/read updates arrive. Some customers never read, so don't wait for everyone.
+  const camp = data?.campaign;
+  const recent = camp?.completed_at && Date.now() - Date.parse(camp.completed_at) < 15 * 60 * 1000;
+  const live = camp && (['scheduled', 'sending'].includes(camp.status) || (recent && data.report.sent > data.report.read));
   useEffect(() => {
     if (!live) return undefined;
     const t = setInterval(load, 4000);
@@ -56,12 +61,13 @@ export default function CampaignReport() {
     }
   }
 
-  async function cancel() {
-    if (!confirm('Stop this campaign? Messages already sent cannot be taken back.')) return;
+  async function cancel({ ask = true } = {}) {
+    if (ask && !confirm('Stop this offer? Messages already sent cannot be taken back.')) return;
     setCancelling(true);
     try {
       const r = await api(`/api/campaigns/${id}/cancel`, { method: 'POST' });
-      toast(`Stopped. ${plural(r.cancelled, 'message')} will not be sent.`);
+      toast(ask ? `Stopped. ${plural(r.cancelled, 'message')} will not be sent.` : 'Undone. Nothing was sent.');
+      if (!ask) setUndone(true);
       load();
     } catch (e) {
       toast(e.message, 'bad');
@@ -76,7 +82,7 @@ export default function CampaignReport() {
   const { campaign: c, report: r } = data;
   return (
     <div className="page">
-      <Link to="/campaigns" className="back"><ArrowLeft size={16} />Campaigns</Link>
+      <Link to="/campaigns" className="back"><ArrowLeft size={16} />Offers sent</Link>
       <div className="page-head">
         <div>
           <div className="row wrap" style={{ gap: 10 }}>
@@ -94,47 +100,66 @@ export default function CampaignReport() {
             <button className="btn wa" onClick={approve} disabled={approving}>{approving ? <Spinner /> : <><ShieldCheck size={18} />Approve and send</>}</button>
           )}
           {['scheduled', 'sending', 'pending_approval'].includes(c.status) && (
-            <button className="btn danger" onClick={cancel} disabled={cancelling}>{cancelling ? <Spinner /> : <><XCircle size={18} />{c.status === 'sending' ? 'Stop sending' : 'Cancel'}</>}</button>
+            <button className="btn danger" onClick={() => cancel()} disabled={cancelling}>{cancelling ? <Spinner /> : <><XCircle size={18} />{c.status === 'sending' ? 'Stop sending' : 'Stop'}</>}</button>
           )}
         </div>
       </div>
 
       <div className="stack">
+        {location.state?.undo && !undone && c.status === 'scheduled' && (
+          <div className="alert warn undo-bar">
+            <span><b>Your offer starts going out within a minute.</b> Changed your mind? Undo now and nothing is sent.</span>
+            <button className="btn lg" onClick={() => cancel({ ask: false })} disabled={cancelling}>{cancelling ? <Spinner /> : <><Undo2 size={18} />Undo</>}</button>
+          </div>
+        )}
+        {c.provider === 'mock' && (
+          <Alert tone="warn" icon={AlertCircle}>
+            <b>Test only: nothing reached these phones.</b> This offer was sent while the app is in test mode, so the ticks below are pretend,
+            to show how reports will look. Real messages go out once the shop’s WhatsApp (Meta) account is connected.
+          </Alert>
+        )}
+        <div className="card card-pad">
+          <p style={{ fontSize: '1.05rem', margin: 0 }}>
+            <b>{num(r.sent)}</b> sent · <b>{num(r.delivered)}</b> reached phones · <b>{num(r.read)}</b> read it
+            {r.redeemed > 0 && <> · <b>{num(r.redeemed)}</b> bought with their code ({inr(r.revenue)})</>}
+            {r.failed > 0 && <> · <b>{num(r.failed)}</b> couldn’t be reached</>}
+          </p>
+        </div>
         {c.status === 'pending_approval' && (
           <Alert tone="warn" icon={ShieldCheck}>
             <b>Waiting for the owner’s approval.</b> It goes to about {num(c.expected_count)} customers ({inr((c.expected_count || 0) * Number(c.cost_per_message))}). Nothing has been sent yet.
           </Alert>
         )}
         <div className="grid kpis">
-          <Kpi icon={Send} tone="brand" label="Sent" value={num(r.sent)} sub={r.pending ? `${num(r.pending)} still waiting` : `of ${num(r.total)}`} />
-          <Kpi icon={CheckCheck} tone="wa" label="Delivered" value={`${pct(r.delivered, r.sent)}%`} sub={`${num(r.delivered)} phones`} />
-          <Kpi icon={Eye} tone="info" label="Read" value={`${pct(r.read, r.sent)}%`} sub={`${num(r.read)} customers`} />
-          <Kpi icon={MessageCircle} tone="gold" label="Replied" value={num(r.replied)} sub={<Link to="/inbox">Open inbox</Link>} />
-          <Kpi icon={Flame} tone="bad" label="Hot leads" value={num(r.leads)} sub={<Link to="/leads">Call list</Link>} />
+          <Kpi icon={Check} tone="brand" label="✓ Sent" value={num(r.sent)} sub={r.pending ? `${num(r.pending)} still waiting` : `of ${num(r.total)}`} />
+          <Kpi icon={CheckCheck} tone="wa" label="✓✓ Reached phone" value={num(r.delivered)} sub={`${pct(r.delivered, r.sent)}% of sent`} />
+          <Kpi icon={CheckCheck} tone="info" label="Blue ✓✓ Read" value={num(r.read)} sub={`${pct(r.read, r.sent)}% of sent`} />
+          <Kpi icon={MessageCircle} tone="gold" label="Replied" value={num(r.replied)} sub={<Link to="/inbox">Open replies</Link>} />
+          <Kpi icon={Flame} tone="bad" label="Call back list" value={num(r.leads)} sub={<Link to="/leads">Call list</Link>} />
           <Kpi icon={Ticket} tone="brand" label="Bought with code" value={num(r.redeemed)} sub={`${inr(r.revenue)} in sales`} />
-          <Kpi icon={IndianRupee} tone="gold" label="Return" value={r.cost ? `${num(Math.round(r.revenue / r.cost))}×` : '—'} sub={`${inr(r.cost)} spent`} />
-          <Kpi icon={MessageSquareText} tone="info" label="SMS backup" value={num(r.sms_total)} sub={r.sms_preview ? `${num(r.sms_preview)} preview only (no DLT yet)` : c.sms_fallback ? 'On' : 'Off'} />
+          <Kpi icon={IndianRupee} tone="gold" label="Sales per ₹1 spent" value={r.cost ? `₹${num(Math.round(r.revenue / r.cost))}` : '—'} sub={`${inr(r.cost)} spent`} />
+          {(r.sms_total > 0 || c.sms_fallback) && <Kpi icon={MessageSquareText} tone="info" label="SMS backup" value={num(r.sms_total)} sub={r.sms_preview ? `${num(r.sms_preview)} trial only, not sent` : 'On'} />}
         </div>
 
         <div className="card card-pad stack" style={{ gap: 12 }}>
           <div className="row between wrap">
-            <h2>Where each message got to</h2>
+            <h2>Where the messages are</h2>
             <span className="row muted" style={{ gap: 6 }}><IndianRupee size={16} />Cost so far <b className="num" style={{ color: 'var(--text)' }}>{inr(r.cost)}</b></span>
           </div>
           <Funnel total={r.total} sent={r.sent} delivered={r.delivered} read={r.read} failed={r.failed} />
           <div className="legend">
             <span><i style={{ background: 'var(--read)' }} />Read {num(r.read)}</span>
-            <span><i style={{ background: 'var(--wa)' }} />Delivered, not read yet {num(r.delivered - r.read)}</span>
-            <span><i style={{ background: 'var(--text-3)', opacity: 0.45 }} />Sent, not delivered yet {num(r.sent - r.delivered)}</span>
+            <span><i style={{ background: 'var(--wa)' }} />Reached phone, not read yet {num(r.delivered - r.read)}</span>
+            <span><i style={{ background: 'var(--text-3)', opacity: 0.45 }} />Sent, not reached yet {num(r.sent - r.delivered)}</span>
             {r.pending > 0 && <span><i style={{ background: 'var(--border)' }} />Waiting to send {num(r.pending)}</span>}
-            <span><i style={{ background: 'var(--bad)' }} />Failed {num(r.failed)}</span>
-            {r.cancelled > 0 && <span>Cancelled {num(r.cancelled)}</span>}
+            <span><i style={{ background: 'var(--bad)' }} />Couldn’t reach {num(r.failed)}</span>
+            {r.cancelled > 0 && <span>Not sent {num(r.cancelled)}</span>}
           </div>
         </div>
 
         {r.failureReasons.length > 0 && (
           <div className="card">
-            <div className="card-head"><h2>Why some failed</h2></div>
+            <div className="card-head"><h2>Why some couldn’t be reached</h2></div>
             {r.failureReasons.map((f) => (
               <div key={f.reason} className="list-item">
                 <AlertCircle size={18} style={{ color: 'var(--bad)', flexShrink: 0 }} />

@@ -3,7 +3,7 @@
 //   Node (local dev, tests) -> Node's built-in SQLite (node:sqlite), a file or in memory
 // query(sql, params) uses $1, $2... placeholders and returns { rows, rowCount }.
 // JSON columns come back parsed and true/false columns come back as booleans.
-import { SCHEMA } from './schema.js';
+import { SCHEMA, CONNECTION_TABLE } from './schema.js';
 
 let impl = null;
 
@@ -132,7 +132,11 @@ export async function initDb({ memory = false, d1 = null, file } = {}) {
 async function ensureSchema() {
   try {
     await impl.query('SELECT 1 FROM leads LIMIT 1');
-    if (impl.kind === 'd1') return; // already set up; skip the work on every cold start
+    if (impl.kind === 'd1') {
+      // Already set up. Tables added after the first deploy are created here (cheap if they exist).
+      await impl.query(CONNECTION_TABLE.trim().replace(/;$/, ''));
+      return;
+    }
   } catch {
     /* first run: create the tables */
   }

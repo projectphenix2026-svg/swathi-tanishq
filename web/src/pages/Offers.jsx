@@ -57,8 +57,8 @@ export default function Offers() {
     <div className="page" style={{ maxWidth: 980 }}>
       <div className="page-head">
         <div>
-          <h1>Offer codes</h1>
-          <p>When a customer shows a code from their WhatsApp message, enter it here with the bill amount. Reports then show real sales per campaign.</p>
+          <h1>Bill codes</h1>
+          <p>When a customer shows a code from their WhatsApp message, enter it here with the bill amount. Reports then show the real sales from each offer.</p>
         </div>
       </div>
       <div className="two-col">

@@ -1,3 +1,4 @@
+import { savedMetaProvider } from '../lib/whatsapp-connection.js';
 import express from 'express';
 import { query, indiaStartOf } from '../db/index.js';
 import { config } from '../config.js';
@@ -11,7 +12,7 @@ router.get('/', async (req, res) => {
   const { rows: [customers] } = await query(
     `SELECT count(*) AS total,
             count(*) FILTER (WHERE whatsapp_opt_in = 1 AND opted_out_at IS NULL) AS reachable
-       FROM contacts WHERE client_id = $1`,
+       FROM contacts WHERE client_id = $1 AND phone NOT LIKE 'deleted:%'`,
     [req.clientId],
   );
   // This calendar month in India time.
@@ -64,7 +65,8 @@ router.get('/settings', async (req, res) => {
     businessName: config.businessName,
     provider: { name: p.name, label: p.label, stub: Boolean(p.stub), missing: p.missingConfig() },
     sms: { name: sms.name, label: sms.label, live: sms.live, missing: sms.missingConfig(), costPerSms: config.sms.costPerSms },
-    metaTemplatesReady: Boolean(config.meta.wabaId && config.meta.accessToken),
+    metaTemplatesReady: Boolean((config.meta.wabaId && config.meta.accessToken) || savedMetaProvider()),
+    whatsappConnected: Boolean(savedMetaProvider()),
     costPerMessage: config.costPerMessage,
     webhooksReachable: Boolean(config.publicBaseUrl),
     weeklyCap: limits.weekly_cap,

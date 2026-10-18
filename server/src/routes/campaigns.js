@@ -1,8 +1,10 @@
 import express from 'express';
-import { query } from '../db/index.js';
+import { query, NOW } from '../db/index.js';
 import { config } from '../config.js';
 import { getProvider } from '../providers/index.js';
-import { previewAudience, launchCampaign, campaignReport } from '../lib/campaigns.js';
+import { previewAudience, launchCampaign, campaignReport, queueMessages, TEST_PHONE_TAG } from '../lib/campaigns.js';
+import { kick } from '../lib/dispatch.js';
+import { normalizePhone } from '../lib/phone.js';
 import { render, valuesFor } from '../lib/template.js';
 import { withButtons } from '../providers/twilio.js';
 import { requireRole } from './auth.js';
@@ -55,26 +57,83 @@ router.post('/render', async (req, res) => {
   });
 });
 
+/** The template, or an error in plain words if it cannot be sent right now. */
+async function sendableTemplate(clientId, templateId) {
+  const { rows: [t] } = await query('SELECT * FROM templates WHERE id = $1 AND client_id = $2', [templateId, clientId]);
+  if (!t) return { error: 'Choose a message.' };
+  if (t.status !== 'approved') return { error: 'This message is not ready to send yet.' };
+  const provider = getProvider();
+  const missingConfig = provider.missingConfig();
+  if (missingConfig.length) return { error: `Sending is not set up yet. Missing: ${missingConfig.join(', ')}.` };
+  if (provider.name === 'meta' && (!t.provider_ref || (t.provider_status && t.provider_status !== 'APPROVED'))) {
+    return { error: 'WhatsApp (Meta) has not approved this message yet. Submit it from the saved message page and check back.' };
+  }
+  return { t };
+}
+
+// "Send a test to my phone": the message as one customer would get it, to a staff phone.
+// The phone is saved once as a customer tagged test-phone, which normal sends leave out.
+router.post('/test', canEdit, async (req, res) => {
+  const b = req.body || {};
+  const ph = normalizePhone(b.phone);
+  if (!ph.ok) return res.status(400).json({ error: ph.reason });
+  const { t, error } = await sendableTemplate(req.clientId, b.templateId);
+  if (error) return res.status(400).json({ error });
+  const { rows: [as] } = await query('SELECT * FROM contacts WHERE id = $1 AND client_id = $2', [b.asContactId, req.clientId]);
+  const { rows: [existing] } = await query('SELECT * FROM contacts WHERE client_id = $1 AND phone = $2', [req.clientId, ph.e164]);
+  const isTestPhone = existing && (existing.tags || []).includes(TEST_PHONE_TAG);
+  let contact = existing;
+  if (!existing || isTestPhone) {
+    // Copy the chosen customer's details, so the test reads exactly like their message.
+    const d = as || {};
+    ({ rows: [contact] } = await query(
+      `INSERT INTO contacts (client_id, name, phone, city, birthday, anniversary, last_purchase, interests, tags,
+                             whatsapp_opt_in, opt_in_at, opt_in_source)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 1, ${NOW}, 'staff test phone')
+       ON CONFLICT (client_id, phone) DO UPDATE SET name = excluded.name, city = excluded.city, birthday = excluded.birthday,
+         anniversary = excluded.anniversary, last_purchase = excluded.last_purchase, interests = excluded.interests,
+         whatsapp_opt_in = 1, opted_out_at = NULL
+       RETURNING *`,
+      [req.clientId, d.name || req.user.name, ph.e164, d.city ?? null, d.birthday ?? null, d.anniversary ?? null,
+        d.last_purchase ?? null, d.interests ?? null, JSON.stringify([TEST_PHONE_TAG])],
+    ));
+  } else if (!existing.whatsapp_opt_in || existing.opted_out_at) {
+    return res.status(400).json({ error: `${ph.display} is saved as a customer who has not agreed to WhatsApp messages. Use another number.` });
+  }
+  const audience = { mode: 'selected', contactIds: [contact.id] };
+  const { rows: [campaign] } = await query(
+    `INSERT INTO campaigns (client_id, name, template_id, audience, variables, status, started_at, cost_per_message, provider,
+                            created_by, expected_count, approved_by, approved_at)
+     VALUES ($1, $2, $3, $4, $5, 'sending', ${NOW}, $6, $7, $8, 1, $8, ${NOW}) RETURNING *`,
+    [req.clientId, `Test · ${t.name}`, t.id, JSON.stringify(audience), JSON.stringify(b.variables || {}),
+      config.costPerMessage, getProvider().name, req.user.id],
+  );
+  const queued = await queueMessages(req.clientId, {
+    audience, template: t, variables: b.variables || {}, keyPrefix: `campaign:${campaign.id}:contact:`, campaignId: campaign.id, ignoreCap: true,
+  });
+  if (!queued) {
+    await query(`UPDATE campaigns SET status = 'cancelled', completed_at = ${NOW} WHERE id = $1`, [campaign.id]);
+    return res.status(400).json({ error: 'The test could not go out: this message needs details the chosen customer does not have, or the offer is blank.' });
+  }
+  kick();
+  res.status(201).json({ campaign, phone: ph.display, as: contact.name });
+});
+
 router.post('/', canEdit, async (req, res) => {
   const b = req.body || {};
   const name = String(b.name || '').trim();
   if (!name) return res.status(400).json({ error: 'Give the campaign a name.' });
-  const { rows: [t] } = await query('SELECT * FROM templates WHERE id = $1 AND client_id = $2', [b.templateId, req.clientId]);
-  if (!t) return res.status(400).json({ error: 'Choose a message template.' });
-  if (t.status !== 'approved') return res.status(400).json({ error: 'This template is not ready to send yet.' });
+  const { t, error } = await sendableTemplate(req.clientId, b.templateId);
+  if (error) return res.status(400).json({ error });
   const provider = getProvider();
-  const missingConfig = provider.missingConfig();
-  if (missingConfig.length) {
-    return res.status(400).json({ error: `Sending is not set up yet. Missing: ${missingConfig.join(', ')}.` });
-  }
-  if (provider.name === 'meta' && (!t.provider_ref || (t.provider_status && t.provider_status !== 'APPROVED'))) {
-    return res.status(400).json({ error: 'Meta has not approved this template yet. Submit it from the template page and check back.' });
-  }
   let scheduledAt = null;
   if (b.scheduledAt) {
     scheduledAt = new Date(b.scheduledAt);
     if (Number.isNaN(scheduledAt.getTime())) return res.status(400).json({ error: 'Pick a valid date and time.' });
     if (scheduledAt.getTime() < Date.now() - 60000) return res.status(400).json({ error: 'That time has already passed.' });
+  } else if (Number(b.undoSeconds) > 0) {
+    // "Send now" with a short pause, so staff can still undo (it starts on the next minute's run).
+    scheduledAt = new Date(Date.now() + Math.min(60, Number(b.undoSeconds)) * 1000);
   }
   const preview = await previewAudience(req.clientId, { audience: b.audience, template: t, variables: b.variables });
   if (!preview.sendable) return res.status(400).json({ error: 'No customers can receive this campaign. Check the audience and offer.' });

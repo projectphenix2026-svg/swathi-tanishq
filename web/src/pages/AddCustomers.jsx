@@ -34,7 +34,7 @@ export default function AddCustomers() {
       <div className="page-head">
         <div>
           <h1>Add customers</h1>
-          <p>Bring in your list once; every campaign uses it. Numbers are tidied to +91 format automatically.</p>
+          <p>Bring in your list once; every offer you send uses it. Numbers are tidied to +91 format automatically.</p>
         </div>
       </div>
 
@@ -280,7 +280,7 @@ function ImportReview({ preview, onBack, onDone, onRemap }) {
 
   const fields = [
     ['phone', 'Phone number', true], ['name', 'Name'], ['city', 'City'], ['last_purchase', 'Last purchase'],
-    ['interests', 'Interests'], ['birthday', 'Birthday'], ['anniversary', 'Anniversary'], ['opt_in', 'WhatsApp opt-in'],
+    ['interests', 'Interests'], ['birthday', 'Birthday'], ['anniversary', 'Anniversary'], ['opt_in', 'Agreed to WhatsApp'],
   ];
 
   return (
@@ -358,7 +358,7 @@ function ImportReview({ preview, onBack, onDone, onRemap }) {
           <span>
             <b>These customers agreed to get WhatsApp messages from us</b>
             <span className="hint" style={{ display: 'block' }}>
-              {optInColumn ? 'Your file has an opt-in column; it is used where filled in, and this choice applies to the empty cells.' : 'WhatsApp requires consent. Sending to people who did not agree can get the business number blocked.'}
+              {optInColumn ? 'Your file has a column saying who agreed to WhatsApp; it is used where filled in, and this choice applies to the empty cells.' : 'WhatsApp requires consent. Sending to people who did not agree can get the business number blocked.'}
             </span>
           </span>
         </label>
@@ -421,7 +421,7 @@ function ImportDone({ result, onAgain }) {
         <div className="row wrap" style={{ justifyContent: 'center' }}>
           <button className="btn" onClick={onAgain}><RefreshCw size={18} />Add more</button>
           <button className="btn" onClick={() => navigate('/customers')}>View customers</button>
-          <button className="btn primary" onClick={() => navigate('/campaigns/new')}><Send size={18} />Create a campaign</button>
+          <button className="btn primary" onClick={() => navigate('/campaigns/new')}><Send size={18} />Send an offer</button>
         </div>
       </div>
     </div>
@@ -483,7 +483,7 @@ function OneCustomer() {
       <div className="divider" />
       <label className="check">
         <span className="switch"><input type="checkbox" checked={f.whatsapp_opt_in} onChange={set('whatsapp_opt_in')} /><span /></span>
-        <span><b>Customer agreed to receive WhatsApp offers</b><span className="hint" style={{ display: 'block' }}>Without this, they are saved but never sent campaigns.</span></span>
+        <span><b>Customer agreed to receive WhatsApp offers</b><span className="hint" style={{ display: 'block' }}>Without this, they are saved but never sent offers.</span></span>
       </label>
       <label className="check">
         <span className="switch"><input type="checkbox" checked={f.sms_opt_in} onChange={set('sms_opt_in')} /><span /></span>

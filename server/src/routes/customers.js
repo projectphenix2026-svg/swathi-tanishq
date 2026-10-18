@@ -8,13 +8,16 @@ const router = express.Router();
 const canEdit = requireRole('admin', 'manager');
 
 const SORTS = { recent: 'created_at DESC', name: 'name IS NULL, name ASC' };
+// Deleted customers keep their row (so past offer totals and sales stay right) with all personal
+// details removed and the phone replaced by deleted:<id>; lists and counts leave them out.
+export const NOT_DELETED = "phone NOT LIKE 'deleted:%'";
 
 router.get('/', async (req, res) => {
   const { q = '', filter = 'all', sort = 'recent' } = req.query;
   const limit = Math.min(Number(req.query.limit) || 50, 200);
   const offset = Math.max(Number(req.query.offset) || 0, 0);
   const params = [req.clientId];
-  const where = ['client_id = $1'];
+  const where = ['client_id = $1', NOT_DELETED];
   if (q) {
     params.push(`%${q}%`);
     const digits = String(q).replace(/\D/g, '');
@@ -44,7 +47,7 @@ router.get('/summary', async (req, res) => {
             count(*) FILTER (WHERE whatsapp_opt_in = 1 AND opted_out_at IS NULL) AS opted_in,
             count(*) FILTER (WHERE whatsapp_opt_in = 0 AND opted_out_at IS NULL) AS no_opt_in,
             count(*) FILTER (WHERE opted_out_at IS NOT NULL) AS opted_out
-       FROM contacts WHERE client_id = $1`,
+       FROM contacts WHERE client_id = $1 AND ${NOT_DELETED}`,
     [req.clientId],
   );
   const { rows: cities } = await query(
@@ -122,6 +125,36 @@ router.patch('/:id', canEdit, async (req, res) => {
   );
   if (!c) return res.status(404).json({ error: 'Customer not found.' });
   res.json({ customer: c });
+});
+
+// Delete a customer: their name, number, details, chats and call-back entry are removed; queued
+// messages to them are cancelled. Past offer counts, costs and bill-code sales stay in reports.
+router.delete('/:id', canEdit, async (req, res) => {
+  const { rows: [c] } = await query(`SELECT id FROM contacts WHERE id = $1 AND client_id = $2 AND ${NOT_DELETED}`, [req.params.id, req.clientId]);
+  if (!c) return res.status(404).json({ error: 'Customer not found.' });
+  await batch([
+    { sql: 'DELETE FROM leads WHERE contact_id = $1', params: [c.id] },
+    {
+      sql: `UPDATE messages SET status = 'cancelled', error_message = 'Customer was deleted'
+             WHERE contact_id = $1 AND status IN ('queued', 'retrying')`,
+      params: [c.id],
+    },
+    {
+      // Chats (customer replies and staff answers) are not part of any offer report.
+      sql: `DELETE FROM messages WHERE contact_id = $1 AND campaign_id IS NULL AND occasion_id IS NULL
+              AND id NOT IN (SELECT message_id FROM redemptions)`,
+      params: [c.id],
+    },
+    { sql: 'UPDATE messages SET body = NULL, template_values = NULL, variables = NULL WHERE contact_id = $1', params: [c.id] },
+    {
+      sql: `UPDATE contacts SET name = 'Deleted customer', phone = 'deleted:' || id, city = NULL, birthday = NULL, anniversary = NULL,
+              last_purchase = NULL, interests = NULL, tags = '[]', whatsapp_opt_in = 0, sms_opt_in = 0, opt_in_at = NULL,
+              opt_in_source = NULL, opted_out_at = NULL, updated_at = ${NOW}
+             WHERE id = $1`,
+      params: [c.id],
+    },
+  ]);
+  res.json({ ok: true });
 });
 
 // ---- Import. The browser reads Excel/CSV/contacts files and builds the preview; the server

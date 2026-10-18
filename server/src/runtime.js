@@ -7,6 +7,7 @@ import { processDue } from './lib/dispatch.js';
 import { releaseStuck } from './lib/sender.js';
 import { pollStatuses } from './lib/messages.js';
 import { runAllOccasions } from './lib/occasions.js';
+import { refreshProvider } from './lib/whatsapp-connection.js';
 
 let setupDone = false;
 
@@ -37,6 +38,7 @@ let minute = 0;
  */
 export async function everyMinute({ send = true, occasions = true } = {}) {
   minute += 1;
+  await refreshProvider().catch((err) => console.warn('[whatsapp] could not read the connection:', err.message));
   if (send) {
     await processDue();
     if (minute % 10 === 0) await releaseStuck();
@@ -44,7 +46,10 @@ export async function everyMinute({ send = true, occasions = true } = {}) {
   if (occasions && config.occasionCheckMinutes > 0 && minute % config.occasionCheckMinutes === 0) {
     await runAllOccasions();
   }
-  if (occasions && !config.publicBaseUrl && config.statusPollSeconds > 0 && getProvider().fetchStatus) {
+  // Test mode has no webhooks, so its made-up delivered/read statuses are always fetched.
+  const provider = getProvider();
+  const noWebhooks = provider.name === 'mock' || (!config.publicBaseUrl && config.statusPollSeconds > 0);
+  if (occasions && noWebhooks && provider.fetchStatus) {
     await pollStatuses();
   }
 }

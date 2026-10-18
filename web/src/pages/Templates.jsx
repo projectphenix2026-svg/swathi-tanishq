@@ -4,8 +4,9 @@ import { ExternalLink, FileText, Phone, Plus, Reply } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { Empty, Skeleton } from '../components/ui.jsx';
 import { dateOnly } from '../lib/format.js';
+import { toFriendly } from '../lib/friendly.js';
 
-const STATUS = { approved: ['ok', 'Ready to send'], draft: ['neutral', 'Draft'], rejected: ['bad', 'Rejected'] };
+const STATUS = { approved: ['ok', 'Ready to send'], draft: ['neutral', 'Not finished'], rejected: ['bad', 'Rejected'] };
 
 export default function Templates() {
   const [list, setList] = useState(null);
@@ -17,10 +18,10 @@ export default function Templates() {
     <div className="page">
       <div className="page-head">
         <div>
-          <h1>Message templates</h1>
-          <p>Reusable messages with personal details filled in for each customer.</p>
+          <h1>Saved messages</h1>
+          <p>Messages you can send again and again. Each customer gets their own name and details.</p>
         </div>
-        <Link to="/templates/new" className="btn primary"><Plus size={18} />New template</Link>
+        <Link to="/templates/new" className="btn primary"><Plus size={18} />Write a message</Link>
       </div>
       {!list ? (
         <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
@@ -28,8 +29,8 @@ export default function Templates() {
         </div>
       ) : list.length === 0 ? (
         <div className="card">
-          <Empty icon={FileText} title="Write your first template" actions={<Link to="/templates/new" className="btn primary"><Plus size={18} />New template</Link>}>
-            A good template greets the customer by name, mentions something personal like their last purchase, and gives a real offer with an end date.
+          <Empty icon={FileText} title="Write your first message" actions={<Link to="/templates/new" className="btn primary"><Plus size={18} />Write a message</Link>}>
+            A good message greets the customer by name, mentions something personal like their last purchase, and gives a real offer with an end date.
           </Empty>
         </div>
       ) : (
@@ -43,7 +44,7 @@ export default function Templates() {
                   <span className={`badge ${tone}`}>{label}</span>
                 </div>
                 <div style={{ background: 'var(--wa-chat)', borderRadius: 12, padding: 12 }}>
-                  <div className="bubble" style={{ maxWidth: '100%', display: '-webkit-box', WebkitLineClamp: 4, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{t.body}</div>
+                  <div className="bubble" style={{ maxWidth: '100%', display: '-webkit-box', WebkitLineClamp: 4, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{toFriendly(t.body)}</div>
                   {t.buttons.length > 0 && (
                     <div className="row wrap" style={{ gap: 6, marginTop: 6 }}>
                       {t.buttons.map((b, i) => (
@@ -54,7 +55,7 @@ export default function Templates() {
                     </div>
                   )}
                 </div>
-                <div className="subtle">Updated {dateOnly(t.updated_at)}{t.used_in ? ` · used in ${t.used_in} campaign${t.used_in > 1 ? 's' : ''}` : ''}</div>
+                <div className="subtle">Updated {dateOnly(t.updated_at)}{t.used_in ? ` · sent ${t.used_in} time${t.used_in > 1 ? 's' : ''}` : ''}</div>
               </Link>
             );
           })}
