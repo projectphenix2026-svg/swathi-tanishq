@@ -91,7 +91,8 @@ function Today({ d, isOwner }) {
   const copyDue = isOwner && (!d.lastExportAt || Date.now() - Date.parse(d.lastExportAt) > 7 * 24 * 3600 * 1000);
   const last = d.recent.find((c) => c.status !== 'cancelled' && !c.name.startsWith('Test · '));
   const items = [
-    d.new_leads > 0 && { to: '/leads', pic: 'phone', title: `${plural(d.new_leads, 'customer')} said Interested`, text: 'Call them today, while they’re keen.', action: 'Call' },
+    d.overdue_leads > 0 && { to: '/leads', pic: 'phone', urgent: true, title: `${plural(d.overdue_leads, 'interested customer')} waiting more than a day`, text: 'Call them now: interest fades fast.', action: 'Call now' },
+    d.new_leads > d.overdue_leads && { to: '/leads', pic: 'phone', title: `${plural(d.new_leads - (d.overdue_leads || 0), 'customer')} said Interested`, text: 'Call them today, while they’re keen.', action: 'Call' },
     d.inbox.unread > 0 && { to: '/inbox', pic: 'speech', title: `${plural(d.inbox.unread, 'new reply', 'new replies')}`, text: 'Answer them from here. Replies within 24 hours are free.', action: 'Answer' },
     d.pending_approval > 0 && { to: '/campaigns', pic: 'hourglass', title: `${plural(d.pending_approval, 'offer')} ${d.pending_approval === 1 ? 'waits' : 'wait'} for the owner’s OK`, text: 'Big sends by staff go out once the owner approves.', action: 'Check' },
     d.occasions_on
@@ -113,7 +114,7 @@ function Today({ d, isOwner }) {
           </div>
         )}
         {items.map((it) => (
-          <Link key={it.title} to={it.to} className={`today-item ${it.done ? 'done' : ''}`}>
+          <Link key={it.title} to={it.to} className={`today-item ${it.done ? 'done' : ''} ${it.urgent ? 'urgent' : ''}`}>
             <span className="emoji" aria-hidden="true"><Pic name={it.pic} size={36} /></span>
             <div className="what"><b>{it.title}</b><span className="subtle">{it.text}</span></div>
             {it.action ? <span className="btn primary sm">{it.action}</span> : <ChevronRight size={18} className="muted" />}

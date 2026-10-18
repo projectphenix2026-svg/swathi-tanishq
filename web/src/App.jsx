@@ -18,6 +18,7 @@ import Occasions from './pages/Occasions.jsx';
 import Leads from './pages/Leads.jsx';
 import Offers from './pages/Offers.jsx';
 import Settings from './pages/Settings.jsx';
+import Updates from './pages/Updates.jsx';
 
 
 export default function App() {
@@ -86,6 +87,7 @@ export default function App() {
           <Route path="leads" element={<Leads />} />
           <Route path="offers" element={<Offers />} />
           <Route path="settings" element={<Settings />} />
+          <Route path="updates" element={<Updates />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

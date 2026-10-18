@@ -505,3 +505,6 @@ code, .code { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; f
   .action-bar > .row { flex: 1 1 auto; justify-content: flex-end; }
   .action-bar .btn.wa.lg { flex: 1 1 100%; justify-content: center; white-space: normal; }
 }
+
+.today-item.urgent { background: var(--bad-soft); }
+.today-item.urgent b { color: var(--bad); }

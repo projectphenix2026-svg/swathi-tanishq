@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CakeSlice, CalendarHeart, Gift, Heart, Pencil, Plus, Send, Sparkles } from 'lucide-react';
+import { CakeSlice, CalendarHeart, Gift, Heart, Pencil, Plus, Send, Sparkles, Star } from 'lucide-react';
 import { VARIABLES, extractVariables, valuesFor } from '@shared/template.js';
 import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.js';
@@ -12,7 +12,23 @@ const KINDS = {
   birthday: { label: 'Birthday', icon: CakeSlice, tone: 'tone-gold', hint: 'Uses each customer’s birthday from your list.' },
   anniversary: { label: 'Anniversary', icon: Heart, tone: 'tone-brand', hint: 'Uses each customer’s wedding anniversary.' },
   festival: { label: 'Festival', icon: Sparkles, tone: 'tone-wa', hint: 'One date for everyone, e.g. Diwali or Akshaya Tritiya.' },
+  thank_you: { label: 'After a purchase', icon: Star, tone: 'tone-gold', hint: 'A thank-you with a “Rate us on Google” button, the day after a bill code is used.' },
 };
+// "After a purchase": how many days after the bill code was used.
+const AFTER = [
+  { d: 1, label: 'The next day' },
+  { d: 2, label: '2 days after' },
+  { d: 3, label: '3 days after' },
+];
+const THANK_YOU_NAME = '⭐ Thank you + Google review';
+const thankYouMessage = (link) => ({
+  name: THANK_YOU_NAME,
+  category: 'marketing',
+  status: 'approved',
+  body: 'Thank you for shopping at {{store}}, {{name}}! We hope you love your new jewellery. Could you spare a minute to rate us on Google? It helps other families find us.',
+  buttons: [{ type: 'url', text: 'Rate us on Google', url: link }],
+  sms_body: `Thank you for shopping at {{store}}, {{name}}! Please rate us on Google: ${link} -SWATHI`,
+});
 const WHEN = [
   { d: 7, label: 'A week before' },
   { d: 3, label: '3 days before' },
@@ -23,7 +39,8 @@ const HOURS = [8, 9, 10, 11, 12, 16, 17, 18, 19];
 const CAMPAIGN_VARS = VARIABLES.filter((v) => v.source === 'campaign');
 const EXAMPLE_CUSTOMER = { name: 'Priya Sharma', city: 'Hyderabad', last_purchase: 'gold bangles', interests: 'bridal' };
 
-function whenText(days) {
+function whenText(days, kind) {
+  if (kind === 'thank_you') return [...days].sort((a, b) => a - b).map((d) => (d === 1 ? 'the day after a purchase' : `${d} days after a purchase`)).join(' and ');
   return [...days].sort((a, b) => b - a).map((d) => (d === 0 ? 'on the day' : d === 1 ? 'the day before' : `${d} days before`)).join(' and ');
 }
 function hourText(h) {
@@ -54,7 +71,7 @@ export default function Occasions() {
     }
   }
 
-  const missingKinds = data ? ['birthday', 'anniversary'].filter((k) => !data.occasions.some((o) => o.kind === k)) : [];
+  const missingKinds = data ? ['birthday', 'anniversary', 'thank_you'].filter((k) => !data.occasions.some((o) => o.kind === k)) : [];
 
   return (
     <div className="page">
@@ -86,7 +103,7 @@ export default function Occasions() {
                   <button key={k} className="card card-pad option" style={{ alignItems: 'center' }} onClick={() => setEditing({ kind: k })}>
                     <span className={`kpi-icon ${K.tone}`} style={{ width: 44, height: 44, borderRadius: 12 }}><K.icon size={22} /></span>
                     <span style={{ flex: 1 }}>
-                      <span className="option-title">Set up {K.label.toLowerCase()} greetings</span>
+                      <span className="option-title">{k === 'thank_you' ? 'Set up thank-you + Google review' : `Set up ${K.label.toLowerCase()} greetings`}</span>
                       <span className="subtle" style={{ display: 'block' }}>{K.hint}</span>
                     </span>
                     <Plus size={18} />
@@ -138,7 +155,7 @@ function OccasionCard({ o, canEdit, onToggle, onEdit }) {
         <div style={{ flex: 1, minWidth: 0 }}>
           <h3>{o.name}</h3>
           <p className="subtle">
-            {o.kind === 'festival' ? `${dateOnly(o.festival_date)} · ` : ''}Sends {whenText(o.days_before)}, at {hourText(o.send_hour)}
+            {o.kind === 'festival' ? `${dateOnly(o.festival_date)} · ` : ''}Sends {whenText(o.days_before, o.kind)}, at {hourText(o.send_hour)}
           </p>
         </div>
         {canEdit && (
@@ -189,18 +206,34 @@ function OccasionEditor({ initial, templates, businessName, onClose, onSaved }) 
     name: initial.name || KINDS[initial.kind].label,
     kind: initial.kind,
     festival_date: initial.festival_date ? String(initial.festival_date).slice(0, 10) : '',
-    days_before: initial.days_before || (initial.kind === 'festival' ? [3, 0] : [0]),
+    days_before: initial.days_before || (initial.kind === 'festival' ? [3, 0] : initial.kind === 'thank_you' ? [1] : [0]),
     send_hour: initial.send_hour ?? 10,
-    template_id: initial.template_id || templates[0]?.id || '',
+    template_id: initial.template_id || (initial.kind === 'thank_you' ? templates.find((t) => t.name === THANK_YOU_NAME)?.id : templates[0]?.id) || '',
     variables: initial.variables || {},
     sms_fallback: Boolean(initial.sms_fallback),
     enabled: initial.enabled ?? true,
   });
   const [busy, setBusy] = useState(false);
+  const [list, setList] = useState(templates);
+  const [reviewLink, setReviewLink] = useState('');
   const set = (patch) => setO((x) => ({ ...x, ...patch }));
-  const template = templates.find((t) => t.id === Number(o.template_id));
+  const template = list.find((t) => t.id === Number(o.template_id));
+  const isThanks = o.kind === 'thank_you';
+  const hasThanksMessage = list.some((t) => t.name === THANK_YOU_NAME);
+
+  async function createThankYou() {
+    if (!/^https?:\/\/\S+\.\S+/.test(reviewLink.trim())) return toast('Paste your Google review link (it starts with https://).', 'bad');
+    try {
+      const r = await api('/api/templates', { method: 'POST', body: thankYouMessage(reviewLink.trim()) });
+      setList((x) => [...x, r.template]);
+      set({ template_id: r.template.id, variables: { store: businessName || '', ...o.variables } });
+      toast('Thank-you message created');
+    } catch (e) {
+      toast(e.message, 'bad');
+    }
+  }
   const needed = useMemo(() => (template ? CAMPAIGN_VARS.filter((v) => extractVariables(template.body).includes(v.key)) : []), [template]);
-  const values = { ...valuesFor(EXAMPLE_CUSTOMER, o.variables), days_left: String(Math.max(...o.days_before)), offer_code: `PRIYA-${o.kind === 'birthday' ? 'BDAY' : o.kind === 'anniversary' ? 'ANNIV' : 'FEST'}-4821` };
+  const values = { ...valuesFor(EXAMPLE_CUSTOMER, o.variables), days_left: String(Math.max(...o.days_before)), offer_code: `PRIYA-${o.kind === 'birthday' ? 'BDAY' : o.kind === 'anniversary' ? 'ANNIV' : o.kind === 'thank_you' ? 'THANKS' : 'FEST'}-4821` };
 
   const toggleDay = (d) => set({ days_before: o.days_before.includes(d) ? o.days_before.filter((x) => x !== d) : [...o.days_before, d] });
 
@@ -232,9 +265,19 @@ function OccasionEditor({ initial, templates, businessName, onClose, onSaved }) 
               <Field label="Festival date"><input className="input" type="date" value={o.festival_date} onChange={(e) => set({ festival_date: e.target.value })} /></Field>
             )}
           </div>
-          <Field label="When to send" hint="Pick one or more. A week before is the best time for gift reminders.">
+          {isThanks && !hasThanksMessage && (
+            <div className="card card-pad stack-sm" style={{ background: 'var(--surface-2)' }}>
+              <b>Ready-made thank-you message</b>
+              <span className="subtle">Paste the shop’s Google review link (Google Business Profile → Ask for reviews → copy link). It becomes a “Rate us on Google” button.</span>
+              <div className="row wrap" style={{ gap: 8 }}>
+                <input className="input" style={{ flex: '1 1 240px' }} placeholder="https://g.page/r/..." value={reviewLink} onChange={(e) => setReviewLink(e.target.value)} inputMode="url" />
+                <button type="button" className="btn primary" onClick={createThankYou}>Create the message</button>
+              </div>
+            </div>
+          )}
+          <Field label="When to send" hint={isThanks ? 'Counted from the day the bill code was used at the counter.' : 'Pick one or more. A week before is the best time for gift reminders.'}>
             <div className="chips">
-              {WHEN.map((w) => (
+              {(isThanks ? AFTER : WHEN).map((w) => (
                 <button key={w.d} type="button" className={`chip ${o.days_before.includes(w.d) ? 'on' : ''}`} onClick={() => toggleDay(w.d)}>{w.label}</button>
               ))}
             </div>
@@ -245,9 +288,9 @@ function OccasionEditor({ initial, templates, businessName, onClose, onSaved }) 
             </div>
           </Field>
           <Field label="Message" hint={templates.length ? 'Tip: use {{days_left}} for “in 7 days” and {{offer_code}} for a code they show at billing.' : undefined}>
-            {templates.length ? (
+            {list.length ? (
               <select className="select" value={o.template_id} onChange={(e) => set({ template_id: Number(e.target.value) })}>
-                {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                {list.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             ) : (
               <Alert>No saved messages yet. <Link to="/templates/new">Write one first.</Link></Alert>

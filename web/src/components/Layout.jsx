@@ -13,6 +13,7 @@ const LINKS = [
   { to: '/inbox', label: 'Replies', pic: 'speech', badge: 'replies', main: true, also: ['/leads'] },
   { to: '/occasions', label: 'Birthday & festival wishes', pic: 'cake' },
   { to: '/leads', label: 'Call back list', pic: 'phone', badge: 'leads' },
+  { to: '/updates', label: 'Order updates', pic: 'bag' },
   { to: '/templates', label: 'Saved messages', pic: 'memo' },
   { to: '/offers', label: 'Bill codes', pic: 'ticket' },
   { to: '/settings', label: 'Settings', pic: 'gear' },
@@ -42,7 +43,7 @@ export function Layout() {
   useEffect(() => setMore(false), [location.pathname]);
 
   const signOut = () => logout().then(() => navigate('/login'));
-  const moreActive = ['/templates', '/offers', '/settings'].some((p) => location.pathname.startsWith(p));
+  const moreActive = ['/templates', '/offers', '/settings', '/updates'].some((p) => location.pathname.startsWith(p));
   
 
   return (

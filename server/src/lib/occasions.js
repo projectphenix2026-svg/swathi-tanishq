@@ -47,8 +47,14 @@ export async function runOccasion(occasion, { now = new Date(), force = false } 
     const target = addDays(today, before);
     let extraWhere = [];
     let extraParams = [];
+    let suffixDate = target;
     if (occasion.kind === 'festival') {
       if (festivalDay(occasion) !== target) continue;
+    } else if (occasion.kind === 'thank_you') {
+      // "After a purchase": customers who used a bill code `before` days ago (India date).
+      suffixDate = addDays(today, -before);
+      extraWhere = [`EXISTS (SELECT 1 FROM redemptions r WHERE r.contact_id = c.id AND date(r.redeemed_at, '+330 minutes') = $X1)`];
+      extraParams = [suffixDate];
     } else {
       extraWhere = [`substr(c.${column(occasion.kind)}, 6, 5) IN (SELECT value FROM json_each($X1))`];
       extraParams = [dayKeys(target)];
@@ -58,7 +64,7 @@ export async function runOccasion(occasion, { now = new Date(), force = false } 
       template,
       variables: { ...occasion.variables, days_left: String(before) },
       keyPrefix: `occasion:${occasion.id}:contact:`,
-      keySuffix: `:${target}:${before}`,
+      keySuffix: `:${suffixDate}:${before}`,
       occasionId: occasion.id,
       extraWhere,
       extraParams,
@@ -88,6 +94,26 @@ export async function runAllOccasions(opts = {}) {
 export async function upcoming(clientId, occasion, days = 30, now = new Date()) {
   const { date: today } = indiaNow(now);
   const list = [];
+  if (occasion.kind === 'thank_you') {
+    // Purchases from the last few days whose thank-you is still to come.
+    const maxDays = Math.max(...(occasion.days_before || [1]));
+    const { where, params } = audienceWhere(clientId, occasion.audience);
+    params.push(addDays(today, -maxDays));
+    const { rows } = await query(
+      `SELECT date(r.redeemed_at, '+330 minutes') AS d, count(DISTINCT c.id) AS n, json_group_array(DISTINCT c.name) AS names
+         FROM redemptions r JOIN contacts c ON c.id = r.contact_id
+        WHERE ${where} AND ${ELIGIBLE} AND date(r.redeemed_at, '+330 minutes') >= $${params.length}
+        GROUP BY d`,
+      params,
+    );
+    for (const r of rows) {
+      for (const after of occasion.days_before || [1]) {
+        const sendOn = addDays(r.d, after);
+        if (sendOn >= today) list.push({ sendOn, occasionDate: r.d, before: after, count: r.n, names: JSON.parse(r.names || '[]').slice(0, 3) });
+      }
+    }
+    return list.sort((a, b) => a.sendOn.localeCompare(b.sendOn));
+  }
   if (occasion.kind === 'festival') {
     const fest = festivalDay(occasion);
     const { where, params } = audienceWhere(clientId, occasion.audience);
