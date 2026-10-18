@@ -37,6 +37,20 @@ CREATE TABLE IF NOT EXISTS media (
   created_at TEXT NOT NULL DEFAULT ${NOW}
 );`;
 
+// More special days per customer (spouse's or child's birthday, any other date). Birthday and
+// wedding anniversary stay on the customer. A date in year 1904 means "year not known".
+export const DATES_TABLE = `
+CREATE TABLE IF NOT EXISTS contact_dates (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  client_id  INTEGER NOT NULL REFERENCES clients(id),
+  contact_id INTEGER NOT NULL REFERENCES contacts(id),
+  kind       TEXT NOT NULL,                          -- spouse_birthday | child_birthday | other
+  label      TEXT,
+  date       TEXT NOT NULL,                          -- YYYY-MM-DD
+  created_at TEXT NOT NULL DEFAULT ${NOW}
+);`;
+export const DATES_INDEX = 'CREATE INDEX IF NOT EXISTS contact_dates_day_idx ON contact_dates (client_id, substr(date, 6, 5))';
+
 export const SCHEMA = `
 CREATE TABLE IF NOT EXISTS clients (
   id                 INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -207,6 +221,8 @@ CREATE TABLE IF NOT EXISTS leads (
 CREATE INDEX IF NOT EXISTS leads_open_idx ON leads (client_id, status, created_at);
 ${CONNECTION_TABLE}
 ${MEDIA_TABLE}
+${DATES_TABLE}
+${DATES_INDEX};
 `;
 
 // Columns added after the first deploy; db/index.js adds any that an older database lacks.

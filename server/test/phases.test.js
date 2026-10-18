@@ -311,7 +311,7 @@ describe('Phase 5: offer codes, leads, weekly limit, roles', () => {
     const v = await login('viewer@example.com');
     expect((await v.get('/api/customers')).status).toBe(200);
     expect((await v.post('/api/templates').send({ name: 'x', body: 'Hello there {{name}} and welcome.' })).status).toBe(403);
-    expect((await v.post('/api/customers').send({ name: 'x', phone: '9876543210' })).status).toBe(403);
+    expect((await v.post('/api/customers').send({ city: 'Hyderabad', name: 'x', phone: '9876543210' })).status).toBe(403);
   });
 
   it('holds big sends by managers for an admin to approve', async () => {

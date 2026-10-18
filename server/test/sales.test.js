@@ -24,8 +24,8 @@ beforeAll(async () => {
   setProvider(provider);
   owner = request.agent(createApp());
   await owner.post('/api/auth/login').send({ email: 'owner@example.com', password: 'owner-password-1' });
-  priya = (await owner.post('/api/customers').send({ name: 'Priya', phone: '90000 60001', whatsapp_opt_in: true })).body.customer;
-  await owner.post('/api/customers').send({ name: 'Ravi', phone: '90000 60002' }); // no consent
+  priya = (await owner.post('/api/customers').send({ city: 'Hyderabad', name: 'Priya', phone: '90000 60001', whatsapp_opt_in: true })).body.customer;
+  await owner.post('/api/customers').send({ city: 'Hyderabad', name: 'Ravi', phone: '90000 60002' }); // no consent
 });
 afterAll(() => closeDb());
 

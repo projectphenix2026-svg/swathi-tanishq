@@ -69,11 +69,35 @@ describe('API flow', () => {
   });
 
   it('adds one customer by form and refuses a duplicate', async () => {
-    const add = await agent.post('/api/customers').send({ name: 'Kiran', phone: '99887 76655', whatsapp_opt_in: true, last_purchase: 'anklets' });
+    const add = await agent.post('/api/customers').send({ city: 'Secunderabad', name: 'Kiran', phone: '99887 76655', whatsapp_opt_in: true, last_purchase: 'anklets' });
     expect(add.status).toBe(201);
     expect(add.body.customer.phone).toBe('+919988776655');
-    const dup = await agent.post('/api/customers').send({ name: 'Kiran 2', phone: '+91 99887 76655' });
+    const dup = await agent.post('/api/customers').send({ city: 'Hyderabad', name: 'Kiran 2', phone: '+91 99887 76655' });
     expect(dup.status).toBe(409);
+  });
+
+  it('needs a city, and keeps extra special days', async () => {
+    const noCity = await agent.post('/api/customers').send({ name: 'Lata', phone: '99887 11111' });
+    expect(noCity.status).toBe(400);
+    expect(noCity.body.fields.city).toMatch(/city/);
+    const add = await agent.post('/api/customers').send({
+      name: 'Lata', phone: '99887 11111', city: 'Warangal', birthday: '1904-03-14',
+      dates: [{ kind: 'spouse_birthday', date: '1985-07-02' }, { kind: 'other', label: 'Daughter’s wedding', date: '2027-02-10' }],
+    });
+    expect(add.status).toBe(201);
+    expect(add.body.customer).toMatchObject({ birthday: '1904-03-14', dates: [{ kind: 'spouse_birthday', date: '1985-07-02' }, { kind: 'other', label: 'Daughter’s wedding' }] });
+    const id = add.body.customer.id;
+    expect((await agent.patch(`/api/customers/${id}`).send({ city: ' ' })).status).toBe(400);
+    const edit = await agent.patch(`/api/customers/${id}`).send({ dates: [{ kind: 'child_birthday', date: '2015-12-01' }] });
+    expect(edit.body.customer.dates).toEqual([{ kind: 'child_birthday', label: null, date: '2015-12-01' }]);
+    const list = await agent.get('/api/customers?q=Lata');
+    expect(list.body.customers[0].dates).toHaveLength(1);
+    // Imports: rows without a city need one city for all of them.
+    const rows = [{ phone: '+919988722222', name: 'No City', status: 'ok' }];
+    const refused = await agent.post('/api/customers/import/commit').send({ rows, optIn: {} });
+    expect(refused.body).toMatchObject({ noCity: 1 });
+    const saved = await agent.post('/api/customers/import/commit').send({ rows, optIn: {}, defaultCity: 'Hyderabad' });
+    expect(saved.body.created).toBe(1);
   });
 
   it('validates templates in plain words', async () => {
@@ -154,7 +178,7 @@ describe('API flow', () => {
   });
 
   it('deletes a customer: gone from lists, chats and call list, but offer totals stay', async () => {
-    const add = await agent.post('/api/customers').send({ name: 'Delete Me', phone: '90000 22222', whatsapp_opt_in: true, last_purchase: 'ring' });
+    const add = await agent.post('/api/customers').send({ city: 'Hyderabad', name: 'Delete Me', phone: '90000 22222', whatsapp_opt_in: true, last_purchase: 'ring' });
     const id = add.body.customer.id;
     const offer = await agent.post('/api/campaigns').send({
       name: 'Before delete', templateId, audience: { mode: 'selected', contactIds: [id] }, variables: { offer: '7% off' }, expectedCount: 1,
@@ -172,7 +196,7 @@ describe('API flow', () => {
     const report = (await agent.get(`/api/campaigns/${offer.body.campaign.id}`)).body.report;
     expect(report).toMatchObject({ total: 1, sent: 1 });
     // The same number can be added again as a new customer.
-    expect((await agent.post('/api/customers').send({ name: 'Back Again', phone: '90000 22222' })).status).toBe(201);
+    expect((await agent.post('/api/customers').send({ city: 'Hyderabad', name: 'Back Again', phone: '90000 22222' })).status).toBe(201);
     expect((await agent.delete(`/api/customers/${id}`)).status).toBe(404);
   });
 
