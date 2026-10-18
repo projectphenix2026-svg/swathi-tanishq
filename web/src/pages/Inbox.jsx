@@ -4,11 +4,13 @@ import { AlertCircle, ArrowLeft, Check, CheckCheck, Clock, ExternalLink, FlaskCo
 import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.js';
 import { Avatar, Empty, SectionTabs, Spinner, useToast } from '../components/ui.jsx';
+import { useT } from '../lib/i18n.jsx';
 import { ago, dateOnly, phone, timeOnly } from '../lib/format.js';
 
 const QUICK = ['Thank you! We will call you shortly.', 'Yes, the offer is valid all week.', 'You are welcome to visit us any day, 10 am – 9 pm.'];
 
 export default function Inbox() {
+  const { t } = useT();
   const { contactId } = useParams();
   const [list, setList] = useState(null);
   const [filter, setFilter] = useState('all');
@@ -28,12 +30,12 @@ export default function Inbox() {
     <div className="inbox">
       <section className="convo-list" style={{ display: showList ? undefined : 'none' }} data-desktop-show>
         <div style={{ padding: '18px 16px 12px', borderBottom: '1px solid var(--border)' }}>
-          <h1 style={{ fontSize: '1.3rem' }}>Replies</h1>
-          <p className="subtle" style={{ marginBottom: 10 }}>What customers wrote back, newest first.</p>
-          <div style={{ marginBottom: 10 }}><SectionTabs tabs={[{ to: '/inbox', label: 'Messages' }, { to: '/leads', label: 'Call back list' }]} /></div>
+          <h1 style={{ fontSize: '1.3rem' }}>{t('Replies')}</h1>
+          <p className="subtle" style={{ marginBottom: 10 }}>{t('What customers wrote back, newest first.')}</p>
+          <div style={{ marginBottom: 10 }}><SectionTabs tabs={[{ to: '/inbox', label: t('Messages') }, { to: '/leads', label: t('Call back list') }]} /></div>
           <div className="chips">
-            <button className={`chip ${filter === 'all' ? 'on' : ''}`} onClick={() => setFilter('all')}>All</button>
-            <button className={`chip ${filter === 'unread' ? 'on' : ''}`} onClick={() => setFilter('unread')}>Unread</button>
+            <button className={`chip ${filter === 'all' ? 'on' : ''}`} onClick={() => setFilter('all')}>{t('All')}</button>
+            <button className={`chip ${filter === 'unread' ? 'on' : ''}`} onClick={() => setFilter('unread')}>{t('Unread')}</button>
           </div>
         </div>
         {!list ? (

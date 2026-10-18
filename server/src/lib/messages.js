@@ -55,8 +55,8 @@ export async function retryTomorrow(messageId, errorCode) {
 const STOP_WORDS = ['stop', 'unsubscribe', 'stop all', 'opt out', 'optout'];
 const START_WORDS = ['start', 'subscribe', 'opt in', 'unstop'];
 // Replies that mean "I want this": the customer goes on the hot-lead call list.
-const INTEREST_WORDS = ['interested', 'i am interested', 'im interested', 'book a visit', 'book visit', 'book', 'call me', 'yes', 'want to visit', 'see designs', 'see the designs'];
-const NOT_NOW_WORDS = ['not now', 'no', 'later', 'not interested'];
+const INTEREST_WORDS = ['ఆసక్తి ఉంది', 'ఆసక్తి', 'रुचि है', 'दिलचस्पी है', 'interested', 'i am interested', 'im interested', 'book a visit', 'book visit', 'book', 'call me', 'yes', 'want to visit', 'see designs', 'see the designs'];
+const NOT_NOW_WORDS = ['not now', 'no', 'later', 'not interested', 'ఇప్పుడు కాదు', 'వద్దు', 'अभी नहीं', 'नहीं'];
 
 async function addTag(contactId, tag) {
   await query(

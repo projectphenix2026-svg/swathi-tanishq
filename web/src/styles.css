@@ -508,3 +508,9 @@ code, .code { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; f
 
 .today-item.urgent { background: var(--bad-soft); }
 .today-item.urgent b { color: var(--bad); }
+
+/* Language switch (English / Telugu / Hindi) */
+.lang-switch { display: inline-flex; gap: 2px; padding: 3px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--border); }
+.lang-switch button { border: 0; background: none; padding: 4px 9px; border-radius: 7px; font: inherit; font-size: 0.82rem; color: var(--text-2); cursor: pointer; }
+.lang-switch button.on { background: var(--surface); color: var(--brand); font-weight: 700; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.sidebar-foot .lang-switch { align-self: flex-start; }

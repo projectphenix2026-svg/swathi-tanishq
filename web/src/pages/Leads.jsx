@@ -4,6 +4,7 @@ import { Check, Flame, MessageCircle, Phone, ShoppingBag, ThumbsDown, X } from '
 import { api } from '../lib/api.js';
 import { Avatar, Empty, Pic, SectionTabs, Skeleton, useToast } from '../components/ui.jsx';
 import { useAuth } from '../lib/auth.js';
+import { useT } from '../lib/i18n.jsx';
 import { ago, num, phone } from '../lib/format.js';
 
 const TABS = [
@@ -18,6 +19,7 @@ export default function Leads() {
   const [data, setData] = useState(null);
   const [staff, setStaff] = useState(null);
   const { settings } = useAuth();
+  const { t } = useT();
   const canSeeStaff = ['admin', 'manager'].includes(settings?.role);
 
   const load = useCallback(() => {
@@ -45,11 +47,11 @@ export default function Leads() {
     <div className="page" style={{ maxWidth: 980 }}>
       <div className="page-head">
         <div>
-          <h1>Replies</h1>
-          <p>Customers who tapped “Interested” or asked for a call. Call them today, while they’re keen.</p>
+          <h1>{t('Replies')}</h1>
+          <p>{t('Customers who tapped “Interested” or asked for a call. Call them today, while they’re keen.')}</p>
         </div>
       </div>
-      <div style={{ marginBottom: 16 }}><SectionTabs tabs={[{ to: '/inbox', label: 'Messages' }, { to: '/leads', label: 'Call back list' }]} /></div>
+      <div style={{ marginBottom: 16 }}><SectionTabs tabs={[{ to: '/inbox', label: t('Messages') }, { to: '/leads', label: t('Call back list') }]} /></div>
       {c.overdue > 0 && !tab && (
         <div className="alert bad" style={{ marginBottom: 12 }}>
           <Pic name="phone" size={30} />
@@ -67,9 +69,9 @@ export default function Leads() {
         </div>
       )}
       <div className="chips" style={{ marginBottom: 16 }}>
-        {TABS.map((t) => (
-          <button key={t.key} className={`chip ${tab === t.key ? 'on' : ''}`} onClick={() => { setTab(t.key); setData(null); }}>
-            {t.label} <span className="n">{num(t.key ? c[t.key] || 0 : (c.new || 0) + (c.called || 0))}</span>
+        {TABS.map((x) => (
+          <button key={x.key} className={`chip ${tab === x.key ? 'on' : ''}`} onClick={() => { setTab(x.key); setData(null); }}>
+            {t(x.label)} <span className="n">{num(x.key ? c[x.key] || 0 : (c.new || 0) + (c.called || 0))}</span>
           </button>
         ))}
       </div>
@@ -100,12 +102,12 @@ export default function Leads() {
                 {l.updated_by_name && l.status !== 'new' && <div className="subtle">{l.status === 'won' ? 'Bought' : l.status === 'lost' ? 'Marked not interested' : 'Called'} by {l.updated_by_name} {ago(l.updated_at)}</div>}
               </div>
               <div className="lead-actions">
-                <a className="btn sm wa" href={`tel:${l.phone}`}><Phone size={15} />Call</a>
-                <Link className="btn sm" to={`/inbox/${l.contact_id}`}><MessageCircle size={15} />Chat</Link>
-                {l.status === 'new' && <button className="btn sm" onClick={() => update(l, 'called')}><Check size={15} />Called</button>}
+                <a className="btn sm wa" href={`tel:${l.phone}`}><Phone size={15} />{t('Call')}</a>
+                <Link className="btn sm" to={`/inbox/${l.contact_id}`}><MessageCircle size={15} />{t('Chat')}</Link>
+                {l.status === 'new' && <button className="btn sm" onClick={() => update(l, 'called')}><Check size={15} />{t('Called')}</button>}
                 {['new', 'called'].includes(l.status) && (
                   <>
-                    <button className="btn sm" onClick={() => update(l, 'won')}><ShoppingBag size={15} />Bought</button>
+                    <button className="btn sm" onClick={() => update(l, 'won')}><ShoppingBag size={15} />{t('Bought')}</button>
                     <button className="btn sm ghost" onClick={() => update(l, 'lost')} title="Not interested"><ThumbsDown size={15} /></button>
                   </>
                 )}

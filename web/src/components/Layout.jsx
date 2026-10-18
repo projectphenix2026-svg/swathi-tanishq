@@ -4,6 +4,7 @@ import { Gem, LogOut, Menu, X } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.js';
 import { Avatar, Pic } from './ui.jsx';
+import { SCREEN_LANGS, useT } from '../lib/i18n.jsx';
 
 // Four places for everyday work; the rest sits under More.
 const LINKS = [
@@ -21,6 +22,7 @@ const LINKS = [
 
 export function Layout() {
   const { user, logout, settings } = useAuth();
+  const { t, lang, setLang } = useT();
   const [counts, setCounts] = useState({ unread: 0, leads: 0, replies: 0 });
   const [more, setMore] = useState(false);
   const navigate = useNavigate();
@@ -53,16 +55,17 @@ export function Layout() {
           <div className="brand-mark"><Gem size={19} /></div>
           <div>
             <div className="brand-name">{settings?.businessName || 'Swathi Tanishq'}</div>
-            <div className="brand-sub">WhatsApp &amp; SMS offers</div>
+            <div className="brand-sub">{t('WhatsApp & SMS offers')}</div>
           </div>
         </div>
         <nav className="nav" aria-label="Main">
-          {LINKS.filter((l) => l.main).map((l) => <SideLink key={l.to} link={l} counts={counts} pathname={location.pathname} />)}
-          <div className="nav-group">More</div>
-          {LINKS.filter((l) => !l.main).map((l) => <SideLink key={l.to} link={l} counts={counts} pathname={location.pathname} />)}
+          {LINKS.filter((l) => l.main).map((l) => <SideLink key={l.to} link={l} counts={counts} pathname={location.pathname} t={t} />)}
+          <div className="nav-group">{t('More')}</div>
+          {LINKS.filter((l) => !l.main).map((l) => <SideLink key={l.to} link={l} counts={counts} pathname={location.pathname} t={t} />)}
         </nav>
         <div className="sidebar-foot">
-          {settings && <ProviderPill settings={settings} />}
+          <LangSwitch lang={lang} setLang={setLang} label={t('Language')} />
+          {settings && <ProviderPill settings={settings} t={t} />}
           <div className="user-chip">
             <Avatar name={user.name} size={34} />
             <div style={{ minWidth: 0, flex: 1 }}>
@@ -80,7 +83,10 @@ export function Layout() {
             <div className="brand-mark" style={{ width: 32, height: 32 }}><Gem size={17} /></div>
             <b>{settings?.businessName || 'Swathi Tanishq'}</b>
           </div>
-          <button className="icon-btn" onClick={signOut} aria-label="Sign out"><LogOut size={19} /></button>
+          <span className="row" style={{ gap: 6 }}>
+            <LangSwitch lang={lang} setLang={setLang} label={t('Language')} compact />
+            <button className="icon-btn" onClick={signOut} aria-label="Sign out"><LogOut size={19} /></button>
+          </span>
         </header>
         <Outlet />
       </div>
@@ -89,13 +95,13 @@ export function Layout() {
         {LINKS.filter((l) => l.main).map(({ to, label, pic, end, badge, also }) => (
           <NavLink key={to} to={to} end={end} className={({ isActive }) => (isActive || also?.some((p) => location.pathname.startsWith(p)) ? 'active' : '')}>
             <Pic name={pic} size={24} plain />
-            {label}
+            {t(label)}
             {badge && counts[badge] > 0 && <span className="dot">{counts[badge]}</span>}
           </NavLink>
         ))}
         <button className={`more-btn ${moreActive ? 'active' : ''}`} onClick={() => setMore(true)} aria-haspopup="dialog">
           <Menu size={21} />
-          More
+          {t('More')}
                   </button>
       </nav>
 
@@ -103,14 +109,14 @@ export function Layout() {
         <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && setMore(false)}>
           <div className="modal" role="dialog" aria-label="More">
             <div className="modal-head">
-              <h2>More</h2>
+              <h2>{t('More')}</h2>
               <button className="icon-btn" onClick={() => setMore(false)} aria-label="Close"><X size={20} /></button>
             </div>
             <div className="more-grid">
               {LINKS.filter((l) => !l.main).map(({ to, label, pic, badge }) => (
                 <NavLink key={to} to={to} className="more-item">
                   <Pic name={pic} size={44} />
-                  {label}
+                  {t(label)}
                   {badge && counts[badge] > 0 && <span className="count hot">{counts[badge]}</span>}
                 </NavLink>
               ))}
@@ -122,20 +128,33 @@ export function Layout() {
   );
 }
 
-function SideLink({ link: { to, label, pic, end, badge, also }, counts, pathname }) {
+function SideLink({ link: { to, label, pic, end, badge, also }, counts, pathname, t }) {
   const sub = also?.some((p) => pathname.startsWith(p));
   return (
     <NavLink to={to} end={end} className={({ isActive }) => (isActive || sub ? 'active' : '')}>
       <Pic name={pic} size={22} plain />
-      {label}
+      {t(label)}
       {badge && counts[badge] > 0 && <span className={`count ${badge === 'leads' ? 'hot' : ''}`}>{counts[badge]}</span>}
     </NavLink>
   );
 }
 
-function ProviderPill({ settings }) {
+/** English / తెలుగు / हिन्दी for the everyday screens; remembered on this device. */
+function LangSwitch({ lang, setLang, label, compact }) {
+  return (
+    <div className="lang-switch" role="group" aria-label={label}>
+      {SCREEN_LANGS.map((l) => (
+        <button key={l.code} type="button" className={lang === l.code ? 'on' : ''} onClick={() => setLang(l.code)} aria-pressed={lang === l.code} title={l.label}>
+          {compact ? l.short : l.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function ProviderPill({ settings, t }) {
   const p = settings.provider;
   const tone = p.name === 'mock' ? 'warn' : p.missing.length ? 'bad' : 'ok';
-  const text = p.name === 'mock' ? 'Test mode: nothing is sent' : p.missing.length ? `${p.label}: not set up` : `Sending via ${p.label}`;
+  const text = p.name === 'mock' ? t('Test mode: nothing is sent') : p.missing.length ? `${p.label}: not set up` : `Sending via ${p.label}`;
   return <span className={`badge ${tone}`} style={{ alignSelf: 'flex-start', height: 'auto', padding: '4px 10px', whiteSpace: 'normal' }}>{text}</span>;
 }
