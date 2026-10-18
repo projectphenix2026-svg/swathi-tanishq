@@ -205,4 +205,6 @@ export const EXTRA_COLUMNS = {
   whatsapp_connection: [['daily_limit', 'INTEGER'], ['limit_tier', 'TEXT'], ['limit_checked_at', 'TEXT']],
   // Last time the owner downloaded all the shop's data.
   clients: [['last_export_at', 'TEXT']],
+  // How an offer is sent: 'whatsapp' (optionally with SMS backup) or 'sms' (bulk SMS).
+  campaigns: [['channel', "TEXT NOT NULL DEFAULT 'whatsapp'"]],
 };

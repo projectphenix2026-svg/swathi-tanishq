@@ -1,7 +1,7 @@
 import express from 'express';
 import { query, NOW } from '../db/index.js';
 import { config } from '../config.js';
-import { getProvider } from '../providers/index.js';
+import { getProvider, getSmsProvider } from '../providers/index.js';
 import { previewAudience, launchCampaign, campaignReport, queueMessages, TEST_PHONE_TAG } from '../lib/campaigns.js';
 import { kick } from '../lib/dispatch.js';
 import { normalizePhone } from '../lib/phone.js';
@@ -18,7 +18,7 @@ router.get('/', async (req, res) => {
   const { rows } = await query(
     `SELECT c.*, t.name AS template_name,
             count(m.id) AS total,
-            count(m.id) FILTER (WHERE m.status IN ('sent', 'delivered', 'read')) AS sent,
+            count(m.id) FILTER (WHERE m.status IN ('sent', 'delivered', 'read') OR (c.channel = 'sms' AND m.status = 'preview')) AS sent,
             count(m.id) FILTER (WHERE m.status IN ('delivered', 'read')) AS delivered,
             count(m.id) FILTER (WHERE m.status = 'read') AS read,
             count(m.id) FILTER (WHERE m.status = 'failed') AS failed,
@@ -35,11 +35,12 @@ router.get('/', async (req, res) => {
 // Live numbers for steps 1-4 of the builder.
 router.post('/preview', async (req, res) => {
   const { audience = { mode: 'all' }, templateId, variables = {} } = req.body || {};
+  const channel = req.body?.channel === 'sms' ? 'sms' : 'whatsapp';
   let template = null;
   if (templateId) template = (await query('SELECT * FROM templates WHERE id = $1 AND client_id = $2', [templateId, req.clientId])).rows[0];
-  const result = await previewAudience(req.clientId, { audience, template, variables });
-  // Meta's daily limit: how many go out now, and when the rest should be done.
-  const p = await pace();
+  const result = await previewAudience(req.clientId, { audience, template, variables, channel });
+  // Meta's daily limit (WhatsApp only): how many go out now, and when the rest should be done.
+  const p = channel === 'sms' ? null : await pace();
   const count = template ? result.sendable : result.eligible;
   res.json({ ...result, pace: p && { ...p, finishBy: finishEstimate(count, p) } });
 });
@@ -62,10 +63,16 @@ router.post('/render', async (req, res) => {
 });
 
 /** The template, or an error in plain words if it cannot be sent right now. */
-async function sendableTemplate(clientId, templateId) {
+async function sendableTemplate(clientId, templateId, channel = 'whatsapp') {
   const { rows: [t] } = await query('SELECT * FROM templates WHERE id = $1 AND client_id = $2', [templateId, clientId]);
   if (!t) return { error: 'Choose a message.' };
   if (t.status !== 'approved') return { error: 'This message is not ready to send yet.' };
+  if (channel === 'sms') {
+    if (!t.sms_body) return { error: 'This message has no SMS version yet. Add one on its saved message page (SMS version).' };
+    const missing = getSmsProvider().missingConfig();
+    if (missing.length) return { error: `SMS sending is not set up yet. Missing: ${missing.join(', ')}.` };
+    return { t };
+  }
   const provider = getProvider();
   const missingConfig = provider.missingConfig();
   if (missingConfig.length) return { error: `Sending is not set up yet. Missing: ${missingConfig.join(', ')}.` };
@@ -81,7 +88,8 @@ router.post('/test', canEdit, async (req, res) => {
   const b = req.body || {};
   const ph = normalizePhone(b.phone);
   if (!ph.ok) return res.status(400).json({ error: ph.reason });
-  const { t, error } = await sendableTemplate(req.clientId, b.templateId);
+  const channel = b.channel === 'sms' ? 'sms' : 'whatsapp';
+  const { t, error } = await sendableTemplate(req.clientId, b.templateId, channel);
   if (error) return res.status(400).json({ error });
   const { rows: [as] } = await query('SELECT * FROM contacts WHERE id = $1 AND client_id = $2', [b.asContactId, req.clientId]);
   const { rows: [existing] } = await query('SELECT * FROM contacts WHERE client_id = $1 AND phone = $2', [req.clientId, ph.e164]);
@@ -92,28 +100,28 @@ router.post('/test', canEdit, async (req, res) => {
     const d = as || {};
     ({ rows: [contact] } = await query(
       `INSERT INTO contacts (client_id, name, phone, city, birthday, anniversary, last_purchase, interests, tags,
-                             whatsapp_opt_in, opt_in_at, opt_in_source)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 1, ${NOW}, 'staff test phone')
+                             whatsapp_opt_in, opt_in_at, opt_in_source, sms_opt_in)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 1, ${NOW}, 'staff test phone', 1)
        ON CONFLICT (client_id, phone) DO UPDATE SET name = excluded.name, city = excluded.city, birthday = excluded.birthday,
          anniversary = excluded.anniversary, last_purchase = excluded.last_purchase, interests = excluded.interests,
-         whatsapp_opt_in = 1, opted_out_at = NULL
+         whatsapp_opt_in = 1, sms_opt_in = 1, opted_out_at = NULL
        RETURNING *`,
       [req.clientId, d.name || req.user.name, ph.e164, d.city ?? null, d.birthday ?? null, d.anniversary ?? null,
         d.last_purchase ?? null, d.interests ?? null, JSON.stringify([TEST_PHONE_TAG])],
     ));
-  } else if (!existing.whatsapp_opt_in || existing.opted_out_at) {
-    return res.status(400).json({ error: `${ph.display} is saved as a customer who has not agreed to WhatsApp messages. Use another number.` });
+  } else if (!(channel === 'sms' ? existing.sms_opt_in : existing.whatsapp_opt_in) || existing.opted_out_at) {
+    return res.status(400).json({ error: `${ph.display} is saved as a customer who has not agreed to ${channel === 'sms' ? 'SMS' : 'WhatsApp'} messages. Use another number.` });
   }
   const audience = { mode: 'selected', contactIds: [contact.id] };
   const { rows: [campaign] } = await query(
     `INSERT INTO campaigns (client_id, name, template_id, audience, variables, status, started_at, cost_per_message, provider,
-                            created_by, expected_count, approved_by, approved_at)
-     VALUES ($1, $2, $3, $4, $5, 'sending', ${NOW}, $6, $7, $8, 1, $8, ${NOW}) RETURNING *`,
+                            created_by, expected_count, approved_by, approved_at, channel)
+     VALUES ($1, $2, $3, $4, $5, 'sending', ${NOW}, $6, $7, $8, 1, $8, ${NOW}, $9) RETURNING *`,
     [req.clientId, `Test · ${t.name}`, t.id, JSON.stringify(audience), JSON.stringify(b.variables || {}),
-      config.costPerMessage, getProvider().name, req.user.id],
+      channel === 'sms' ? config.sms.costPerSms : config.costPerMessage, (channel === 'sms' ? getSmsProvider() : getProvider()).name, req.user.id, channel],
   );
   const queued = await queueMessages(req.clientId, {
-    audience, template: t, variables: b.variables || {}, keyPrefix: `campaign:${campaign.id}:contact:`, campaignId: campaign.id, ignoreCap: true,
+    audience, template: t, variables: b.variables || {}, keyPrefix: `campaign:${campaign.id}:contact:`, campaignId: campaign.id, ignoreCap: true, channel,
   });
   if (!queued) {
     await query(`UPDATE campaigns SET status = 'cancelled', completed_at = ${NOW} WHERE id = $1`, [campaign.id]);
@@ -127,9 +135,10 @@ router.post('/', canEdit, async (req, res) => {
   const b = req.body || {};
   const name = String(b.name || '').trim();
   if (!name) return res.status(400).json({ error: 'Give the campaign a name.' });
-  const { t, error } = await sendableTemplate(req.clientId, b.templateId);
+  const channel = b.channel === 'sms' ? 'sms' : 'whatsapp';
+  const { t, error } = await sendableTemplate(req.clientId, b.templateId, channel);
   if (error) return res.status(400).json({ error });
-  const provider = getProvider();
+  const provider = channel === 'sms' ? getSmsProvider() : getProvider();
   let scheduledAt = null;
   if (b.scheduledAt) {
     scheduledAt = new Date(b.scheduledAt);
@@ -139,8 +148,8 @@ router.post('/', canEdit, async (req, res) => {
     // "Send now" with a short pause, so staff can still undo (it starts on the next minute's run).
     scheduledAt = new Date(Date.now() + Math.min(60, Number(b.undoSeconds)) * 1000);
   }
-  const preview = await previewAudience(req.clientId, { audience: b.audience, template: t, variables: b.variables });
-  if (!preview.sendable) return res.status(400).json({ error: 'No customers can receive this campaign. Check the audience and offer.' });
+  const preview = await previewAudience(req.clientId, { audience: b.audience, template: t, variables: b.variables, channel });
+  if (!preview.sendable) return res.status(400).json({ error: 'No customers can receive this offer. Check who gets it and the offer details.' });
   if (b.expectedCount !== undefined && Number(b.expectedCount) !== preview.sendable) {
     return res.status(409).json({
       error: `The audience changed: it is now ${preview.sendable} customers instead of ${b.expectedCount}. Please review again.`,
@@ -151,11 +160,11 @@ router.post('/', canEdit, async (req, res) => {
   const needsApproval = req.user.role !== 'admin' && preview.sendable >= preview.approvalThreshold;
   const { rows: [campaign] } = await query(
     `INSERT INTO campaigns (client_id, name, template_id, audience, variables, status, scheduled_at, cost_per_message, provider,
-                            created_by, sms_fallback, expected_count, approved_by, approved_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, CASE WHEN $13 IS NULL THEN NULL ELSE strftime('%Y-%m-%dT%H:%M:%fZ', 'now') END) RETURNING *`,
+                            created_by, sms_fallback, expected_count, approved_by, approved_at, channel)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, CASE WHEN $13 IS NULL THEN NULL ELSE strftime('%Y-%m-%dT%H:%M:%fZ', 'now') END, $14) RETURNING *`,
     [req.clientId, name, t.id, JSON.stringify(b.audience || { mode: 'all' }), JSON.stringify(b.variables || {}),
-      needsApproval ? 'pending_approval' : 'scheduled', scheduledAt, config.costPerMessage, provider.name, req.user.id,
-      Boolean(b.smsFallback), preview.sendable, needsApproval ? null : req.user.id],
+      needsApproval ? 'pending_approval' : 'scheduled', scheduledAt, preview.costPerMessage, provider.name, req.user.id,
+      channel === 'whatsapp' && Boolean(b.smsFallback), preview.sendable, needsApproval ? null : req.user.id, channel],
   );
   if (needsApproval) return res.status(202).json({ campaign, pendingApproval: true, queued: 0 });
   const result = await launchCampaign(req.clientId, campaign, t);
@@ -187,8 +196,8 @@ router.get('/:id', async (req, res) => {
     [req.params.id, req.clientId],
   );
   if (!c) return res.status(404).json({ error: 'Campaign not found.' });
-  const report = await campaignReport(c.id);
-  const p = report.pending > 0 ? await pace() : null;
+  const report = await campaignReport(c.id, c.channel);
+  const p = report.pending > 0 && c.channel !== 'sms' ? await pace() : null;
   res.json({ campaign: c, report, pace: p && { ...p, finishBy: finishEstimate(report.pending, p) } });
 });
 

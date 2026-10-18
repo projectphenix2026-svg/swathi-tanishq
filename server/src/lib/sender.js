@@ -45,6 +45,17 @@ export async function processSendJob(messageId) {
   // Personalise now: customer details, campaign values and a unique offer code.
   let values = msg.template_values;
   let body = msg.body;
+  if (msg.channel === 'sms' && template && !body) {
+    // Bulk SMS: personalise the SMS version the same way (name, offer, bill code...).
+    values = valuesFor(contact, msg.variables || {});
+    if (extractVariables(template.sms_body || '').includes('offer_code')) {
+      values.offer_code = await reserveCode(msg, contact, cleanPrefix(msg.variables?.code_prefix, 'OFFER'));
+    }
+    const { text, missing } = render(template.sms_body || '', values);
+    if (!text || missing.length) return skip(msg, missing.length ? `Missing details: ${missing.map((k) => LABEL[k] || k).join(', ')}` : 'This message has no SMS version');
+    body = text;
+    await query(`UPDATE messages SET body = $2, template_values = $3 WHERE id = $1`, [msg.id, body, values]);
+  }
   if (msg.channel === 'whatsapp' && template && !body) {
     values = valuesFor(contact, msg.variables || {});
     if (extractVariables(template.body).includes('offer_code')) {

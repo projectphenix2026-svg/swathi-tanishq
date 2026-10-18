@@ -38,7 +38,7 @@ const ICONS = {
   gear: ['settings', 'slate'], diya: ['local_fire_department', 'orange'], moneybag: ['currency_rupee', 'gold'],
   blossom: ['local_florist', 'pink'], sparkles: ['new_releases', 'purple'], chartdown: ['trending_down', 'blue'],
   ring: ['diamond', 'maroon'], check: ['check_circle', 'green'], hourglass: ['hourglass_top', 'gold'], mobile: ['smartphone', 'blue'],
-  chart: ['bar_chart', 'blue'], gem: ['diamond', 'gold'], inbox: ['inbox', 'blue'], eyes: ['visibility', 'blue'],
+  chart: ['bar_chart', 'blue'], gem: ['diamond', 'gold'], sms: ['sms', 'blue'], inbox: ['inbox', 'blue'], eyes: ['visibility', 'blue'],
 };
 export function Pic({ name, size = 28, plain = false, label }) {
   const [glyph, tone] = ICONS[name] || [name, 'maroon'];

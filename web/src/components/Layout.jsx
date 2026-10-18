@@ -52,7 +52,7 @@ export function Layout() {
           <div className="brand-mark"><Gem size={19} /></div>
           <div>
             <div className="brand-name">{settings?.businessName || 'Swathi Tanishq'}</div>
-            <div className="brand-sub">WhatsApp messaging</div>
+            <div className="brand-sub">WhatsApp &amp; SMS offers</div>
           </div>
         </div>
         <nav className="nav" aria-label="Main">
