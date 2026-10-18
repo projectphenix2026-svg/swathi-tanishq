@@ -3,7 +3,7 @@
 //   Node (local dev, tests) -> Node's built-in SQLite (node:sqlite), a file or in memory
 // query(sql, params) uses $1, $2... placeholders and returns { rows, rowCount }.
 // JSON columns come back parsed and true/false columns come back as booleans.
-import { SCHEMA, CONNECTION_TABLE, MEDIA_TABLE, DATES_TABLE, DATES_INDEX, EXTRA_COLUMNS } from './schema.js';
+import { SCHEMA, CONNECTION_TABLE, MEDIA_TABLE, DATES_TABLE, DATES_INDEX, LOGIN_ATTEMPTS_TABLE, EXTRA_COLUMNS } from './schema.js';
 
 let impl = null;
 
@@ -139,7 +139,7 @@ async function ensureSchema() {
   }
   if (ready) {
     // Already set up. Tables added after the first deploy are created here (cheap if they exist).
-    for (const table of [CONNECTION_TABLE, MEDIA_TABLE, DATES_TABLE, DATES_INDEX]) await impl.query(table.trim().replace(/;$/, ''));
+    for (const table of [CONNECTION_TABLE, MEDIA_TABLE, DATES_TABLE, DATES_INDEX, LOGIN_ATTEMPTS_TABLE]) await impl.query(table.trim().replace(/;$/, ''));
   } else {
     await impl.exec(SCHEMA);
   }

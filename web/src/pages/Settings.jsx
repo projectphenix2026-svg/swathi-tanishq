@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { KeyRound, UserPlus } from 'lucide-react';
+import { KeyRound, UserMinus, UserPlus } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.js';
 import { Avatar, Field, Modal, Pic, Spinner, useToast } from '../components/ui.jsx';
@@ -181,6 +181,7 @@ function Staff({ me }) {
   const [users, setUsers] = useState(null);
   const [adding, setAdding] = useState(false);
   const [resetting, setResetting] = useState(null);
+  const [removing, setRemoving] = useState(null);
   const load = () => api('/api/auth/users').then((r) => setUsers(r.users)).catch(() => setUsers([]));
   useEffect(() => {
     load();
@@ -210,6 +211,7 @@ function Staff({ me }) {
                   {ROLES.filter((r) => r.value !== 'viewer' || u.role === 'viewer').map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
                 </select>
                 {u.id !== me.id && <button className="btn ghost sm" onClick={() => setResetting(u)}><KeyRound size={15} />New password</button>}
+                {u.id !== me.id && <button className="btn ghost sm danger" onClick={() => setRemoving(u)}><UserMinus size={15} />Remove</button>}
               </div>
             ))}
           </div>
@@ -223,6 +225,7 @@ function Staff({ me }) {
       </Block>
       {adding && <AddStaff onClose={() => setAdding(false)} onSaved={() => { setAdding(false); load(); }} />}
       {resetting && <ResetPassword u={resetting} onClose={() => setResetting(null)} />}
+      {removing && <RemoveStaff u={removing} onClose={() => setRemoving(null)} onDone={() => { setRemoving(null); load(); }} />}
     </>
   );
 }
@@ -263,6 +266,28 @@ function AddStaff({ onClose, onSaved }) {
           </div>
         </Field>
       </div>
+    </Modal>
+  );
+}
+
+/** Someone left: their login stops working at once. Past reports still show their name. */
+function RemoveStaff({ u, onClose, onDone }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  async function remove() {
+    setBusy(true);
+    try {
+      await api(`/api/auth/users/${u.id}`, { method: 'DELETE' });
+      toast(`${u.name} can no longer sign in`);
+      onDone();
+    } catch (e) {
+      toast(e.message, 'bad');
+      setBusy(false);
+    }
+  }
+  return (
+    <Modal title={`Remove ${u.name}?`} onClose={onClose} footer={<><button className="btn" onClick={onClose}>Keep</button><button className="btn danger" onClick={remove} disabled={busy}>{busy ? <Spinner /> : 'Yes, remove'}</button></>}>
+      <p>{u.name} is signed out at once and can no longer sign in. Messages they sent stay in the reports.</p>
     </Modal>
   );
 }
@@ -310,7 +335,38 @@ function Account({ user, isOwner }) {
           ))}
         </div>
       </Block>
-      {!isOwner && <Block title="Password" hint="Forgot it or want a new one? Ask the owner: Settings → Staff → New password." />}
+      <ChangePassword isOwner={isOwner} />
     </>
+  );
+}
+
+/** Change your own password (the current one is needed). Other phones and computers are signed out. */
+function ChangePassword({ isOwner }) {
+  const toast = useToast();
+  const [f, setF] = useState({ current: '', next: '' });
+  const [busy, setBusy] = useState(false);
+  async function save(e) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      await api('/api/auth/me/password', { method: 'POST', body: { currentPassword: f.current, newPassword: f.next } });
+      toast('Password changed. Other phones and computers are signed out.');
+      setF({ current: '', next: '' });
+    } catch (err) {
+      toast(err.message, 'bad');
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <form onSubmit={save}>
+      <Block title="Password" hint={isOwner ? 'Change the first password you were given to one only you know.' : 'Forgot it? Ask the owner: Settings → Staff → New password.'}>
+        <div className="form-grid two">
+          <Field label="Current password"><input id="pw-current" className="input" type="password" autoComplete="current-password" value={f.current} onChange={(e) => setF((x) => ({ ...x, current: e.target.value }))} /></Field>
+          <Field label="New password" hint="At least 8 characters."><input id="pw-new" className="input" type="password" autoComplete="new-password" value={f.next} onChange={(e) => setF((x) => ({ ...x, next: e.target.value }))} /></Field>
+        </div>
+        <button className="btn primary" style={{ alignSelf: 'flex-start' }} disabled={busy || !f.current || f.next.length < 8}>{busy ? <Spinner /> : 'Change password'}</button>
+      </Block>
+    </form>
   );
 }
