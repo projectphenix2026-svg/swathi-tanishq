@@ -4,6 +4,7 @@ import { query, indiaStartOf, ago } from '../db/index.js';
 import { config } from '../config.js';
 import { getProvider, getSmsProvider } from '../providers/index.js';
 import { clientSettings } from '../lib/campaigns.js';
+import { calendar, indiaNow } from '../lib/occasions.js';
 import { requireRole } from './auth.js';
 
 const router = express.Router();
@@ -54,8 +55,9 @@ router.get('/', async (req, res) => {
                AND redeemed_at >= $2) AS redeemed`,
     [req.clientId, indiaStartOf('month'), indiaStartOf('day')],
   );
-  const { rows: [cl] } = await query('SELECT last_export_at FROM clients WHERE id = $1', [req.clientId]);
-  res.json({ customers, month: { ...month, spend: Math.round(month.spend * 100) / 100 }, inbox, recent, templates: t.n, lastExportAt: cl?.last_export_at || null, ...extra });
+  const { rows: [cl] } = await query('SELECT last_export_at, sales_codes FROM clients WHERE id = $1', [req.clientId]);
+  const charts = await homeCharts(req.clientId, Boolean(cl?.sales_codes));
+  res.json({ customers, month: { ...month, spend: Math.round(month.spend * 100) / 100 }, inbox, recent, templates: t.n, lastExportAt: cl?.last_export_at || null, ...extra, ...charts });
 });
 
 // Settings the screens need: which provider, cost per message, sandbox hints, limits.
@@ -101,5 +103,76 @@ router.put('/settings/sales-codes', requireRole('admin'), async (req, res) => {
   await query('UPDATE clients SET sales_codes = $2 WHERE id = $1', [req.clientId, on ? 1 : 0]);
   res.json({ salesCodes: on });
 });
+
+/**
+ * Home's numbers and charts: new customers, last month's read rate, replies and Interested,
+ * messages per week (8 weeks), what happened to the last message, customers by city, the next
+ * 7 days' special days, and the getting-started steps.
+ */
+async function homeCharts(clientId, salesCodes) {
+  const monthStart = indiaStartOf('month');
+  const { rows: [nums] } = await query(
+    `SELECT (SELECT count(*) FROM contacts WHERE client_id = $1 AND phone NOT LIKE 'deleted:%' AND created_at >= $2) AS new_customers,
+            (SELECT count(*) FROM messages WHERE client_id = $1 AND direction = 'inbound' AND created_at >= $2) AS replies,
+            (SELECT count(*) FROM leads WHERE client_id = $1 AND created_at >= $2) AS interested,
+            (SELECT count(*) FROM messages WHERE client_id = $1 AND direction = 'outbound' AND status IN ('sent', 'delivered', 'read')
+               AND created_at >= $3 AND created_at < $2) AS last_sent,
+            (SELECT count(*) FROM messages WHERE client_id = $1 AND direction = 'outbound' AND status = 'read'
+               AND created_at >= $3 AND created_at < $2) AS last_read,
+            (SELECT count(*) FROM campaigns WHERE client_id = $1) AS campaigns,
+            (SELECT count(*) FROM occasions WHERE client_id = $1 AND kind = 'birthday' AND enabled = 1) AS birthday_on`,
+    [clientId, monthStart, indiaStartOf('month', new Date(Date.parse(monthStart) - 86400000))],
+  );
+  // Messages per week, oldest first: week 0 is the last 7 days.
+  const { rows: weekRows } = await query(
+    `SELECT CAST((julianday('now') - julianday(created_at)) / 7 AS INTEGER) AS w,
+            count(*) FILTER (WHERE status IN ('sent', 'delivered', 'read')) AS sent,
+            count(*) FILTER (WHERE status = 'read') AS read
+       FROM messages WHERE client_id = $1 AND direction = 'outbound' AND channel = 'whatsapp' AND created_at >= ${ago('56 days')}
+      GROUP BY w`,
+    [clientId],
+  );
+  const today = indiaNow().date;
+  const weeks = Array.from({ length: 8 }, (_, i) => {
+    const w = 7 - i;
+    const r = weekRows.find((x) => x.w === w) || { sent: 0, read: 0 };
+    const end = new Date(`${today}T00:00:00Z`);
+    end.setUTCDate(end.getUTCDate() - w * 7);
+    return { ending: end.toISOString().slice(0, 10), sent: r.sent, read: r.read };
+  });
+  // The last message that went out, step by step.
+  const { rows: [last] } = await query(
+    `SELECT c.id, c.name,
+            count(m.id) FILTER (WHERE m.status IN ('sent', 'delivered', 'read')) AS sent,
+            count(m.id) FILTER (WHERE m.status IN ('delivered', 'read')) AS delivered,
+            count(m.id) FILTER (WHERE m.status = 'read') AS read,
+            (SELECT count(DISTINCT i.contact_id) FROM messages i JOIN messages o ON o.contact_id = i.contact_id AND o.campaign_id = c.id
+              WHERE i.direction = 'inbound' AND i.created_at > o.sent_at) AS replied,
+            (SELECT count(*) FROM leads l WHERE l.campaign_id = c.id) AS interested,
+            (SELECT count(*) FROM redemptions r JOIN messages rm ON rm.id = r.message_id WHERE rm.campaign_id = c.id) AS bought
+       FROM campaigns c JOIN messages m ON m.campaign_id = c.id
+      WHERE c.client_id = $1 AND c.name NOT LIKE 'Test · %' AND c.name NOT LIKE 'Order ready ·%' AND c.name NOT LIKE 'Repair ready ·%'
+        AND c.status IN ('sending', 'completed')
+      GROUP BY c.id ORDER BY c.created_at DESC LIMIT 1`,
+    [clientId],
+  );
+  const { rows: cities } = await query(
+    `SELECT min(city) AS city, count(*) AS n FROM contacts
+      WHERE client_id = $1 AND phone NOT LIKE 'deleted:%' AND city IS NOT NULL AND trim(city) <> ''
+      GROUP BY lower(trim(city)) ORDER BY n DESC LIMIT 6`,
+    [clientId],
+  );
+  const cal = await calendar(clientId, today, 7);
+  const upcoming = Object.entries(cal)
+    .map(([date, d]) => ({ date, birthday: d.birthday.map((x) => x.name), anniversary: d.anniversary.map((x) => x.name), personal: d.personal.map((x) => x.name), events: d.events.map((x) => x.name) }))
+    .filter((d) => d.birthday.length + d.anniversary.length + d.personal.length + d.events.length);
+  return {
+    ...nums,
+    weeks,
+    lastMessage: last ? { ...last, bought: salesCodes ? last.bought : null } : null,
+    cities,
+    upcoming,
+  };
+}
 
 export default router;
