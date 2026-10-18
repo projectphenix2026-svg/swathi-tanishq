@@ -69,6 +69,10 @@ export async function runOccasion(occasion, { now = new Date(), force = false } 
     let suffixDate = target;
     if (occasion.kind === 'festival') {
       if (!eventOn(occasion, target)) continue;
+    } else if (occasion.kind === 'personal') {
+      // Family days: a spouse's or child's birthday, or any other day saved on the customer.
+      extraWhere = [`EXISTS (SELECT 1 FROM contact_dates d WHERE d.contact_id = c.id AND substr(d.date, 6, 5) IN (SELECT value FROM json_each($X1)))`];
+      extraParams = [dayKeys(target)];
     } else if (occasion.kind === 'thank_you') {
       // "After a purchase": customers who used a sales code `before` days ago (India date).
       suffixDate = addDays(today, -before);
@@ -107,6 +111,87 @@ export async function runAllOccasions(opts = {}) {
   }
   if (total) console.log(`[occasions] queued ${total} greeting(s)`);
   return total;
+}
+
+/** Which month-days fall in the window for each lead time: 'MM-DD' -> [{ sendOn, occasionDate, before }]. */
+function windowDays(occasion, today, days) {
+  const wanted = new Map();
+  for (let i = 0; i < days; i++) {
+    const sendOn = addDays(today, i);
+    for (const before of occasion.days_before || [0]) {
+      const target = addDays(sendOn, before);
+      for (const md of dayKeys(target)) {
+        if (!wanted.has(md)) wanted.set(md, []);
+        wanted.get(md).push({ sendOn, occasionDate: target, before });
+      }
+    }
+  }
+  return wanted;
+}
+
+async function upcomingPersonal(clientId, occasion, days, today) {
+  const wanted = windowDays(occasion, today, days);
+  const { where, params } = audienceWhere(clientId, occasion.audience);
+  params.push([...wanted.keys()]);
+  const { rows } = await query(
+    `SELECT substr(d.date, 6, 5) AS md, count(DISTINCT c.id) AS n, json_group_array(c.name) AS names
+       FROM contact_dates d JOIN contacts c ON c.id = d.contact_id
+      WHERE ${where} AND ${ELIGIBLE} AND substr(d.date, 6, 5) IN (SELECT value FROM json_each($${params.length}))
+      GROUP BY md`,
+    params,
+  );
+  const byDay = new Map();
+  for (const r of rows) {
+    for (const w of wanted.get(r.md) || []) {
+      const key = `${w.sendOn}|${w.before}`;
+      const entry = byDay.get(key) || { ...w, count: 0, names: [] };
+      entry.count += r.n;
+      entry.names.push(...JSON.parse(r.names).slice(0, 3 - entry.names.length));
+      byDay.set(key, entry);
+    }
+  }
+  return [...byDay.values()].sort((a, b) => a.sendOn.localeCompare(b.sendOn) || b.before - a.before);
+}
+
+/**
+ * The calendar: who has a birthday, anniversary or family day, and which festivals and shop
+ * events fall, on each day from `from` for `days` days. Only customers who can get WhatsApp.
+ */
+export async function calendar(clientId, from, days = 42) {
+  const dates = Array.from({ length: days }, (_, i) => addDays(from, i));
+  const byMd = new Map();
+  for (const d of dates) {
+    for (const md of dayKeys(d)) {
+      if (!byMd.has(md)) byMd.set(md, []);
+      byMd.get(md).push(d);
+    }
+  }
+  const mds = [...byMd.keys()];
+  const out = Object.fromEntries(dates.map((d) => [d, { birthday: [], anniversary: [], personal: [], events: [] }]));
+  const put = (md, kind, item) => {
+    for (const d of byMd.get(md) || []) out[d][kind].push(item);
+  };
+  const people = await query(
+    `SELECT c.id, c.name, substr(c.birthday, 6, 5) AS b, substr(c.anniversary, 6, 5) AS a FROM contacts c
+      WHERE c.client_id = $1 AND c.phone NOT LIKE 'deleted:%' AND ${ELIGIBLE}
+        AND (substr(c.birthday, 6, 5) IN (SELECT value FROM json_each($2)) OR substr(c.anniversary, 6, 5) IN (SELECT value FROM json_each($2)))`,
+    [clientId, mds],
+  );
+  for (const r of people.rows) {
+    if (mds.includes(r.b)) put(r.b, 'birthday', { id: r.id, name: r.name });
+    if (mds.includes(r.a)) put(r.a, 'anniversary', { id: r.id, name: r.name });
+  }
+  const family = await query(
+    `SELECT c.id, c.name, d.kind, d.label, substr(d.date, 6, 5) AS md FROM contact_dates d JOIN contacts c ON c.id = d.contact_id
+      WHERE c.client_id = $1 AND c.phone NOT LIKE 'deleted:%' AND ${ELIGIBLE} AND substr(d.date, 6, 5) IN (SELECT value FROM json_each($2))`,
+    [clientId, mds],
+  );
+  for (const r of family.rows) put(r.md, 'personal', { id: r.id, name: r.name, kind: r.kind, label: r.label });
+  const { rows: events } = await query("SELECT * FROM occasions WHERE client_id = $1 AND kind = 'festival' AND enabled = 1", [clientId]);
+  for (const o of events) {
+    for (const d of dates) if (eventOn(o, d)) out[d].events.push({ id: o.id, name: o.name });
+  }
+  return out;
 }
 
 /** Greetings coming up in the next `days` days, for the occasions screen (one query). */
@@ -150,6 +235,7 @@ export async function upcoming(clientId, occasion, days = 30, now = new Date()) 
     }
     return list.sort((a, b) => a.sendOn.localeCompare(b.sendOn));
   }
+  if (occasion.kind === 'personal') return upcomingPersonal(clientId, occasion, days, today);
   // Which occasion dates fall in the window for each lead time, keyed by month-day.
   const wanted = new Map(); // 'MM-DD' -> [{ sendOn, occasionDate, before }]
   for (let i = 0; i < days; i++) {

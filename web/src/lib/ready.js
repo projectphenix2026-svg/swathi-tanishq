@@ -68,3 +68,30 @@ export function withoutCode(text) {
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
+
+// Ready-made wishes for Special days (no sales code; birthday and anniversary can carry a gift offer).
+export const READY_WISHES = {
+  birthday: {
+    name: '🎂 Birthday wish', pic: 'cake',
+    body: 'Happy birthday, {{name}}! 🎂\n\nEveryone at {{store}} wishes you a wonderful year ahead.\n\n*A birthday gift for you:* {{offer}}\n*Valid till:* {{offer_ends}}\n\nWe would love to see you at the store.',
+    sms: 'Happy birthday {{name}}! Birthday gift at {{store}}: {{offer}} till {{offer_ends}}. -SWATHI',
+    offer: 'a free silver coin with any purchase',
+  },
+  anniversary: {
+    name: '💐 Anniversary wish', pic: 'ring',
+    body: 'Happy anniversary, {{name}}! 💐\n\nWishing you both many more happy years together, from all of us at {{store}}.\n\n*Your anniversary gift:* {{offer}}\n*Valid till:* {{offer_ends}}',
+    sms: 'Happy anniversary {{name}}! Gift at {{store}}: {{offer}} till {{offer_ends}}. -SWATHI',
+    offer: '10% off making charges',
+  },
+  personal: {
+    name: '🌸 Family day wish', pic: 'blossom',
+    body: 'Hi {{name}} 🌸\n\nWishing your family a very happy special day, from all of us at {{store}}.\n\nIf you are planning a gift, we would love to help you choose.',
+    sms: 'Hi {{name}}, warm wishes to your family on this special day from {{store}}. -SWATHI',
+  },
+  festival: {
+    name: '✨ Festival greeting', pic: 'sparkles',
+    body: 'Hi {{name}} ✨\n\n*Warm wishes from {{store}}!*\nMay this festival bring joy and prosperity to your home.\n\n*Festive offer:* {{offer}}\n*Valid till:* {{offer_ends}}',
+    sms: 'Festival wishes from {{store}}, {{name}}! Offer: {{offer}} till {{offer_ends}}. -SWATHI',
+    offer: '15% off making charges',
+  },
+};
