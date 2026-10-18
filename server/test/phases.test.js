@@ -262,7 +262,10 @@ describe('Phase 5: offer codes, leads, weekly limit, roles', () => {
     }
     const agent = await login('admin@example.com');
     const p = await agent.post('/api/campaigns/preview').send({ audience: { mode: 'all' }, templateId: t.id });
-    expect(p.body).toMatchObject({ eligible: 2, atCap: 1, sendable: 1 });
+    expect(p.body).toMatchObject({ eligible: 2, atCap: 1, sendable: 1, weeklyCap: 2 });
+    // Step 1 (no message picked yet) already shows the real number, not everyone in the group.
+    const p0 = await agent.post('/api/campaigns/preview').send({ audience: { mode: 'all' } });
+    expect(p0.body).toMatchObject({ eligible: 2, atCap: 1, sendable: 1 });
     await query('UPDATE clients SET weekly_cap = 0');
     const p2 = await agent.post('/api/campaigns/preview').send({ audience: { mode: 'all' }, templateId: t.id });
     expect(p2.body.sendable).toBe(2);

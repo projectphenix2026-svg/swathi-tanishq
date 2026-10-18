@@ -73,8 +73,10 @@ export async function sendConditions(clientId, template, variables, { ignoreCap 
     .map((col) => `c.${col} IS NOT NULL AND trim(c.${col}) <> ''`);
   const campaignBlank = keys.some((k) => !CUSTOMER_KEYS[k] && !GENERATED.has(k) && !String(variables?.[k] || '').trim());
   const { weekly_cap: cap } = await clientSettings(clientId);
-  // The weekly limit protects the WhatsApp number; bulk SMS is not counted.
-  const capped = !ignoreCap && channel !== 'sms' && template?.category === 'marketing' && cap > 0 ? atCapSql(cap) : null;
+  // The weekly limit protects the WhatsApp number; bulk SMS is not counted. Before a message is
+  // picked (step 1 of Send an offer) it is counted as an offer, so the first number shown is already right.
+  const marketing = template ? template.category === 'marketing' : true;
+  const capped = !ignoreCap && channel !== 'sms' && marketing && cap > 0 ? atCapSql(cap) : null;
   return { keys, conds, campaignBlank, capped };
 }
 
@@ -124,7 +126,7 @@ export async function previewAudience(clientId, { audience, template, variables,
       WHERE ${where} AND ${ELIGIBLE} ORDER BY c.name IS NULL, c.name, c.id LIMIT 50`,
     params,
   );
-  const { approval_threshold: threshold } = await clientSettings(clientId);
+  const { approval_threshold: threshold, weekly_cap: weeklyCap } = await clientSettings(clientId);
   const costPerMessage = channel === 'sms' ? config.sms.costPerSms : config.costPerMessage;
   return {
     ...counts,
@@ -133,6 +135,7 @@ export async function previewAudience(clientId, { audience, template, variables,
     atCap,
     sendable,
     approvalThreshold: threshold,
+    weeklyCap,
     costPerMessage,
     estimatedCost: round2(sendable * costPerMessage),
     smsReady: Boolean(template?.sms_body),
