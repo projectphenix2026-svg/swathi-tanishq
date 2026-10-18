@@ -161,7 +161,7 @@ export async function queueMessages(clientId, { audience, template, variables, k
   const sql = `INSERT OR IGNORE INTO messages
       (client_id, campaign_id, occasion_id, contact_id, channel, template_id, variables, idempotency_key, buttons, image_url, status, due_at)
     SELECT c.client_id, ${p(campaignId)}, ${p(occasionId)}, c.id, ${p(channel)}, ${p(template.id)}, ${p(variables || {})},
-           ${p(keyPrefix)} || c.id || ${p(keySuffix)}, ${p(channel === 'sms' ? [] : template.buttons || [])}, ${p(channel === 'sms' ? null : template.image_url || null)}, 'queued',
+           ${p(keyPrefix)} || c.id || ${p(keySuffix)}, ${p(channel === 'sms' ? [] : template.buttons || [])}, ${p(channel === 'sms' ? null : variables?.image_url || template.image_url || null)}, 'queued',
            COALESCE(${p(dueAt)}, ${NOW})
       FROM contacts c
      WHERE ${where} AND ${ELIGIBLE}${all.length ? ' AND ' + all.join(' AND ') : ''}`;

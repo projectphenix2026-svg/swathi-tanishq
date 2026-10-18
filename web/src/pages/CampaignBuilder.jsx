@@ -10,6 +10,7 @@ import { ProviderBanner } from './Dashboard.jsx';
 import { dateTime, inr, num, phone, plural, rate } from '../lib/format.js';
 import { READY_MESSAGES } from '../lib/ready.js';
 import { toFriendly } from '../lib/friendly.js';
+import { PhotoPicker } from '../components/PhotoPicker.jsx';
 
 const STEPS = ['Who gets it', 'Message', 'When', 'Check & send'];
 const CAMPAIGN_VARS = VARIABLES.filter((v) => v.source === 'campaign');
@@ -189,7 +190,7 @@ export default function CampaignBuilder() {
                   {preview.sample.map((s) => <option key={s.id} value={s.id}>{s.name || phone(s.phone)}{s.city ? ` · ${s.city}` : ''}</option>)}
                 </select>
               </div>
-              {isSms ? <SmsPreview text={template.sms_body} values={values} live={settings?.sms?.live} /> : <PhonePreview body={template.body} values={values} buttons={template.buttons} imageUrl={template.image_url} businessName={settings?.businessName} />}
+              {isSms ? <SmsPreview text={template.sms_body} values={values} live={settings?.sms?.live} /> : <PhonePreview body={template.body} values={values} buttons={template.buttons} imageUrl={variables.image_url || template.image_url} businessName={settings?.businessName} />}
               {rendered?.missing.length > 0 && (
                 <Alert tone="warn" icon={AlertTriangle}>
                   {previewAs.name || 'This customer'} has no {rendered.missing.map((k) => VAR_LABEL[k]).join(' or ')}, so they will be skipped rather than sent a message with a gap.
@@ -377,6 +378,18 @@ function MessageStep({ templates, templateId, setTemplateId, setTemplates, chann
     }
   }
 
+  const chosen = templates.find((t) => t.id === templateId);
+  async function addPhotoToMessage(url) {
+    if (!url || !chosen) return;
+    try {
+      const { template: t } = await api(`/api/templates/${chosen.id}`, { method: 'PUT', body: { ...chosen, image_url: url } });
+      setTemplates((list) => list.map((x) => (x.id === t.id ? t : x)));
+      toast('Photo added to the message');
+    } catch (e) {
+      toast(e.message, 'bad');
+    }
+  }
+
   const readyNames = new Set(READY_MESSAGES.map((m) => m.name));
   const own = templates.filter((t) => !readyNames.has(t.name));
   const chosenName = templates.find((t) => t.id === templateId)?.name;
@@ -434,6 +447,25 @@ function MessageStep({ templates, templateId, setTemplateId, setTemplates, chann
               </Field>
             ))}
           </div>
+        </div>
+      )}
+
+      {chosen && channel !== 'sms' && (
+        <div className="card card-pad stack">
+          <div>
+            <h2>Photo</h2>
+            <p className="subtle">
+              {chosen.image_url
+                ? 'This message has a photo. Use it, or pick a different photo just for this offer.'
+                : 'Add a jewellery photo to this message. It is saved with the message; with WhatsApp (Meta) the message is then approved once more.'}
+            </p>
+          </div>
+          {chosen.image_url ? (
+            <PhotoPicker value={variables.image_url || chosen.image_url} changeLabel="Use a different photo" removable={Boolean(variables.image_url)}
+              onChange={(url) => setVariables((x) => ({ ...x, image_url: url || undefined }))} />
+          ) : (
+            <PhotoPicker value="" onChange={addPhotoToMessage} />
+          )}
         </div>
       )}
 

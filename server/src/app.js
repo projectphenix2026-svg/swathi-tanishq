@@ -15,6 +15,7 @@ import leadRoutes from './routes/leads.js';
 import offerRoutes from './routes/offers.js';
 import whatsappRoutes from './routes/whatsapp.js';
 import exportRoutes from './routes/export.js';
+import { upload as mediaUpload, serve as mediaServe } from './routes/media.js';
 import { refreshProvider } from './lib/whatsapp-connection.js';
 
 export function createApp() {
@@ -33,6 +34,7 @@ export function createApp() {
     next();
   });
   app.use('/webhooks', webhookRoutes);
+  app.use('/media', mediaServe);
   app.use('/api/auth', authRoutes);
   app.use('/api/customers', requireAuth, customerRoutes);
   app.use('/api/templates', requireAuth, templateRoutes);
@@ -44,6 +46,7 @@ export function createApp() {
   app.use('/api/offers', requireAuth, offerRoutes);
   app.use('/api/whatsapp', requireAuth, whatsappRoutes);
   app.use('/api/export', requireAuth, exportRoutes);
+  app.use('/api/media', mediaUpload);
 
   app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));
 

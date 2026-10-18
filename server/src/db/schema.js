@@ -26,6 +26,17 @@ CREATE TABLE IF NOT EXISTS whatsapp_connection (
   updated_at       TEXT NOT NULL DEFAULT ${NOW}
 );`;
 
+// Offer photos (small JPEGs, base64), served publicly at /media/<id> for WhatsApp to fetch.
+export const MEDIA_TABLE = `
+CREATE TABLE IF NOT EXISTS media (
+  id         TEXT PRIMARY KEY,
+  client_id  INTEGER NOT NULL REFERENCES clients(id),
+  mime       TEXT NOT NULL,
+  data       TEXT NOT NULL,
+  size       INTEGER NOT NULL,
+  created_at TEXT NOT NULL DEFAULT ${NOW}
+);`;
+
 export const SCHEMA = `
 CREATE TABLE IF NOT EXISTS clients (
   id                 INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -195,6 +206,7 @@ CREATE TABLE IF NOT EXISTS leads (
 );
 CREATE INDEX IF NOT EXISTS leads_open_idx ON leads (client_id, status, created_at);
 ${CONNECTION_TABLE}
+${MEDIA_TABLE}
 `;
 
 // Columns added after the first deploy; db/index.js adds any that an older database lacks.
