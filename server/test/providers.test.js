@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import crypto from 'node:crypto';
 import { createTwilioProvider, withButtons } from '../src/providers/twilio.js';
 import { createMetaProvider } from '../src/providers/meta.js';
+import { createMockProvider } from '../src/providers/mock.js';
 
 const cfg = { accountSid: 'ACtest', authToken: 'test-token', whatsappFrom: '+17372508034' };
 
@@ -112,5 +113,15 @@ describe('Meta adapter (stub)', () => {
     const parsed = p.parseWebhook({ body });
     expect(parsed.statuses[0]).toMatchObject({ providerMessageId: 'wamid.1', status: 'read' });
     expect(parsed.inbound[0]).toMatchObject({ from: '+919876543210', body: 'Interested', profileName: 'Priya' });
+  });
+});
+
+describe('Test mode provider', () => {
+  it('moves sent -> delivered -> read even when a fresh copy answers (as on Cloudflare)', async () => {
+    const { providerMessageId: id } = await createMockProvider().send({ to: '+919876543210', body: 'Hi' });
+    const fresh = () => createMockProvider({ deliverAfterMs: 0, readAfterMs: 60_000 });
+    expect((await fresh().fetchStatus(id)).status).toBe('delivered');
+    expect((await createMockProvider({ deliverAfterMs: 0, readAfterMs: 0 }).fetchStatus(id)).status).toBe('read');
+    expect(await createMockProvider().fetchStatus('SMother')).toBeNull();
   });
 });

@@ -126,7 +126,7 @@ export function ProviderBanner({ settings, compact }) {
   if (p.name === 'mock') {
     return (
       <Alert tone="warn" icon={TestTube2}>
-        <b>Test mode.</b> Nothing is sent to real phones. Messages pretend to be delivered and read after a few seconds, so you can try everything safely.
+        <b>Test mode.</b> Nothing is sent to real phones. Messages pretend to be delivered and then read within about a minute, so you can try everything safely.
       </Alert>
     );
   }

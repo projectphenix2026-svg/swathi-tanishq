@@ -35,8 +35,11 @@ export default function CampaignReport() {
     load();
   }, [load]);
 
-  // Refresh while messages are still going out or statuses are still arriving.
-  const live = data?.campaign && (['scheduled', 'sending'].includes(data.campaign.status) || data.report.sent > data.report.read);
+  // Refresh while messages are still going out, and for 15 minutes after the last one, while
+  // most delivered/read updates arrive. Some customers never read, so don't wait for everyone.
+  const camp = data?.campaign;
+  const recent = camp?.completed_at && Date.now() - Date.parse(camp.completed_at) < 15 * 60 * 1000;
+  const live = camp && (['scheduled', 'sending'].includes(camp.status) || (recent && data.report.sent > data.report.read));
   useEffect(() => {
     if (!live) return undefined;
     const t = setInterval(load, 4000);
