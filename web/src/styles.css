@@ -716,3 +716,10 @@ a.chart-card:hover { border-color: var(--brand); }
 .staff-list { display: flex; flex-direction: column; }
 .staff-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--border); }
 .staff-row:first-child { border-top: none; }
+@media (max-width: 600px) {
+  /* Phones: the mode bar stays one line; the import choices wrap into two columns. */
+  .mode-bar { padding: 6px 16px; flex-wrap: nowrap; }
+  .mode-bar > span { display: none; }
+  .tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; }
+  .tab { white-space: normal; text-align: center; font-size: 0.85rem; padding: 6px 8px; }
+}
