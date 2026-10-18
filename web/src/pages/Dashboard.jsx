@@ -37,7 +37,7 @@ export default function Dashboard() {
           <Alert tone="bad">Could not load the dashboard. Refresh the page to try again.</Alert>
         ) : (
           <>
-            <Today d={d} />
+            <Today d={d} isOwner={settings?.role === 'admin'} />
 
             {!setupDone && <GettingStarted d={d} />}
 
@@ -87,7 +87,8 @@ export default function Dashboard() {
 }
 
 /** Home: what needs doing today, in plain sentences, most urgent first. */
-function Today({ d }) {
+function Today({ d, isOwner }) {
+  const copyDue = isOwner && (!d.lastExportAt || Date.now() - Date.parse(d.lastExportAt) > 7 * 24 * 3600 * 1000);
   const last = d.recent.find((c) => c.status !== 'cancelled' && !c.name.startsWith('Test · '));
   const items = [
     d.new_leads > 0 && { to: '/leads', pic: 'phone', title: `${plural(d.new_leads, 'customer')} said Interested`, text: 'Call them today, while they’re keen.', action: 'Call' },
@@ -96,6 +97,7 @@ function Today({ d }) {
     d.occasions_on
       ? { to: '/occasions', pic: 'cake', title: d.greetings_today ? `${plural(d.greetings_today, 'wish', 'wishes')} went out today` : 'No birthdays or anniversaries today', text: 'Wishes go out every morning on their own.', done: true }
       : { to: '/occasions', pic: 'cake', title: 'Switch on birthday wishes', text: 'Set it once. They go out every morning on their own.', action: 'Set up' },
+    copyDue && { to: '/settings#your-data', pic: 'chart', title: 'Download this week’s copy of your data', text: 'One click: customers, offers and bill codes in Excel.', action: 'Download' },
     last && { to: `/campaigns/${last.id}`, pic: 'megaphone', title: `Your “${last.name}”: ${num(last.total)} sent, ${num(last.read)} read it`, text: d.redeemed ? `This month ${plural(d.redeemed, 'customer')} bought with their code (${inr(d.revenue)}).` : 'When a customer buys with their code, it shows here.', done: true },
   ].filter(Boolean);
   const nothingToDo = !d.new_leads && !d.inbox.unread && !d.pending_approval;

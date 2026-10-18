@@ -3,7 +3,7 @@
 //   Node (local dev, tests) -> Node's built-in SQLite (node:sqlite), a file or in memory
 // query(sql, params) uses $1, $2... placeholders and returns { rows, rowCount }.
 // JSON columns come back parsed and true/false columns come back as booleans.
-import { SCHEMA, CONNECTION_TABLE } from './schema.js';
+import { SCHEMA, CONNECTION_TABLE, EXTRA_COLUMNS } from './schema.js';
 
 let impl = null;
 
@@ -130,17 +130,31 @@ export async function initDb({ memory = false, d1 = null, file } = {}) {
 }
 
 async function ensureSchema() {
+  let ready = false;
   try {
     await impl.query('SELECT 1 FROM leads LIMIT 1');
-    if (impl.kind === 'd1') {
-      // Already set up. Tables added after the first deploy are created here (cheap if they exist).
-      await impl.query(CONNECTION_TABLE.trim().replace(/;$/, ''));
-      return;
-    }
+    ready = impl.kind === 'd1';
   } catch {
     /* first run: create the tables */
   }
-  await impl.exec(SCHEMA);
+  if (ready) {
+    // Already set up. Tables added after the first deploy are created here (cheap if they exist).
+    await impl.query(CONNECTION_TABLE.trim().replace(/;$/, ''));
+  } else {
+    await impl.exec(SCHEMA);
+  }
+  await ensureColumns();
+}
+
+/** Adds columns introduced after the first deploy to older databases (SQLite has no ADD COLUMN IF NOT EXISTS). */
+async function ensureColumns() {
+  for (const [table, columns] of Object.entries(EXTRA_COLUMNS)) {
+    const { rows } = await impl.query(`PRAGMA table_info(${table})`);
+    const have = new Set(rows.map((r) => r.name));
+    for (const [name, type] of columns) {
+      if (!have.has(name)) await impl.query(`ALTER TABLE ${table} ADD COLUMN ${name} ${type}`);
+    }
+  }
 }
 
 export function db() {

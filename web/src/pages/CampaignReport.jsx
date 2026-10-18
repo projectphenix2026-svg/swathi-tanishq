@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, Check, CheckCheck, Flame, IndianRupee, MessageCircle, MessageSquareText, RefreshCw, ShieldCheck, Ticket, Undo2, XCircle } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Check, CheckCheck, Clock, Flame, IndianRupee, MessageCircle, MessageSquareText, RefreshCw, ShieldCheck, Ticket, Undo2, XCircle } from 'lucide-react';
 import { useAuth } from '../lib/auth.js';
 import { api } from '../lib/api.js';
 import { Alert, CampaignStatus, Kpi, MessageStatus, Skeleton, Spinner, useToast } from '../components/ui.jsx';
@@ -125,6 +125,12 @@ export default function CampaignReport() {
             {r.failed > 0 && <> · <b>{num(r.failed)}</b> couldn’t be reached</>}
           </p>
         </div>
+        {data.pace && r.pending > 0 && (
+          <Alert tone="info" icon={Clock}>
+            <b>{num(r.pending)} waiting.</b> WhatsApp lets this number reach {num(data.pace.limit)} new customers a day
+            ({num(data.pace.remaining)} left right now). The rest go out on their own{data.pace.finishBy ? `, finishing by ${dateTime(data.pace.finishBy)}` : ' today'}.
+          </Alert>
+        )}
         {c.status === 'pending_approval' && (
           <Alert tone="warn" icon={ShieldCheck}>
             <b>Waiting for the owner’s approval.</b> It goes to about {num(c.expected_count)} customers ({inr((c.expected_count || 0) * Number(c.cost_per_message))}). Nothing has been sent yet.

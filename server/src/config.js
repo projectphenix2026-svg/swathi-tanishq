@@ -18,6 +18,10 @@ export const config = {
   jwtSecret: env.JWT_SECRET || '',
   // Encrypts the shop's WhatsApp key in the database (falls back to JWT_SECRET).
   settingsKey: env.SETTINGS_KEY || '',
+  // Meta's daily limit (new customers a day) when the number's tier is not known yet.
+  dailyLimit: Number(env.WHATSAPP_DAILY_LIMIT ?? 250),
+  // Optional pretend limit in test mode, to try the pacing (0 = none).
+  testDailyLimit: Number(env.TEST_DAILY_LIMIT ?? 0),
   adminEmail: env.ADMIN_EMAIL || '',
   adminPassword: env.ADMIN_PASSWORD || '',
   adminName: env.ADMIN_NAME || 'Admin',

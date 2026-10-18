@@ -5,6 +5,7 @@ import { getProvider } from '../providers/index.js';
 import { previewAudience, launchCampaign, campaignReport, queueMessages, TEST_PHONE_TAG } from '../lib/campaigns.js';
 import { kick } from '../lib/dispatch.js';
 import { normalizePhone } from '../lib/phone.js';
+import { pace, finishEstimate } from '../lib/pacing.js';
 import { render, valuesFor } from '../lib/template.js';
 import { withButtons } from '../providers/twilio.js';
 import { requireRole } from './auth.js';
@@ -37,7 +38,10 @@ router.post('/preview', async (req, res) => {
   let template = null;
   if (templateId) template = (await query('SELECT * FROM templates WHERE id = $1 AND client_id = $2', [templateId, req.clientId])).rows[0];
   const result = await previewAudience(req.clientId, { audience, template, variables });
-  res.json(result);
+  // Meta's daily limit: how many go out now, and when the rest should be done.
+  const p = await pace();
+  const count = template ? result.sendable : result.eligible;
+  res.json({ ...result, pace: p && { ...p, finishBy: finishEstimate(count, p) } });
 });
 
 // The exact message one customer would receive.
@@ -184,7 +188,8 @@ router.get('/:id', async (req, res) => {
   );
   if (!c) return res.status(404).json({ error: 'Campaign not found.' });
   const report = await campaignReport(c.id);
-  res.json({ campaign: c, report });
+  const p = report.pending > 0 ? await pace() : null;
+  res.json({ campaign: c, report, pace: p && { ...p, finishBy: finishEstimate(report.pending, p) } });
 });
 
 router.get('/:id/messages', async (req, res) => {

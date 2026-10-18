@@ -53,7 +53,8 @@ router.get('/', async (req, res) => {
                AND redeemed_at >= $2) AS redeemed`,
     [req.clientId, indiaStartOf('month'), indiaStartOf('day')],
   );
-  res.json({ customers, month: { ...month, spend: Math.round(month.spend * 100) / 100 }, inbox, recent, templates: t.n, ...extra });
+  const { rows: [cl] } = await query('SELECT last_export_at FROM clients WHERE id = $1', [req.clientId]);
+  res.json({ customers, month: { ...month, spend: Math.round(month.spend * 100) / 100 }, inbox, recent, templates: t.n, lastExportAt: cl?.last_export_at || null, ...extra });
 });
 
 // Settings the screens need: which provider, cost per message, sandbox hints, limits.
@@ -61,6 +62,7 @@ router.get('/settings', async (req, res) => {
   const p = getProvider();
   const sms = getSmsProvider();
   const limits = await clientSettings(req.clientId);
+  const { rows: [cl] } = await query('SELECT last_export_at FROM clients WHERE id = $1', [req.clientId]);
   res.json({
     businessName: config.businessName,
     provider: { name: p.name, label: p.label, stub: Boolean(p.stub), missing: p.missingConfig() },
@@ -72,6 +74,7 @@ router.get('/settings', async (req, res) => {
     weeklyCap: limits.weekly_cap,
     approvalThreshold: limits.approval_threshold,
     role: req.user.role,
+    lastExportAt: cl?.last_export_at || null,
     sandbox:
       p.name === 'twilio'
         ? { number: process.env.TWILIO_SANDBOX_DISPLAY_NUMBER || config.twilio.whatsappFrom, joinCode: process.env.TWILIO_SANDBOX_JOIN_CODE || '' }

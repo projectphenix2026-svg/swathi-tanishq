@@ -14,6 +14,7 @@ import occasionRoutes from './routes/occasions.js';
 import leadRoutes from './routes/leads.js';
 import offerRoutes from './routes/offers.js';
 import whatsappRoutes from './routes/whatsapp.js';
+import exportRoutes from './routes/export.js';
 import { refreshProvider } from './lib/whatsapp-connection.js';
 
 export function createApp() {
@@ -42,6 +43,7 @@ export function createApp() {
   app.use('/api/leads', requireAuth, leadRoutes);
   app.use('/api/offers', requireAuth, offerRoutes);
   app.use('/api/whatsapp', requireAuth, whatsappRoutes);
+  app.use('/api/export', requireAuth, exportRoutes);
 
   app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));
 

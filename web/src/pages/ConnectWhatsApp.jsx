@@ -106,6 +106,7 @@ export function ConnectWhatsApp() {
               <span className="subtle">
                 Key {c.tokenHint} · {c.tokenExpiresAt ? `stops working ${dateOnly(c.tokenExpiresAt)}` : 'permanent'}
                 {c.quality ? ` · quality ${c.quality.toLowerCase()}` : ''} · checked {dateOnly(c.checkedAt)}
+                {c.dailyLimit === -1 ? ' · no daily limit' : c.dailyLimit ? ` · up to ${c.dailyLimit.toLocaleString('en-IN')} new customers a day` : ''}
               </span>
             </div>
             <div className="row wrap" style={{ gap: 8 }}>

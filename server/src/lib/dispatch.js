@@ -5,6 +5,7 @@
 // queued or retrying, so overlapping runs never send anything twice.
 import { query, NOW } from '../db/index.js';
 import { config } from '../config.js';
+import { pace } from './pacing.js';
 
 let runner = null;
 let scheduleBackground = (promise) => promise.catch((err) => console.error('[dispatch]', err));
@@ -26,12 +27,28 @@ export function setBackground(fn) {
  */
 export async function processDue({ limit = config.sendBatchSize, concurrency = 3 } = {}) {
   if (!runner) throw new Error('No sender registered');
-  const { rows } = await query(
-    `SELECT id FROM messages
-      WHERE direction = 'outbound' AND status IN ('queued', 'retrying') AND due_at <= ${NOW}
-      ORDER BY due_at, id LIMIT $1`,
-    [limit],
-  );
+  const due = `direction = 'outbound' AND status IN ('queued', 'retrying') AND due_at <= ${NOW}`;
+  const p = await pace();
+  let rows;
+  if (!p) {
+    ({ rows } = await query(`SELECT id FROM messages WHERE ${due} ORDER BY due_at, id LIMIT $1`, [limit]));
+  } else {
+    // Replies and SMS are not limited; offers and wishes stop at Meta's daily limit and wait.
+    const free = await query(
+      `SELECT id FROM messages WHERE ${due} AND (channel = 'sms' OR (campaign_id IS NULL AND occasion_id IS NULL))
+        ORDER BY due_at, id LIMIT $1`,
+      [limit],
+    );
+    const room = Math.min(limit - free.rows.length, p.remaining);
+    const paced = room > 0
+      ? await query(
+        `SELECT id FROM messages WHERE ${due} AND channel = 'whatsapp' AND (campaign_id IS NOT NULL OR occasion_id IS NOT NULL)
+          ORDER BY due_at, id LIMIT $1`,
+        [room],
+      )
+      : { rows: [] };
+    rows = [...free.rows, ...paced.rows];
+  }
   let next = 0;
   let handled = 0;
   const worker = async () => {

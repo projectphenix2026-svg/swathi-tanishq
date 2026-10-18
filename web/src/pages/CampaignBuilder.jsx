@@ -511,6 +511,12 @@ function ReviewStep({ name, setName, template, audience, picked, when, sendCount
           <p className="subtle">{plural(preview.matched - sendCount, 'customer')} in this group will not get it (not agreed to WhatsApp, said STOP, or missing details).</p>
         )}
         {when.sms && <p className="subtle">SMS backup is on for customers who are not on WhatsApp.</p>}
+        {preview?.pace?.finishBy && (
+          <Alert tone="info" icon={CalendarClock}>
+            WhatsApp lets this number reach <b>{num(preview.pace.limit)} new customers a day</b> ({num(preview.pace.remaining)} left right now).
+            This offer goes out over a few days on its own and should finish by <b>{dateTime(preview.pace.finishBy)}</b>.
+          </Alert>
+        )}
         {preview && settings?.role !== 'admin' && sendCount >= preview.approvalThreshold && (
           <Alert tone="info" icon={ShieldCheck}>
             This goes to {num(sendCount)} customers, so the owner must approve it first. You’ll find it under Send offer as “Waiting for owner’s OK”.

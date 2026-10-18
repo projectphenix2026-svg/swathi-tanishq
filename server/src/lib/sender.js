@@ -8,6 +8,7 @@ import { getProvider, getSmsProvider } from '../providers/index.js';
 import { extractVariables, render, valuesFor, VARIABLES } from './template.js';
 import { cleanPrefix, makeOfferCode } from './offers.js';
 import { setRunner, kick } from './dispatch.js';
+import { retryTomorrow } from './messages.js';
 
 // WhatsApp errors meaning "this number cannot get WhatsApp": SMS backup is worth trying.
 export const NOT_ON_WHATSAPP = new Set(['63003', '63024', '131026']);
@@ -88,6 +89,7 @@ export async function processSendJob(messageId) {
       );
       return { retrying: true };
     }
+    if (await retryTomorrow(msg.id, err.code)) return { retrying: true };
     await setFinal(msg.id, 'failed', err.code || null, err.message);
     await fallbackToSms(msg.id);
   }
