@@ -18,6 +18,10 @@ export const config = {
   jwtSecret: env.JWT_SECRET || '',
   // Encrypts the shop's WhatsApp key in the database (falls back to JWT_SECRET).
   settingsKey: env.SETTINGS_KEY || '',
+  // Meta's daily limit (new customers a day) when the number's tier is not known yet.
+  dailyLimit: Number(env.WHATSAPP_DAILY_LIMIT ?? 250),
+  // Optional pretend limit in test mode, to try the pacing (0 = none).
+  testDailyLimit: Number(env.TEST_DAILY_LIMIT ?? 0),
   adminEmail: env.ADMIN_EMAIL || '',
   adminPassword: env.ADMIN_PASSWORD || '',
   adminName: env.ADMIN_NAME || 'Admin',
@@ -29,6 +33,8 @@ export const config = {
 
   // mock | twilio | meta
   provider: (env.MESSAGING_PROVIDER || 'mock').toLowerCase(),
+  // Meta's India rate for utility messages (order and repair updates), before GST.
+  utilityCostPerMessage: Number(env.UTILITY_COST_INR ?? 0.115),
   costPerMessage: Number(env.COST_PER_MESSAGE_INR || 0.8631),
   maxAttempts: Number(env.SEND_MAX_ATTEMPTS || 4),
   validateWebhooks: bool(env.VALIDATE_WEBHOOK_SIGNATURES, true),

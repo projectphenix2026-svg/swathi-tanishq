@@ -16,6 +16,7 @@ export async function applyStatus({ providerMessageId, status, errorCode, errorM
   if (!msg) return false;
   if (status === 'failed') {
     if (['delivered', 'read', 'failed'].includes(msg.status)) return false;
+    if (await retryTomorrow(msg.id, errorCode)) return true;
     await query(
       `UPDATE messages SET status = 'failed', failed_at = ${NOW}, error_code = $2, error_message = $3 WHERE id = $1`,
       [msg.id, errorCode, errorMessage || 'Not delivered'],
@@ -34,11 +35,28 @@ export async function applyStatus({ providerMessageId, status, errorCode, errorM
   return true;
 }
 
+/**
+ * Meta's per-person marketing limit (error 131049): Meta decided this customer has had enough
+ * offers from all businesses today. Not the customer's fault, so try once more after 24 hours
+ * instead of marking it failed. Returns true when the message was put back in the queue.
+ */
+export async function retryTomorrow(messageId, errorCode) {
+  if (String(errorCode) !== '131049') return false;
+  const { rowCount } = await query(
+    `UPDATE messages SET status = 'retrying', retried_at = ${NOW}, provider_message_id = NULL, cost = NULL,
+            error_code = '131049', error_message = 'Meta limits how many offers one person gets from all businesses. Trying again tomorrow.',
+            due_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '+24 hours')
+      WHERE id = $1 AND retried_at IS NULL AND (campaign_id IS NOT NULL OR occasion_id IS NOT NULL)`,
+    [messageId],
+  );
+  return (rowCount ?? 0) > 0;
+}
+
 const STOP_WORDS = ['stop', 'unsubscribe', 'stop all', 'opt out', 'optout'];
 const START_WORDS = ['start', 'subscribe', 'opt in', 'unstop'];
 // Replies that mean "I want this": the customer goes on the hot-lead call list.
-const INTEREST_WORDS = ['interested', 'i am interested', 'im interested', 'book a visit', 'book visit', 'book', 'call me', 'yes', 'want to visit', 'see designs', 'see the designs'];
-const NOT_NOW_WORDS = ['not now', 'no', 'later', 'not interested'];
+const INTEREST_WORDS = ['ఆసక్తి ఉంది', 'ఆసక్తి', 'रुचि है', 'दिलचस्पी है', 'interested', 'i am interested', 'im interested', 'book a visit', 'book visit', 'book', 'call me', 'yes', 'want to visit', 'see designs', 'see the designs'];
+const NOT_NOW_WORDS = ['not now', 'no', 'later', 'not interested', 'ఇప్పుడు కాదు', 'వద్దు', 'अभी नहीं', 'नहीं'];
 
 async function addTag(contactId, tag) {
   await query(

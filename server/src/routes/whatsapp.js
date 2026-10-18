@@ -28,6 +28,8 @@ function view(c, req) {
     quality: c?.quality || null,
     tokenHint: c?.token_hint || null,
     tokenExpiresAt: c?.token_expires_at || null,
+    dailyLimit: c?.daily_limit ?? null,
+    limitTier: c?.limit_tier || null,
     hasAppSecret: Boolean(c?.app_secret_sealed),
     checkedAt: c?.checked_at || null,
     verifyToken: c?.verify_token || null,
@@ -57,15 +59,18 @@ router.post('/connect', async (req, res) => {
   const verifyToken = saved?.verify_token || [...crypto.getRandomValues(new Uint8Array(16))].map((x) => x.toString(16).padStart(2, '0')).join('');
   await query(
     `INSERT INTO whatsapp_connection (client_id, phone_number_id, waba_id, token_sealed, app_secret_sealed, verify_token,
-       display_phone, verified_name, quality, token_expires_at, token_hint, live, checked_at, updated_by, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 0, ${NOW}, $12, ${NOW})
+       display_phone, verified_name, quality, token_expires_at, token_hint, live, checked_at, updated_by, updated_at,
+       daily_limit, limit_tier, limit_checked_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 0, ${NOW}, $12, ${NOW}, $13, $14, ${NOW})
      ON CONFLICT (client_id) DO UPDATE SET phone_number_id = excluded.phone_number_id, waba_id = excluded.waba_id,
        token_sealed = excluded.token_sealed, app_secret_sealed = excluded.app_secret_sealed, display_phone = excluded.display_phone,
        verified_name = excluded.verified_name, quality = excluded.quality, token_expires_at = excluded.token_expires_at,
        token_hint = excluded.token_hint, checked_at = excluded.checked_at, updated_by = excluded.updated_by,
-       updated_at = excluded.updated_at, live = CASE WHEN whatsapp_connection.phone_number_id = excluded.phone_number_id THEN whatsapp_connection.live ELSE 0 END`,
+       updated_at = excluded.updated_at, daily_limit = excluded.daily_limit, limit_tier = excluded.limit_tier,
+       limit_checked_at = excluded.limit_checked_at, live = CASE WHEN whatsapp_connection.phone_number_id = excluded.phone_number_id THEN whatsapp_connection.live ELSE 0 END`,
     [req.clientId, phoneNumberId, wabaId, await seal(token), await seal(appSecret), verifyToken,
-      check.phone, check.name, check.quality, check.expiresAt, `…${token.slice(-4)}`, req.user.id],
+      check.phone, check.name, check.quality, check.expiresAt, `…${token.slice(-4)}`, req.user.id,
+      check.dailyLimit, check.limitTier],
   );
   await refreshProvider({ force: true });
   const { rows: [c] } = await query('SELECT * FROM whatsapp_connection WHERE client_id = $1', [req.clientId]);

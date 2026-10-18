@@ -1,6 +1,6 @@
 import { savedMetaProvider } from '../lib/whatsapp-connection.js';
 import express from 'express';
-import { query, indiaStartOf } from '../db/index.js';
+import { query, indiaStartOf, ago } from '../db/index.js';
 import { config } from '../config.js';
 import { getProvider, getSmsProvider } from '../providers/index.js';
 import { clientSettings } from '../lib/campaigns.js';
@@ -37,12 +37,13 @@ router.get('/', async (req, res) => {
             count(m.id) FILTER (WHERE m.status IN ('delivered', 'read')) AS delivered,
             count(m.id) FILTER (WHERE m.status = 'read') AS read
        FROM campaigns c LEFT JOIN messages m ON m.campaign_id = c.id
-      WHERE c.client_id = $1 GROUP BY c.id ORDER BY c.created_at DESC LIMIT 5`,
+      WHERE c.client_id = $1 AND c.name NOT LIKE 'Order ready ·%' AND c.name NOT LIKE 'Repair ready ·%' GROUP BY c.id ORDER BY c.created_at DESC LIMIT 5`,
     [req.clientId],
   );
   const { rows: [t] } = await query('SELECT count(*) AS n FROM templates WHERE client_id = $1', [req.clientId]);
   const { rows: [extra] } = await query(
     `SELECT (SELECT count(*) FROM leads WHERE client_id = $1 AND status = 'new') AS new_leads,
+            (SELECT count(*) FROM leads WHERE client_id = $1 AND status = 'new' AND created_at < ${ago('24 hours')}) AS overdue_leads,
             (SELECT count(*) FROM campaigns WHERE client_id = $1 AND status = 'pending_approval') AS pending_approval,
             (SELECT count(*) FROM occasions WHERE client_id = $1 AND enabled = 1) AS occasions_on,
             (SELECT count(*) FROM messages WHERE client_id = $1 AND occasion_id IS NOT NULL
@@ -53,7 +54,8 @@ router.get('/', async (req, res) => {
                AND redeemed_at >= $2) AS redeemed`,
     [req.clientId, indiaStartOf('month'), indiaStartOf('day')],
   );
-  res.json({ customers, month: { ...month, spend: Math.round(month.spend * 100) / 100 }, inbox, recent, templates: t.n, ...extra });
+  const { rows: [cl] } = await query('SELECT last_export_at FROM clients WHERE id = $1', [req.clientId]);
+  res.json({ customers, month: { ...month, spend: Math.round(month.spend * 100) / 100 }, inbox, recent, templates: t.n, lastExportAt: cl?.last_export_at || null, ...extra });
 });
 
 // Settings the screens need: which provider, cost per message, sandbox hints, limits.
@@ -61,6 +63,7 @@ router.get('/settings', async (req, res) => {
   const p = getProvider();
   const sms = getSmsProvider();
   const limits = await clientSettings(req.clientId);
+  const { rows: [cl] } = await query('SELECT last_export_at FROM clients WHERE id = $1', [req.clientId]);
   res.json({
     businessName: config.businessName,
     provider: { name: p.name, label: p.label, stub: Boolean(p.stub), missing: p.missingConfig() },
@@ -72,6 +75,7 @@ router.get('/settings', async (req, res) => {
     weeklyCap: limits.weekly_cap,
     approvalThreshold: limits.approval_threshold,
     role: req.user.role,
+    lastExportAt: cl?.last_export_at || null,
     sandbox:
       p.name === 'twilio'
         ? { number: process.env.TWILIO_SANDBOX_DISPLAY_NUMBER || config.twilio.whatsappFrom, joinCode: process.env.TWILIO_SANDBOX_JOIN_CODE || '' }

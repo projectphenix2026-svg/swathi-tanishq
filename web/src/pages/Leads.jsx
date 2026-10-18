@@ -2,7 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Check, Flame, MessageCircle, Phone, ShoppingBag, ThumbsDown, X } from 'lucide-react';
 import { api } from '../lib/api.js';
-import { Avatar, Empty, SectionTabs, Skeleton, useToast } from '../components/ui.jsx';
+import { Avatar, Empty, Pic, SectionTabs, Skeleton, useToast } from '../components/ui.jsx';
+import { useAuth } from '../lib/auth.js';
+import { useT } from '../lib/i18n.jsx';
 import { ago, num, phone } from '../lib/format.js';
 
 const TABS = [
@@ -15,10 +17,15 @@ export default function Leads() {
   const toast = useToast();
   const [tab, setTab] = useState('');
   const [data, setData] = useState(null);
+  const [staff, setStaff] = useState(null);
+  const { settings } = useAuth();
+  const { t } = useT();
+  const canSeeStaff = ['admin', 'manager'].includes(settings?.role);
 
   const load = useCallback(() => {
     api(`/api/leads${tab ? `?status=${tab}` : ''}`).then(setData).catch(() => setData({ leads: [], counts: {} }));
-  }, [tab]);
+    if (canSeeStaff) api('/api/leads/summary').then((r) => setStaff(r.staff)).catch(() => {});
+  }, [tab, canSeeStaff]);
   useEffect(() => {
     load();
     const t = setInterval(load, 15000);
@@ -40,15 +47,31 @@ export default function Leads() {
     <div className="page" style={{ maxWidth: 980 }}>
       <div className="page-head">
         <div>
-          <h1>Replies</h1>
-          <p>Customers who tapped “Interested” or asked for a call. Call them today, while they’re keen.</p>
+          <h1>{t('Replies')}</h1>
+          <p>{t('Customers who tapped “Interested” or asked for a call. Call them today, while they’re keen.')}</p>
         </div>
       </div>
-      <div style={{ marginBottom: 16 }}><SectionTabs tabs={[{ to: '/inbox', label: 'Messages' }, { to: '/leads', label: 'Call back list' }]} /></div>
+      <div style={{ marginBottom: 16 }}><SectionTabs tabs={[{ to: '/inbox', label: t('Messages') }, { to: '/leads', label: t('Call back list') }]} /></div>
+      {c.overdue > 0 && !tab && (
+        <div className="alert bad" style={{ marginBottom: 12 }}>
+          <Pic name="phone" size={30} />
+          <div style={{ flex: 1 }}><b>{num(c.overdue)} {c.overdue === 1 ? 'customer has' : 'customers have'} waited more than a day.</b> Call them first: interest fades fast.</div>
+        </div>
+      )}
+      {canSeeStaff && staff?.length > 0 && (
+        <div className="card card-pad" style={{ marginBottom: 12 }}>
+          <b>This week’s calls</b>
+          <div className="row wrap" style={{ gap: 16, marginTop: 6 }}>
+            {staff.map((s) => (
+              <span key={s.id} className="subtle"><b style={{ color: 'var(--text)' }}>{s.name}</b> · {num(s.handled)} handled · {num(s.won)} bought</span>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="chips" style={{ marginBottom: 16 }}>
-        {TABS.map((t) => (
-          <button key={t.key} className={`chip ${tab === t.key ? 'on' : ''}`} onClick={() => { setTab(t.key); setData(null); }}>
-            {t.label} <span className="n">{num(t.key ? c[t.key] || 0 : (c.new || 0) + (c.called || 0))}</span>
+        {TABS.map((x) => (
+          <button key={x.key} className={`chip ${tab === x.key ? 'on' : ''}`} onClick={() => { setTab(x.key); setData(null); }}>
+            {t(x.label)} <span className="n">{num(x.key ? c[x.key] || 0 : (c.new || 0) + (c.called || 0))}</span>
           </button>
         ))}
       </div>
@@ -66,7 +89,7 @@ export default function Leads() {
               <div style={{ minWidth: 0 }}>
                 <div className="row wrap" style={{ gap: 8 }}>
                   <b>{l.name || phone(l.phone)}</b>
-                  {l.status === 'new' && <span className="badge bad">New</span>}
+                  {l.status === 'new' && (l.overdue ? <span className="badge bad">Waiting {waited(l.created_at)}</span> : <span className="badge warn">New</span>)}
                   {l.status === 'called' && <span className="badge info">Called</span>}
                   {l.status === 'won' && <span className="badge ok">Bought</span>}
                   {l.status === 'lost' && <span className="badge neutral">Not interested</span>}
@@ -76,15 +99,15 @@ export default function Leads() {
                   Replied <b>“{l.reply || l.reason}”</b> {ago(l.created_at)}{l.campaign_name ? ` to ${l.campaign_name}` : ''}
                   {l.last_purchase && <span> · <ShoppingBag size={13} style={{ verticalAlign: -2 }} /> bought {l.last_purchase}</span>}
                 </div>
-                {l.updated_by_name && l.status !== 'new' && <div className="subtle">Updated by {l.updated_by_name} {ago(l.updated_at)}</div>}
+                {l.updated_by_name && l.status !== 'new' && <div className="subtle">{l.status === 'won' ? 'Bought' : l.status === 'lost' ? 'Marked not interested' : 'Called'} by {l.updated_by_name} {ago(l.updated_at)}</div>}
               </div>
               <div className="lead-actions">
-                <a className="btn sm wa" href={`tel:${l.phone}`}><Phone size={15} />Call</a>
-                <Link className="btn sm" to={`/inbox/${l.contact_id}`}><MessageCircle size={15} />Chat</Link>
-                {l.status === 'new' && <button className="btn sm" onClick={() => update(l, 'called')}><Check size={15} />Called</button>}
+                <a className="btn sm wa" href={`tel:${l.phone}`}><Phone size={15} />{t('Call')}</a>
+                <Link className="btn sm" to={`/inbox/${l.contact_id}`}><MessageCircle size={15} />{t('Chat')}</Link>
+                {l.status === 'new' && <button className="btn sm" onClick={() => update(l, 'called')}><Check size={15} />{t('Called')}</button>}
                 {['new', 'called'].includes(l.status) && (
                   <>
-                    <button className="btn sm" onClick={() => update(l, 'won')}><ShoppingBag size={15} />Bought</button>
+                    <button className="btn sm" onClick={() => update(l, 'won')}><ShoppingBag size={15} />{t('Bought')}</button>
                     <button className="btn sm ghost" onClick={() => update(l, 'lost')} title="Not interested"><ThumbsDown size={15} /></button>
                   </>
                 )}
@@ -96,4 +119,10 @@ export default function Leads() {
       </div>
     </div>
   );
+}
+
+/** "2 days" / "30 hours" since the customer said Interested. */
+function waited(iso) {
+  const h = Math.floor((Date.now() - Date.parse(iso)) / 3600000);
+  return h >= 48 ? `${Math.floor(h / 24)} days` : `${h} hours`;
 }

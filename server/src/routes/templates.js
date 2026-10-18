@@ -4,6 +4,7 @@ import { validateTemplate, cleanButtons, extractVariables, VARIABLES } from '../
 import { buildProvider, getProvider } from '../providers/index.js';
 import { requireRole } from './auth.js';
 import { savedMetaProvider } from '../lib/whatsapp-connection.js';
+import { mediaBytes } from './media.js';
 
 const router = express.Router();
 const canEdit = requireRole('admin', 'manager');
@@ -47,7 +48,9 @@ router.put('/:id', canEdit, async (req, res) => {
   const existing = await find(req.clientId, req.params.id);
   if (!existing) return res.status(404).json({ error: 'Template not found.' });
   // Changing the wording invalidates a Meta approval: the approved text is what Meta sends.
-  const textChanged = existing.body !== input.body || JSON.stringify(existing.buttons) !== JSON.stringify(input.buttons);
+  // Wording, buttons, or adding/removing a photo header need Meta's approval again (a different photo does not).
+  const textChanged = existing.body !== input.body || JSON.stringify(existing.buttons) !== JSON.stringify(input.buttons)
+    || Boolean(existing.image_url) !== Boolean(input.image_url);
   const { rows: [t] } = await query(
     `UPDATE templates SET ${COLS.map((c, i) => `${c} = $${i + 3}`).join(', ')},
             provider_status = CASE WHEN $${COLS.length + 3} THEN NULL ELSE provider_status END,
@@ -75,7 +78,7 @@ router.post('/:id/submit-meta', canEdit, async (req, res) => {
   const meta = metaProvider();
   const missing = meta.missingConfig();
   if (missing.length) return res.status(400).json({ error: `Meta is not set up yet. Missing: ${missing.join(', ')}.` });
-  const result = await meta.submitTemplate(t, EXAMPLES);
+  const result = await meta.submitTemplate(t, EXAMPLES, { sample: await photoSample(t.image_url) });
   const { rows: [u] } = await query(
     `UPDATE templates SET provider_ref = $2, provider_status = $3, provider_reason = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = $1 RETURNING *`,
     [t.id, result.name, result.status],
@@ -94,6 +97,20 @@ router.post('/:id/sync-meta', async (req, res) => {
   );
   res.json({ template: withVars(u) });
 });
+
+/** The message's photo bytes (from the app's own photo store, or its web link) for Meta's sample. */
+async function photoSample(url) {
+  if (!url) return null;
+  const own = /\/media\/([0-9a-f]{32})$/.exec(url);
+  if (own) return mediaBytes(own[1]);
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    return { mime: res.headers.get('content-type') || 'image/jpeg', bytes: new Uint8Array(await res.arrayBuffer()) };
+  } catch {
+    return null;
+  }
+}
 
 function metaProvider() {
   const p = getProvider();

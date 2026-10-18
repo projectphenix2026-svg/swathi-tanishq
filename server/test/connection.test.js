@@ -21,7 +21,7 @@ function fakeMeta({ fail } = {}) {
     if (fail) return json(401, { error: { code: 190, message: 'Session has expired' } });
     if (String(url).includes('/subscribed_apps')) return json(200, { success: true });
     if (String(url).includes('debug_token')) return json(200, { data: { is_valid: true, expires_at: 0 } });
-    if (String(url).includes('/555000111')) return json(200, { display_phone_number: '+91 90000 33333', verified_name: 'Swathi Tanishq', quality_rating: 'GREEN', code_verification_status: 'VERIFIED' });
+    if (String(url).includes('/555000111')) return json(200, { display_phone_number: '+91 90000 33333', verified_name: 'Swathi Tanishq', quality_rating: 'GREEN', code_verification_status: 'VERIFIED', messaging_limit_tier: 'TIER_2K' });
     if (String(url).includes('/777000222')) return json(200, { name: 'Swathi Tanishq', account_review_status: 'APPROVED' });
     return json(404, { error: { code: 100, message: 'Unsupported get request' } });
   };
@@ -74,7 +74,7 @@ describe('Connect WhatsApp (owner only)', () => {
     const calls = fakeMeta();
     const res = await owner.post('/api/whatsapp/connect').send({ phoneNumberId: '555 000 111', wabaId: '777000222', token: 'EAAG-permanent-key-9876', appSecret: 'app-secret' });
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ connected: true, live: false, phone: '+91 90000 33333', name: 'Swathi Tanishq', tokenHint: '…9876', hasAppSecret: true });
+    expect(res.body).toMatchObject({ connected: true, live: false, phone: '+91 90000 33333', name: 'Swathi Tanishq', tokenHint: '…9876', hasAppSecret: true, dailyLimit: 2000, limitTier: 'TIER_2K' });
     expect(res.body.webhookUrl).toMatch(/\/webhooks\/meta$/);
     expect(res.body.verifyToken).toMatch(/^[0-9a-f]{32}$/);
     expect(JSON.stringify(res.body)).not.toContain('EAAG-permanent');

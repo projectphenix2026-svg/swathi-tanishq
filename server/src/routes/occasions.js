@@ -5,7 +5,8 @@ import { runOccasion, upcoming, indiaNow } from '../lib/occasions.js';
 
 const router = express.Router();
 const canEdit = requireRole('admin', 'manager');
-const KINDS = ['birthday', 'anniversary', 'festival'];
+// thank_you = "After a purchase": a thank-you (with a Google review button) N days after a bill code is used.
+const KINDS = ['birthday', 'anniversary', 'festival', 'thank_you'];
 
 router.get('/', async (req, res) => {
   const { rows } = await query(
@@ -90,11 +91,11 @@ router.delete('/:id', canEdit, async (req, res) => {
 
 async function normalise(clientId, b = {}) {
   const kind = KINDS.includes(b.kind) ? b.kind : null;
-  if (!kind) return { error: 'Choose birthday, anniversary or festival.' };
+  if (!kind) return { error: 'Choose birthday, anniversary, festival or after a purchase.' };
   const name = String(b.name || '').trim().slice(0, 80);
   if (!name) return { error: 'Give the occasion a name.' };
-  const days = [...new Set((Array.isArray(b.days_before) ? b.days_before : [0]).map(Number).filter((n) => Number.isInteger(n) && n >= 0 && n <= 30))];
-  if (!days.length) return { error: 'Choose when to send: on the day, or some days before.' };
+  const days = [...new Set((Array.isArray(b.days_before) ? b.days_before : [0]).map(Number).filter((n) => Number.isInteger(n) && n >= (kind === 'thank_you' ? 1 : 0) && n <= 30))];
+  if (!days.length) return { error: kind === 'thank_you' ? 'Choose when to send: the next day, or a few days after the purchase.' : 'Choose when to send: on the day, or some days before.' };
   const hour = Number(b.send_hour ?? 10);
   if (!(hour >= 7 && hour <= 21)) return { error: 'Send between 7 am and 9 pm.' };
   let festival = null;

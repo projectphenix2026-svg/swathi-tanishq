@@ -26,6 +26,17 @@ CREATE TABLE IF NOT EXISTS whatsapp_connection (
   updated_at       TEXT NOT NULL DEFAULT ${NOW}
 );`;
 
+// Offer photos (small JPEGs, base64), served publicly at /media/<id> for WhatsApp to fetch.
+export const MEDIA_TABLE = `
+CREATE TABLE IF NOT EXISTS media (
+  id         TEXT PRIMARY KEY,
+  client_id  INTEGER NOT NULL REFERENCES clients(id),
+  mime       TEXT NOT NULL,
+  data       TEXT NOT NULL,
+  size       INTEGER NOT NULL,
+  created_at TEXT NOT NULL DEFAULT ${NOW}
+);`;
+
 export const SCHEMA = `
 CREATE TABLE IF NOT EXISTS clients (
   id                 INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -195,4 +206,17 @@ CREATE TABLE IF NOT EXISTS leads (
 );
 CREATE INDEX IF NOT EXISTS leads_open_idx ON leads (client_id, status, created_at);
 ${CONNECTION_TABLE}
+${MEDIA_TABLE}
 `;
+
+// Columns added after the first deploy; db/index.js adds any that an older database lacks.
+export const EXTRA_COLUMNS = {
+  // When a message was put back in the queue after Meta's per-person marketing limit (error 131049).
+  messages: [['retried_at', 'TEXT']],
+  // Meta's daily limit for this number: new customers it may message in 24 hours (-1 = no limit).
+  whatsapp_connection: [['daily_limit', 'INTEGER'], ['limit_tier', 'TEXT'], ['limit_checked_at', 'TEXT']],
+  // Last time the owner downloaded all the shop's data.
+  clients: [['last_export_at', 'TEXT']],
+  // How an offer is sent: 'whatsapp' (optionally with SMS backup) or 'sms' (bulk SMS).
+  campaigns: [['channel', "TEXT NOT NULL DEFAULT 'whatsapp'"]],
+};

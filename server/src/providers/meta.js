@@ -33,6 +33,27 @@ export function createMetaProvider(cfg, { fetchImpl = fetch } = {}) {
     return { providerMessageId: data.messages?.[0]?.id, status: 'sent' };
   }
 
+  /** Meta's resumable upload: sample photo bytes -> a header handle for template approval. */
+  async function uploadSample({ bytes, mime }) {
+    const dbg = await fetchImpl(`https://graph.facebook.com/${graphVersion}/debug_token?input_token=${encodeURIComponent(accessToken)}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }).then((r) => r.json()).catch(() => ({}));
+    const appId = dbg?.data?.app_id;
+    if (!appId) throw new ProviderError('Could not find the Meta app for this key, so the sample photo could not be uploaded.');
+    const start = await fetchImpl(
+      `https://graph.facebook.com/${graphVersion}/${appId}/uploads?file_name=offer.jpg&file_length=${bytes.length}&file_type=${encodeURIComponent(mime)}`,
+      { method: 'POST', headers: { Authorization: `Bearer ${accessToken}` } },
+    ).then((r) => r.json());
+    if (!start?.id) throw new ProviderError(start?.error?.message || 'Meta did not accept the sample photo.');
+    const done = await fetchImpl(`https://graph.facebook.com/${graphVersion}/${start.id}`, {
+      method: 'POST',
+      headers: { Authorization: `OAuth ${accessToken}`, file_offset: '0' },
+      body: bytes,
+    }).then((r) => r.json());
+    if (!done?.h) throw new ProviderError(done?.error?.message || 'Meta did not accept the sample photo.');
+    return done.h;
+  }
+
   return {
     name: 'meta',
     label: 'Meta WhatsApp Cloud API',
@@ -50,7 +71,7 @@ export function createMetaProvider(cfg, { fetchImpl = fetch } = {}) {
      * Business-initiated messages must use an approved template (template.provider_ref
      * holds its Meta name). Placeholders become positional {{1}}, {{2}}... in order.
      */
-    async send({ to, template, values }) {
+    async send({ to, template, values, imageUrl }) {
       if (!template?.provider_ref) {
         throw new ProviderError('This template has not been approved by Meta yet (no Meta template name).', {
           code: 132001,
@@ -58,8 +79,10 @@ export function createMetaProvider(cfg, { fetchImpl = fetch } = {}) {
       }
       const params = extractVariables(template.body).map((k) => ({ type: 'text', text: String(values?.[k] ?? '') }));
       const components = [];
-      if (template.image_url) {
-        components.push({ type: 'header', parameters: [{ type: 'image', image: { link: template.image_url } }] });
+      // Messages approved with a photo header carry a photo every time: this offer's, or the saved one.
+      const photo = imageUrl || template.image_url;
+      if (template.image_url && photo) {
+        components.push({ type: 'header', parameters: [{ type: 'image', image: { link: photo } }] });
       }
       if (params.length) components.push({ type: 'body', parameters: params });
       return post({
@@ -81,8 +104,8 @@ export function createMetaProvider(cfg, { fetchImpl = fetch } = {}) {
      * Submits a template to Meta for approval. Placeholders become {{1}}, {{2}}... in order,
      * with example values Meta's reviewers see. Returns { name, status, id }.
      */
-    async submitTemplate(template, examples) {
-      if (!wabaId) throw new ProviderError('Add META_WABA_ID (WhatsApp Business account ID) to the server settings first.');
+    async submitTemplate(template, examples, { sample } = {}) {
+      if (!wabaId) throw new ProviderError('Connect the WhatsApp Business account first (Settings → Connect WhatsApp).');
       const name = metaTemplateName(template.name);
       const keys = extractVariables(template.body);
       let n = 0;
@@ -90,6 +113,11 @@ export function createMetaProvider(cfg, { fetchImpl = fetch } = {}) {
       const body = { type: 'BODY', text };
       if (keys.length) body.example = { body_text: [keys.map((k) => String(examples?.[k] ?? k))] };
       const components = [body];
+      // A message with a photo is approved with a photo header; Meta needs a sample photo for that.
+      if (template.image_url) {
+        if (!sample) throw new ProviderError('Could not read the message’s photo to send to Meta. Add the photo again and retry.');
+        components.unshift({ type: 'HEADER', format: 'IMAGE', example: { header_handle: [await uploadSample(sample)] } });
+      }
       const buttons = (template.buttons || []).map((b) =>
         b.type === 'url' ? { type: 'URL', text: b.text, url: b.url }
           : b.type === 'phone' ? { type: 'PHONE_NUMBER', text: b.text, phone_number: b.phone }

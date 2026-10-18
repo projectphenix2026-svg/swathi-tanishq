@@ -7,6 +7,7 @@ import { query } from '../db/index.js';
 import { buildProvider, setProvider } from '../providers/index.js';
 import { createMetaProvider } from '../providers/meta.js';
 import { open } from './secretbox.js';
+import { TIERS } from './pacing.js';
 
 const CHECK_EVERY_MS = 30_000;
 let lastCheck = 0;
@@ -89,7 +90,7 @@ export async function checkMeta({ phoneNumberId, wabaId, token }, { fetchImpl = 
   };
   let phone;
   try {
-    phone = await get(`${encodeURIComponent(phoneNumberId)}?fields=display_phone_number,verified_name,quality_rating,code_verification_status,name_status`);
+    phone = await get(`${encodeURIComponent(phoneNumberId)}?fields=display_phone_number,verified_name,quality_rating,code_verification_status,name_status,messaging_limit_tier`);
   } catch {
     return { ok: false, error: 'Could not reach Meta. Check the internet connection and try again.' };
   }
@@ -123,9 +124,47 @@ export async function checkMeta({ phoneNumberId, wabaId, token }, { fetchImpl = 
     phone: phone.data.display_phone_number || null,
     name: phone.data.verified_name || null,
     quality: phone.data.quality_rating || null,
+    limitTier: phone.data.messaging_limit_tier || null,
+    dailyLimit: TIERS[phone.data.messaging_limit_tier] ?? null,
     expiresAt,
     warnings,
   };
+}
+
+/**
+ * Meta raises (or lowers) the number's daily limit over time; check it every 6 hours while
+ * real sending is on, so the queue paces itself to the current limit.
+ */
+export async function refreshDailyLimit({ fetchImpl = fetch } = {}) {
+  const { rows: [row] } = await query(
+    `SELECT client_id FROM whatsapp_connection WHERE live = 1
+        AND (limit_checked_at IS NULL OR limit_checked_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-6 hours'))
+      ORDER BY client_id LIMIT 1`,
+  );
+  if (!row) return null;
+  const c = await loadConnection();
+  let tier = null;
+  try {
+    const res = await fetchImpl(
+      `https://graph.facebook.com/${config.meta.graphVersion}/${encodeURIComponent(c.phone_number_id)}?fields=messaging_limit_tier,quality_rating`,
+      { headers: { Authorization: `Bearer ${c.token}` } },
+    );
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) {
+      tier = data.messaging_limit_tier || null;
+      await query(
+        `UPDATE whatsapp_connection SET limit_tier = COALESCE($2, limit_tier), daily_limit = COALESCE($3, daily_limit),
+                quality = COALESCE($4, quality), limit_checked_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+          WHERE client_id = $1`,
+        [row.client_id, tier, TIERS[tier] ?? null, data.quality_rating || null],
+      );
+    } else {
+      await query(`UPDATE whatsapp_connection SET limit_checked_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE client_id = $1`, [row.client_id]);
+    }
+  } catch (err) {
+    console.warn('[whatsapp] could not check the daily limit:', err.message);
+  }
+  return tier;
 }
 
 /** For tests. */

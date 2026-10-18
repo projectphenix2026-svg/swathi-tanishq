@@ -7,6 +7,7 @@ import { useAuth } from '../lib/auth.js';
 import { Alert, Field, Pic, Spinner, useToast } from '../components/ui.jsx';
 import { PhonePreview } from '../components/PhonePreview.jsx';
 import { READY_MESSAGES } from '../lib/ready.js';
+import { PhotoPicker } from '../components/PhotoPicker.jsx';
 import { detailLabel, fromFriendly, toFriendly } from '../lib/friendly.js';
 
 const EXAMPLES = Object.fromEntries(VARIABLES.map((v) => [v.key, v.example]));
@@ -141,6 +142,14 @@ export default function TemplateEditor() {
                 <span className="subtle num" style={{ color: t.body.length > 1024 ? 'var(--bad)' : undefined }}>{t.body.length} / 1024</span>
               </div>
             </Field>
+          </div>
+
+          <div className="card card-pad stack">
+            <div>
+              <h3>Photo (optional)</h3>
+              <p className="subtle">A jewellery photo at the top of the WhatsApp message gets far more taps. With WhatsApp (Meta), a message with a photo is approved once; after that each offer can use a different photo.</p>
+            </div>
+            <PhotoPicker value={t.image_url} onChange={(url) => set({ image_url: url })} />
           </div>
 
           <div className="card card-pad stack">

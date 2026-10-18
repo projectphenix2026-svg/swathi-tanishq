@@ -5,9 +5,11 @@ import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.js';
 import { Alert, CampaignStatus, Kpi, Pic, Skeleton } from '../components/ui.jsx';
 import { dateTime, greeting, inr, num, pct, plural } from '../lib/format.js';
+import { useT } from '../lib/i18n.jsx';
 
 export default function Dashboard() {
   const { user, settings } = useAuth();
+  const { t, lang } = useT();
   const [d, setD] = useState(null);
   const [showNumbers, setShowNumbers] = useState(false);
 
@@ -22,10 +24,10 @@ export default function Dashboard() {
     <div className="page">
       <div className="page-head">
         <div>
-          <h1>{greeting()}, {first}</h1>
-          <p>Here’s what needs you today.</p>
+          <h1>{t(`${greeting()}, {name}`, { name: first })}</h1>
+          <p>{t('Here’s what needs you today.')}</p>
         </div>
-        <Link to="/campaigns/new" className="btn primary lg"><Plus size={19} />Send an offer</Link>
+        <Link to="/campaigns/new" className="btn primary lg"><Plus size={19} />{t('Send an offer')}</Link>
       </div>
 
       <div className="stack">
@@ -37,14 +39,14 @@ export default function Dashboard() {
           <Alert tone="bad">Could not load the dashboard. Refresh the page to try again.</Alert>
         ) : (
           <>
-            <Today d={d} />
+            <Today d={d} isOwner={settings?.role === 'admin'} t={t} lang={lang} />
 
             {!setupDone && <GettingStarted d={d} />}
 
             <div className="card">
               <button className="card-head" onClick={() => setShowNumbers((x) => !x)} style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer', borderBottom: showNumbers ? undefined : 'none' }} aria-expanded={showNumbers}>
-                <h2>This month in numbers</h2>
-                <span className="btn ghost sm">{showNumbers ? 'Hide' : 'See numbers'}</span>
+                <h2>{t('This month in numbers')}</h2>
+                <span className="btn ghost sm">{showNumbers ? t('Hide') : t('See numbers')}</span>
               </button>
               {showNumbers && (
                 <div className="grid kpis" style={{ padding: 16 }}>
@@ -59,8 +61,8 @@ export default function Dashboard() {
 
             <div className="card">
               <div className="card-head">
-                <h2>Recent offers</h2>
-                <Link to="/campaigns" className="btn ghost sm">See all <ChevronRight size={16} /></Link>
+                <h2>{t('Recent offers')}</h2>
+                <Link to="/campaigns" className="btn ghost sm">{t('See all')} <ChevronRight size={16} /></Link>
               </div>
               {d.recent.length === 0 ? (
                 <p className="muted" style={{ padding: 20 }}>No offers sent yet. Your first one takes about 5 minutes.</p>
@@ -87,31 +89,34 @@ export default function Dashboard() {
 }
 
 /** Home: what needs doing today, in plain sentences, most urgent first. */
-function Today({ d }) {
+function Today({ d, isOwner, t, lang }) {
+  const copyDue = isOwner && (!d.lastExportAt || Date.now() - Date.parse(d.lastExportAt) > 7 * 24 * 3600 * 1000);
   const last = d.recent.find((c) => c.status !== 'cancelled' && !c.name.startsWith('Test · '));
   const items = [
-    d.new_leads > 0 && { to: '/leads', pic: 'phone', title: `${plural(d.new_leads, 'customer')} said Interested`, text: 'Call them today, while they’re keen.', action: 'Call' },
-    d.inbox.unread > 0 && { to: '/inbox', pic: 'speech', title: `${plural(d.inbox.unread, 'new reply', 'new replies')}`, text: 'Answer them from here. Replies within 24 hours are free.', action: 'Answer' },
+    d.overdue_leads > 0 && { to: '/leads', pic: 'phone', urgent: true, title: t('{n} waiting more than a day', { n: plural(d.overdue_leads, 'interested customer'), count: d.overdue_leads }), text: t('Call them now: interest fades fast.'), action: t('Call now') },
+    d.new_leads > d.overdue_leads && { to: '/leads', pic: 'phone', title: t('{n} said Interested', { n: plural(d.new_leads - (d.overdue_leads || 0), 'customer'), count: d.new_leads - (d.overdue_leads || 0) }), text: t('Call them today, while they’re keen.'), action: t('Call') },
+    d.inbox.unread > 0 && { to: '/inbox', pic: 'speech', title: lang === 'en' ? plural(d.inbox.unread, 'new reply', 'new replies') : t('{n} new', { count: d.inbox.unread }), text: t('Answer them from here. Replies within 24 hours are free.'), action: t('Answer') },
     d.pending_approval > 0 && { to: '/campaigns', pic: 'hourglass', title: `${plural(d.pending_approval, 'offer')} ${d.pending_approval === 1 ? 'waits' : 'wait'} for the owner’s OK`, text: 'Big sends by staff go out once the owner approves.', action: 'Check' },
     d.occasions_on
-      ? { to: '/occasions', pic: 'cake', title: d.greetings_today ? `${plural(d.greetings_today, 'wish', 'wishes')} went out today` : 'No birthdays or anniversaries today', text: 'Wishes go out every morning on their own.', done: true }
-      : { to: '/occasions', pic: 'cake', title: 'Switch on birthday wishes', text: 'Set it once. They go out every morning on their own.', action: 'Set up' },
-    last && { to: `/campaigns/${last.id}`, pic: 'megaphone', title: `Your “${last.name}”: ${num(last.total)} sent, ${num(last.read)} read it`, text: d.redeemed ? `This month ${plural(d.redeemed, 'customer')} bought with their code (${inr(d.revenue)}).` : 'When a customer buys with their code, it shows here.', done: true },
+      ? { to: '/occasions', pic: 'cake', title: d.greetings_today ? t('{n} went out today', { n: plural(d.greetings_today, 'wish', 'wishes'), count: d.greetings_today }) : t('No birthdays or anniversaries today'), text: t('Wishes go out every morning on their own.'), done: true }
+      : { to: '/occasions', pic: 'cake', title: t('Switch on birthday wishes'), text: t('Wishes go out every morning on their own.'), action: t('Set up') },
+    copyDue && { to: '/settings#your-data', pic: 'chart', title: 'Download this week’s copy of your data', text: 'One click: customers, offers and bill codes in Excel.', action: 'Download' },
+    last && { to: `/campaigns/${last.id}`, pic: 'megaphone', title: t('Your “{name}”: {sent} sent, {read} read it', { name: last.name, sent: num(last.total), read: num(last.read) }), text: d.redeemed ? t('This month {n} bought with their code ({amount}).', { n: plural(d.redeemed, 'customer'), count: d.redeemed, amount: inr(d.revenue) }) : t('When a customer buys with their code, it shows here.'), done: true },
   ].filter(Boolean);
   const nothingToDo = !d.new_leads && !d.inbox.unread && !d.pending_approval;
   return (
     <div className="card">
-      <div className="card-head"><h2>What to do today</h2></div>
+      <div className="card-head"><h2>{t('What to do today')}</h2></div>
       <div className="today">
         {nothingToDo && (
           <div className="today-item">
             <span className="emoji" aria-hidden="true"><Pic name="check" size={36} /></span>
-            <div className="what"><b>Nothing waiting for you</b><span className="subtle">A good day to send an offer.</span></div>
-            <Link to="/campaigns/new" className="btn primary sm">Send offer</Link>
+            <div className="what"><b>{t('Nothing waiting for you')}</b><span className="subtle">{t('A good day to send an offer.')}</span></div>
+            <Link to="/campaigns/new" className="btn primary sm">{t('Send offer')}</Link>
           </div>
         )}
         {items.map((it) => (
-          <Link key={it.title} to={it.to} className={`today-item ${it.done ? 'done' : ''}`}>
+          <Link key={it.title} to={it.to} className={`today-item ${it.done ? 'done' : ''} ${it.urgent ? 'urgent' : ''}`}>
             <span className="emoji" aria-hidden="true"><Pic name={it.pic} size={36} /></span>
             <div className="what"><b>{it.title}</b><span className="subtle">{it.text}</span></div>
             {it.action ? <span className="btn primary sm">{it.action}</span> : <ChevronRight size={18} className="muted" />}
@@ -152,12 +157,13 @@ function GettingStarted({ d }) {
 }
 
 export function ProviderBanner({ settings, compact }) {
+  const { t } = useT();
   if (!settings) return null;
   const p = settings.provider;
   if (p.name === 'mock') {
     return (
       <Alert tone="warn" icon={null}>
-        <b>Test mode.</b> Nothing is sent to real phones. Messages pretend to be delivered and then read within about a minute, so you can try everything safely. To send real messages, the owner connects the shop’s WhatsApp under <Link to="/settings">Settings → Connect WhatsApp</Link>.
+        <b>{t('Test mode.')}</b> {t('Nothing is sent to real phones. Messages pretend to be delivered and then read within about a minute, so you can try everything safely.')} {t('To send real messages, the owner connects the shop’s WhatsApp under')} <Link to="/settings">{t('Settings → Connect WhatsApp')}</Link>.
       </Alert>
     );
   }

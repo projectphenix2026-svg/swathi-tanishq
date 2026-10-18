@@ -5,6 +5,7 @@ import { useAuth } from '../lib/auth.js';
 import { Alert, Avatar, Field, Modal, Spinner, useToast } from '../components/ui.jsx';
 import { dateOnly, rate } from '../lib/format.js';
 import { ConnectWhatsApp } from './ConnectWhatsApp.jsx';
+import { YourData } from './YourData.jsx';
 
 const ROLE_TEXT = {
   admin: 'Everything, including staff, settings and approving big sends',
@@ -13,7 +14,7 @@ const ROLE_TEXT = {
 };
 
 export default function Settings() {
-  const { settings, user } = useAuth();
+  const { settings, user, reloadSettings } = useAuth();
   const isAdmin = settings?.role === 'admin';
   return (
     <div className="page" style={{ maxWidth: 900 }}>
@@ -27,6 +28,7 @@ export default function Settings() {
         {isAdmin && <ConnectWhatsApp />}
         <Channels settings={settings} />
         <Limits isAdmin={isAdmin} settings={settings} />
+        {isAdmin && <YourData lastExportAt={settings?.lastExportAt} onDone={reloadSettings} />}
         {isAdmin ? <Staff me={user} /> : <Alert>Only the owner (an admin) can change limits and staff logins. Your role: <b>{settings?.role}</b>.</Alert>}
       </div>
     </div>

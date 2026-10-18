@@ -41,6 +41,11 @@ export function audienceWhere(clientId, audience = {}, params = []) {
 export const TEST_PHONE_TAG = 'test-phone';
 
 export const ELIGIBLE ='c.whatsapp_opt_in = 1 AND c.opted_out_at IS NULL';
+// Bulk SMS goes to customers who agreed to SMS.
+export const SMS_ELIGIBLE = 'c.sms_opt_in = 1 AND c.opted_out_at IS NULL';
+export const eligibleFor = (channel) => (channel === 'sms' ? SMS_ELIGIBLE : ELIGIBLE);
+/** The text a channel sends: the SMS version for SMS, the WhatsApp message otherwise. */
+export const bodyFor = (template, channel) => (channel === 'sms' ? template?.sms_body : template?.body) || '';
 
 // Customer fields behind each placeholder; offer_code and days_left are filled in at send time.
 const CUSTOMER_KEYS = { name: 'name', full_name: 'name', city: 'city', last_purchase: 'last_purchase', interests: 'interests' };
@@ -60,30 +65,33 @@ export async function clientSettings(clientId) {
 }
 
 /** The extra conditions a customer must meet to receive this template now. */
-export async function sendConditions(clientId, template, variables, { ignoreCap = false } = {}) {
-  const keys = extractVariables(template?.body || '');
+export async function sendConditions(clientId, template, variables, { ignoreCap = false, channel = 'whatsapp' } = {}) {
+  const keys = extractVariables(bodyFor(template, channel));
   const conds = keys
     .map((k) => CUSTOMER_KEYS[k])
     .filter(Boolean)
     .map((col) => `c.${col} IS NOT NULL AND trim(c.${col}) <> ''`);
   const campaignBlank = keys.some((k) => !CUSTOMER_KEYS[k] && !GENERATED.has(k) && !String(variables?.[k] || '').trim());
   const { weekly_cap: cap } = await clientSettings(clientId);
-  const capped = !ignoreCap && template?.category === 'marketing' && cap > 0 ? atCapSql(cap) : null;
+  // The weekly limit protects the WhatsApp number; bulk SMS is not counted.
+  const capped = !ignoreCap && channel !== 'sms' && template?.category === 'marketing' && cap > 0 ? atCapSql(cap) : null;
   return { keys, conds, campaignBlank, capped };
 }
 
 /** Numbers for the builder: how many match, how many can be sent to, and why the rest cannot. */
-export async function previewAudience(clientId, { audience, template, variables }) {
+export async function previewAudience(clientId, { audience, template, variables, channel = 'whatsapp' }) {
   const { where, params } = audienceWhere(clientId, audience);
+  const ELIGIBLE = eligibleFor(channel);
+  const consent = channel === 'sms' ? 'c.sms_opt_in' : 'c.whatsapp_opt_in';
   const { rows: [counts] } = await query(
     `SELECT count(*) AS matched,
             count(*) FILTER (WHERE ${ELIGIBLE}) AS eligible,
             count(*) FILTER (WHERE c.opted_out_at IS NOT NULL) AS opted_out,
-            count(*) FILTER (WHERE c.whatsapp_opt_in = 0 AND c.opted_out_at IS NULL) AS no_opt_in
+            count(*) FILTER (WHERE ${consent} = 0 AND c.opted_out_at IS NULL) AS no_opt_in
        FROM contacts c WHERE ${where}`,
     params,
   );
-  const { keys, conds, campaignBlank, capped } = await sendConditions(clientId, template, variables);
+  const { keys, conds, campaignBlank, capped } = await sendConditions(clientId, template, variables, { channel });
   // Which placeholders some customers have no value for (they are left out).
   const missing = {};
   const missingCols = [...new Set(keys.map((k) => CUSTOMER_KEYS[k]).filter(Boolean))];
@@ -117,14 +125,17 @@ export async function previewAudience(clientId, { audience, template, variables 
     params,
   );
   const { approval_threshold: threshold } = await clientSettings(clientId);
+  const costPerMessage = channel === 'sms' ? config.sms.costPerSms : config.costPerMessage;
   return {
     ...counts,
+    channel,
     missing,
     atCap,
     sendable,
     approvalThreshold: threshold,
-    costPerMessage: config.costPerMessage,
-    estimatedCost: round2(sendable * config.costPerMessage),
+    costPerMessage,
+    estimatedCost: round2(sendable * costPerMessage),
+    smsReady: Boolean(template?.sms_body),
     sample,
   };
 }
@@ -133,10 +144,12 @@ export async function previewAudience(clientId, { audience, template, variables 
  * Queues one message per eligible customer in a single statement.
  * keyPrefix + customer id is each message's unique key, so running it twice adds nothing.
  */
-export async function queueMessages(clientId, { audience, template, variables, keyPrefix, keySuffix = '', campaignId = null, occasionId = null, dueAt = null, extraWhere = [], extraParams = [], ignoreCap = false }) {
+export async function queueMessages(clientId, { audience, template, variables, keyPrefix, keySuffix = '', campaignId = null, occasionId = null, dueAt = null, extraWhere = [], extraParams = [], ignoreCap = false, channel = 'whatsapp' }) {
   const params = [];
   const { where } = audienceWhere(clientId, audience, params);
-  const { conds, campaignBlank, capped } = await sendConditions(clientId, template, variables, { ignoreCap });
+  const ELIGIBLE = eligibleFor(channel);
+  if (channel === 'sms' && !template?.sms_body) return 0;
+  const { conds, campaignBlank, capped } = await sendConditions(clientId, template, variables, { ignoreCap, channel });
   if (campaignBlank) return 0;
   const p = (v) => {
     params.push(v);
@@ -146,9 +159,9 @@ export async function queueMessages(clientId, { audience, template, variables, k
   const extras = extraWhere.map((sql) => sql.replace(/\$X(\d+)/g, (_, i) => p(extraParams[Number(i) - 1])));
   const all = [...conds, ...(capped ? [`NOT ${capped}`] : []), ...extras];
   const sql = `INSERT OR IGNORE INTO messages
-      (client_id, campaign_id, occasion_id, contact_id, template_id, variables, idempotency_key, buttons, image_url, status, due_at)
-    SELECT c.client_id, ${p(campaignId)}, ${p(occasionId)}, c.id, ${p(template.id)}, ${p(variables || {})},
-           ${p(keyPrefix)} || c.id || ${p(keySuffix)}, ${p(template.buttons || [])}, ${p(template.image_url || null)}, 'queued',
+      (client_id, campaign_id, occasion_id, contact_id, channel, template_id, variables, idempotency_key, buttons, image_url, status, due_at)
+    SELECT c.client_id, ${p(campaignId)}, ${p(occasionId)}, c.id, ${p(channel)}, ${p(template.id)}, ${p(variables || {})},
+           ${p(keyPrefix)} || c.id || ${p(keySuffix)}, ${p(channel === 'sms' ? [] : template.buttons || [])}, ${p(channel === 'sms' ? null : variables?.image_url || template.image_url || null)}, 'queued',
            COALESCE(${p(dueAt)}, ${NOW})
       FROM contacts c
      WHERE ${where} AND ${ELIGIBLE}${all.length ? ' AND ' + all.join(' AND ') : ''}`;
@@ -166,6 +179,7 @@ export async function launchCampaign(clientId, campaign, template) {
     keyPrefix: `campaign:${campaign.id}:contact:`,
     campaignId: campaign.id,
     dueAt,
+    channel: campaign.channel || 'whatsapp',
   });
   const later = dueAt && new Date(dueAt).getTime() > Date.now();
   if (!queued) {
@@ -180,15 +194,18 @@ export async function launchCampaign(clientId, campaign, template) {
 }
 
 /** Delivery report for one campaign. Counts are cumulative: "delivered" includes those read. */
-export async function campaignReport(campaignId) {
+export async function campaignReport(campaignId, channel = 'whatsapp') {
+  // The main numbers follow the offer's channel; for bulk SMS a trial-mode SMS counts as sent.
+  const ch = channel === 'sms' ? 'sms' : 'whatsapp';
+  const sentStates = ch === 'sms' ? "('sent', 'delivered', 'read', 'preview')" : "('sent', 'delivered', 'read')";
   const { rows: [r] } = await query(
-    `SELECT count(*) FILTER (WHERE channel = 'whatsapp') AS total,
-            count(*) FILTER (WHERE channel = 'whatsapp' AND status IN ('queued', 'retrying', 'sending')) AS pending,
-            count(*) FILTER (WHERE channel = 'whatsapp' AND status IN ('sent', 'delivered', 'read')) AS sent,
-            count(*) FILTER (WHERE channel = 'whatsapp' AND status IN ('delivered', 'read')) AS delivered,
-            count(*) FILTER (WHERE channel = 'whatsapp' AND status = 'read') AS read,
-            count(*) FILTER (WHERE channel = 'whatsapp' AND status = 'failed') AS failed,
-            count(*) FILTER (WHERE channel = 'whatsapp' AND status = 'cancelled') AS cancelled,
+    `SELECT count(*) FILTER (WHERE channel = '${ch}') AS total,
+            count(*) FILTER (WHERE channel = '${ch}' AND status IN ('queued', 'retrying', 'sending')) AS pending,
+            count(*) FILTER (WHERE channel = '${ch}' AND status IN ${sentStates}) AS sent,
+            count(*) FILTER (WHERE channel = '${ch}' AND status IN ('delivered', 'read')) AS delivered,
+            count(*) FILTER (WHERE channel = '${ch}' AND status = 'read') AS read,
+            count(*) FILTER (WHERE channel = '${ch}' AND status = 'failed') AS failed,
+            count(*) FILTER (WHERE channel = '${ch}' AND status = 'cancelled') AS cancelled,
             count(*) FILTER (WHERE channel = 'sms') AS sms_total,
             count(*) FILTER (WHERE channel = 'sms' AND status = 'preview') AS sms_preview,
             count(*) FILTER (WHERE channel = 'sms' AND status IN ('sent', 'delivered', 'read')) AS sms_sent,
