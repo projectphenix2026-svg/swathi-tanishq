@@ -735,3 +735,31 @@ a.chart-card:hover { border-color: var(--brand); }
 .tpl-result:hover, .tpl-result.on { border-color: var(--brand); background: var(--brand-50); }
 .tpl-text.short { -webkit-line-clamp: 2; margin-top: 4px; }
 .fill-in { display: flex; flex-direction: column; gap: 10px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); }
+
+/* ---------- Template editor (redesign stage 8) ---------- */
+.te-page .two-col { gap: 16px; }
+@media (min-width: 1000px) { .te-page .two-col { grid-template-columns: minmax(0, 1fr) 320px; } .te-page .sticky { top: 16px; } }
+.te-box { border: 1px solid var(--border-strong); border-radius: 12px; overflow: visible; background: var(--surface); }
+.te-box:focus-within { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-50); }
+.te-toolbar { display: flex; align-items: center; gap: 4px; padding: 6px; border-bottom: 1px solid var(--border); background: var(--surface-2); border-radius: 12px 12px 0 0; flex-wrap: wrap; }
+.te-tool { min-width: 34px; height: 32px; border: 1px solid transparent; border-radius: 8px; background: transparent; cursor: pointer; font: inherit; color: var(--text); display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 0 8px; }
+.te-tool:hover { background: var(--surface); border-color: var(--border); }
+.te-tool.wide { font-weight: 600; color: var(--brand); }
+.te-sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
+.te-count { margin-left: auto; padding-right: 6px; font-size: 0.8rem; }
+.te-text { width: 100%; border: none; outline: none; resize: vertical; padding: 12px; font: inherit; line-height: 1.5; background: transparent; color: var(--text); min-height: 220px; display: block; border-radius: 0 0 12px 12px; }
+.te-detail { position: relative; }
+.te-menu { position: absolute; top: calc(100% + 4px); left: 0; z-index: 30; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-lg); padding: 6px; display: flex; flex-direction: column; min-width: 240px; }
+.te-menu button { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 7px 10px; border: none; background: transparent; border-radius: 8px; cursor: pointer; font: inherit; color: var(--text); text-align: left; }
+.te-menu button:hover { background: var(--brand-50); }
+.te-extras { overflow: hidden; }
+.te-extra + .te-extra { border-top: 1px solid var(--border); }
+.te-extra-head { width: 100%; display: flex; align-items: center; gap: 12px; padding: 12px 16px; border: none; background: transparent; cursor: pointer; font: inherit; color: var(--text); text-align: left; }
+.te-extra-head:hover { background: var(--surface-2); }
+.te-extra-head > svg:first-child { color: var(--brand); flex-shrink: 0; }
+.te-sum { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.85rem; }
+.te-extra-body { padding: 4px 16px 16px; display: flex; flex-direction: column; gap: 12px; }
+.te-button { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+@media (max-width: 700px) { .te-button { grid-template-columns: minmax(0, 1fr) auto; } .te-button .seg { grid-column: 1 / -1; } }
+.te-rules { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.te-rules .rule { font-size: 0.82rem; }

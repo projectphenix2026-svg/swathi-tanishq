@@ -1,21 +1,31 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, BadgeCheck, Check, ChevronDown, ExternalLink, MessageSquareText, Phone, Plus, RefreshCw, Reply, Trash2 } from 'lucide-react';
+import { ArrowLeft, BadgeCheck, Check, ChevronDown, ExternalLink, Image, MessageSquareText, MousePointerClick, Phone, Plus, RefreshCw, Reply, Settings2, Trash2 } from 'lucide-react';
 import { VARIABLES, extractVariables, render, validateTemplate } from '@shared/template.js';
 import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.js';
-import { Alert, Field, Pic, Spinner, useToast } from '../components/ui.jsx';
+import { Alert, Field, Spinner, useToast } from '../components/ui.jsx';
 import { PhonePreview } from '../components/PhonePreview.jsx';
 import { READY_MESSAGES } from '../lib/ready.js';
 import { PhotoPicker } from '../components/PhotoPicker.jsx';
 import { detailLabel, fromFriendly, toFriendly } from '../lib/friendly.js';
+import { readyFor } from '../lib/ready-lang.js';
+import { useT } from '../lib/i18n.jsx';
 
+// The template editor: one message box with a small toolbar (bold, slanted, add a detail),
+// and everything else (photo, buttons, SMS version, WhatsApp approval, advanced) in rows that
+// open when needed, each with a one-line summary. The phone on the right shows the result.
 const EXAMPLES = Object.fromEntries(VARIABLES.map((v) => [v.key, v.example]));
-
 const BUTTON_TYPES = [
-  { key: 'url', label: 'Open website', icon: ExternalLink },
-  { key: 'phone', label: 'Call store', icon: Phone },
-  { key: 'quick_reply', label: 'Reply button', icon: Reply },
+  { key: 'quick_reply', label: 'Reply', icon: Reply },
+  { key: 'url', label: 'Website', icon: ExternalLink },
+  { key: 'phone', label: 'Call', icon: Phone },
+];
+const BUTTON_PRESETS = [
+  { type: 'quick_reply', text: 'Interested' },
+  { type: 'quick_reply', text: 'Not now' },
+  { type: 'phone', text: 'Call the store', phone: '' },
+  { type: 'url', text: 'See the designs', url: 'https://' },
 ];
 
 export default function TemplateEditor() {
@@ -24,11 +34,13 @@ export default function TemplateEditor() {
   const toast = useToast();
   const { settings, user } = useAuth();
   const isOwner = user?.role === 'admin';
+  const { lang } = useT();
   const textRef = useRef(null);
   const [t, setT] = useState(id ? null : { name: '', body: '', buttons: [], image_url: '', status: 'approved', provider_ref: '', category: 'marketing', sms_body: '', sms_dlt_template_id: '' });
   const [busy, setBusy] = useState(false);
   const [tried, setTried] = useState(false);
-  const [advanced, setAdvanced] = useState(false);
+  const [open, setOpen] = useState(null); // which extra row is open
+  const [askDelete, setAskDelete] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -41,12 +53,12 @@ export default function TemplateEditor() {
   // Same checks as the server, in shop words: [Customer name] instead of {{name}}.
   const errors = useMemo(() => (t ? validateTemplate(t) : []).map(plainError), [t]);
   const vars = useMemo(() => (t ? extractVariables(t.body) : []), [t]);
-
   if (!t) return <div className="page"><Spinner /></div>;
 
   const set = (patch) => setT((x) => ({ ...x, ...patch }));
-
   const shown = toFriendly(t.body);
+  const details = VARIABLES.filter((v) => v.key !== 'days_left' && v.key !== 'full_name' && (v.key !== 'offer_code' || settings?.salesCodes));
+
   function insert(key) {
     const el = textRef.current;
     const token = `[${detailLabel(key)}]`;
@@ -58,8 +70,7 @@ export default function TemplateEditor() {
       el?.setSelectionRange(start + token.length, start + token.length);
     });
   }
-
-  // WhatsApp formatting: wraps the selected words in *bold* or _italic_ (or adds empty markers).
+  // WhatsApp formatting: wraps the selected words in *bold* or _slanted_ (or adds example words).
   function wrap(mark) {
     const el = textRef.current;
     const start = el?.selectionStart ?? shown.length;
@@ -71,10 +82,7 @@ export default function TemplateEditor() {
       el?.setSelectionRange(start + 1, start + 1 + picked.length);
     });
   }
-
-  function setButton(i, patch) {
-    set({ buttons: t.buttons.map((b, j) => (j === i ? { ...b, ...patch } : b)) });
-  }
+  const setButton = (i, patch) => set({ buttons: t.buttons.map((b, j) => (j === i ? { ...b, ...patch } : b)) });
 
   async function save() {
     setTried(true);
@@ -82,7 +90,7 @@ export default function TemplateEditor() {
     setBusy(true);
     try {
       const r = await api(id ? `/api/templates/${id}` : '/api/templates', { method: id ? 'PUT' : 'POST', body: t });
-      toast('Message saved');
+      toast('Template saved');
       navigate(id ? '/templates' : `/campaigns/new?template=${r.template.id}`);
     } catch (e) {
       toast(e.message, 'bad');
@@ -90,183 +98,202 @@ export default function TemplateEditor() {
       setBusy(false);
     }
   }
-
   async function remove() {
-    if (!confirm('Delete this template?')) return;
     try {
       await api(`/api/templates/${id}`, { method: 'DELETE' });
-      toast('Message deleted');
+      toast('Template deleted');
       navigate('/templates');
     } catch (e) {
       toast(e.message, 'bad');
+      setAskDelete(false);
     }
   }
 
   const rules = [
     { ok: vars.includes('name') || vars.includes('full_name'), text: 'Greets the customer by name' },
-    { ok: vars.some((v) => ['last_purchase', 'interests', 'city'].includes(v)), text: 'Mentions something personal (last purchase, interests or city)' },
+    { ok: vars.some((v) => ['last_purchase', 'interests', 'city'].includes(v)), text: 'Mentions something personal' },
     { ok: vars.includes('offer'), text: 'Gives a real offer' },
     { ok: vars.includes('offer_ends') || /\b(till|until|ends?|before|last day)\b/i.test(t.body), text: 'Says when the offer ends' },
     { ok: t.buttons.length > 0, text: 'Has a one-tap button' },
   ];
+  const meta = t.provider_status === 'APPROVED' ? ['ok', 'Approved by Meta'] : t.provider_status === 'REJECTED' ? ['bad', 'Rejected by Meta'] : t.provider_status ? ['warn', 'Waiting for Meta'] : null;
 
   return (
-    <div className="page">
-      <Link to="/templates" className="back"><ArrowLeft size={16} />Templates</Link>
-      <div className="page-head">
+    <div className="page te-page">
+      <div className="page-head compact">
         <div>
-          <h1>{id ? 'Edit message' : 'Write a message'}</h1>
-          <p>Write it once. Each customer gets their own name, last purchase and offer filled in.</p>
+          <Link to="/templates" className="back"><ArrowLeft size={16} />Templates</Link>
+          <h1>{id ? 'Edit template' : 'New template'}</h1>
         </div>
+        {meta && <span className={`badge ${meta[0]}`}>{meta[1]}</span>}
       </div>
 
-      <div className="two-col">
-        <div className="stack">
+      <div className="two-col te-cols">
+        <div className="stack" style={{ minWidth: 0, gap: 12 }}>
           {!id && !t.body && (
-            <div className="card card-pad stack" style={{ gap: 10 }}>
-              <b>Start from a ready-made message</b>
-              <div className="ready-grid">
-                {READY_MESSAGES.map((m) => (
-                  <button key={m.key} type="button" className="ready-card" onClick={() => setT((x) => ({ ...x, name: m.name, body: m.body, buttons: m.buttons }))}>
-                    <span className="emoji" aria-hidden="true"><Pic name={m.pic} size={44} /></span>
-                    <b>{m.title}</b>
-                    <span>{m.when}</span>
-                  </button>
-                ))}
-              </div>
+            <div className="row wrap" style={{ gap: 6, alignItems: 'center' }}>
+              <span className="subtle">Start from:</span>
+              {READY_MESSAGES.map((m) => (
+                <button key={m.key} type="button" className="chip" onClick={() => { const r = readyFor(m, lang, Boolean(settings?.salesCodes)); setT((x) => ({ ...x, name: r.name, body: r.body, buttons: r.buttons, sms_body: r.sms || x.sms_body })); }}>{m.title}</button>
+              ))}
             </div>
           )}
 
-          <div className="card card-pad stack">
-            <Field label="Name" hint="Only staff see this.">
-              <input className="input" value={t.name} onChange={(e) => set({ name: e.target.value })} placeholder="e.g. Diwali offer for past buyers" />
+          <div className="card card-pad stack" style={{ gap: 12 }}>
+            <Field label="Template name" hint="Only staff see this.">
+              <input id="tpl-name" className="input" value={t.name} onChange={(e) => set({ name: e.target.value })} placeholder="e.g. Diwali offer for past buyers" />
             </Field>
-            <Field label="Message" error={tried ? errors.find((e) => /message|placeholder|1,024/i.test(e)) : null}>
-              <div className="chips" style={{ marginBottom: 4 }}>
-                {VARIABLES.map((v) => (
-                  <button key={v.key} type="button" className="chip" onClick={() => insert(v.key)} title={`Add ${v.label}`} style={{ height: 30, fontSize: '0.8rem' }}>
-                    <Plus size={13} />{v.label}
-                  </button>
-                ))}
-              </div>
-              <div className="row wrap" style={{ gap: 6, alignItems: 'center' }}>
-                <button type="button" className="btn sm" onClick={() => wrap('*')} title="Bold: select words, then click"><b>B</b> Bold</button>
-                <button type="button" className="btn sm" onClick={() => wrap('_')} title="Slanted: select words, then click"><i>I</i> Slanted</button>
-                <span className="hint">Select words and click to make them stand out. Press Enter for a new line. The phone shows how it looks.</span>
-              </div>
-              <textarea ref={textRef} className="textarea" rows={10} value={shown} onChange={(e) => set({ body: fromFriendly(e.target.value) })} placeholder="Hi [Customer name], ..." />
-              <div className="row between">
-                <span className="hint">Tap a detail above to add it where your cursor is. Each customer gets their own.</span>
-                <span className="subtle num" style={{ color: t.body.length > 1024 ? 'var(--bad)' : undefined }}>{t.body.length} / 1024</span>
-              </div>
-            </Field>
-          </div>
-
-          <div className="card card-pad stack">
-            <div>
-              <h3>Photo (optional)</h3>
-              <p className="subtle">A jewellery photo at the top of the WhatsApp message gets far more taps. With WhatsApp (Meta), a message with a photo is approved once; after that each offer can use a different photo.</p>
-            </div>
-            <PhotoPicker value={t.image_url} onChange={(url) => set({ image_url: url })} />
-          </div>
-
-          <div className="card card-pad stack">
-            <div className="row between">
-              <div>
-                <h3>Buttons</h3>
-                <p className="subtle">Up to 2. Customers who tap “Interested” go to Replies → Interested.</p>
-              </div>
-              <button className="btn sm" disabled={t.buttons.length >= 2} onClick={() => set({ buttons: [...t.buttons, { type: 'url', text: '', url: 'https://' }] })}>
-                <Plus size={16} />Add button
-              </button>
-            </div>
-            {t.buttons.length === 0 && <p className="muted" style={{ fontSize: '0.9rem' }}>No buttons yet. “See the designs” or “Call the store” get far more responses than text alone.</p>}
-            {t.buttons.map((b, i) => (
-              <div key={i} className="card" style={{ padding: 14, background: 'var(--surface-2)' }}>
-                <div className="stack" style={{ gap: 12 }}>
-                  <div className="row between">
-                    <div className="chips">
-                      {BUTTON_TYPES.map(({ key, label, icon: Icon }) => (
-                        <button key={key} type="button" className={`chip ${b.type === key ? 'on' : ''}`} style={{ height: 32, fontSize: '0.82rem' }} onClick={() => setButton(i, { type: key })}>
-                          <Icon size={14} />{label}
-                        </button>
-                      ))}
-                    </div>
-                    <button className="icon-btn" onClick={() => set({ buttons: t.buttons.filter((_, j) => j !== i) })} aria-label="Remove button"><Trash2 size={17} /></button>
-                  </div>
-                  <div className="form-grid two">
-                    <Field label="Button text" hint={`${(b.text || '').length}/25`}>
-                      <input className="input" maxLength={25} value={b.text} onChange={(e) => setButton(i, { text: e.target.value })} placeholder={b.type === 'quick_reply' ? 'Interested' : b.type === 'phone' ? 'Call the store' : 'See the designs'} />
-                    </Field>
-                    {b.type === 'url' && <Field label="Website link"><input className="input" value={b.url || ''} onChange={(e) => setButton(i, { url: e.target.value })} inputMode="url" /></Field>}
-                    {b.type === 'phone' && <Field label="Phone number"><input className="input" value={b.phone || ''} onChange={(e) => setButton(i, { phone: e.target.value })} inputMode="tel" placeholder="+91 98765 43210" /></Field>}
-                  </div>
+            <Field label="Message" error={tried ? errors.find((e) => /message|personal detail|1,024/i.test(e)) : null}>
+              <div className="te-box">
+                <div className="te-toolbar">
+                  <button type="button" className="te-tool" onClick={() => wrap('*')} title="Bold: select words, then click"><b>B</b></button>
+                  <button type="button" className="te-tool" onClick={() => wrap('_')} title="Slanted: select words, then click"><i>I</i></button>
+                  <span className="te-sep" />
+                  <AddDetail details={details} onPick={insert} />
+                  <span className="subtle num te-count" style={{ color: t.body.length > 1024 ? 'var(--bad)' : undefined }}>{t.body.length}/1024</span>
                 </div>
+                <textarea ref={textRef} id="tpl-body" className="te-text" rows={11} value={shown} onChange={(e) => set({ body: fromFriendly(e.target.value) })} placeholder="Hi [Customer name], ..." />
               </div>
-            ))}
+              <span className="hint">Details in [brackets] are filled in for each customer. Select words, then B or I, to make them stand out.</span>
+            </Field>
           </div>
 
-          {isOwner && <div className="card">
-            <button className="card-head" onClick={() => setAdvanced((a) => !a)} style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer', borderBottom: advanced ? undefined : 'none' }}>
-              <h3>Advanced (owner only)</h3>
-              <ChevronDown size={18} style={{ transform: advanced ? 'rotate(180deg)' : undefined }} />
-            </button>
-            {advanced && (
-              <div className="stack" style={{ padding: 20 }}>
-                <Field label="Image link (optional)" hint="A public https:// link to a photo of the jewellery.">
-                  <input className="input" value={t.image_url} onChange={(e) => set({ image_url: e.target.value })} placeholder="https://..." />
-                </Field>
+          <div className="card te-extras">
+            <Extra id="photo" open={open} setOpen={setOpen} icon={Image} title="Photo" summary={t.image_url ? 'Photo added' : 'None. A jewellery photo gets far more taps.'}>
+              <PhotoPicker value={t.image_url} onChange={(url) => set({ image_url: url || '' })} />
+              <Field label="Or paste a photo link" hint="A public https:// link to a photo of the jewellery.">
+                <input id="tpl-image" className="input" value={t.image_url} onChange={(e) => set({ image_url: e.target.value })} placeholder="https://..." />
+              </Field>
+            </Extra>
+
+            <Extra id="buttons" open={open} setOpen={setOpen} icon={MousePointerClick} title="Buttons" summary={t.buttons.length ? t.buttons.map((b) => b.text || 'Button').join(' · ') : 'None. Add up to 2, like “Interested”.'}>
+              {t.buttons.map((b, i) => (
+                <div key={i} className="te-button">
+                  <div className="seg" role="group" aria-label="Button type">
+                    {BUTTON_TYPES.map(({ key, label, icon: Icon }) => (
+                      <button key={key} type="button" className={b.type === key ? 'on' : ''} onClick={() => setButton(i, { type: key })}><Icon size={14} />{label}</button>
+                    ))}
+                  </div>
+                  <input className="input" maxLength={25} value={b.text} onChange={(e) => setButton(i, { text: e.target.value })} placeholder="Button text" aria-label="Button text" />
+                  {b.type === 'url' && <input className="input" value={b.url || ''} onChange={(e) => setButton(i, { url: e.target.value })} inputMode="url" placeholder="https://" aria-label="Website link" />}
+                  {b.type === 'phone' && <input className="input" value={b.phone || ''} onChange={(e) => setButton(i, { phone: e.target.value })} inputMode="tel" placeholder="+91 98765 43210" aria-label="Phone number" />}
+                  <button type="button" className="icon-btn sm" onClick={() => set({ buttons: t.buttons.filter((_, j) => j !== i) })} aria-label="Remove button"><Trash2 size={16} /></button>
+                </div>
+              ))}
+              {t.buttons.length < 2 && (
+                <div className="row wrap" style={{ gap: 6 }}>
+                  {BUTTON_PRESETS.filter((p) => !t.buttons.some((b) => b.text === p.text)).map((p) => (
+                    <button key={p.text} type="button" className="chip" onClick={() => set({ buttons: [...t.buttons, { ...p }] })}><Plus size={13} />{p.text}</button>
+                  ))}
+                </div>
+              )}
+              <span className="hint">Customers who tap “Interested” go to Replies → Interested.</span>
+            </Extra>
+
+            {isOwner && (
+              <Extra id="sms" open={open} setOpen={setOpen} icon={MessageSquareText} title="SMS version" summary={t.sms_body ? 'Added' : 'None. Only needed for SMS (after DLT registration).'}>
+                <SmsFields t={t} set={set} />
+              </Extra>
+            )}
+            {isOwner && id && (
+              <Extra id="meta" open={open} setOpen={setOpen} icon={BadgeCheck} title="WhatsApp approval (Meta)" summary={meta ? meta[1] : 'Not submitted'}>
+                <MetaFields t={t} onChange={(u) => setT((x) => ({ ...x, provider_ref: u.provider_ref || '', provider_status: u.provider_status, provider_reason: u.provider_reason }))} canSubmit={settings?.metaTemplatesReady} />
+              </Extra>
+            )}
+            {isOwner && (
+              <Extra id="advanced" open={open} setOpen={setOpen} icon={Settings2} title="Advanced" summary={`${t.category === 'utility' ? 'Utility' : 'Marketing'} · ${t.status === 'draft' ? 'Draft' : 'Ready'}`}>
                 <div className="form-grid two">
-                  <Field label="Category" hint="Marketing counts towards the weekly limit. Utility is for order and service updates.">
+                  <Field label="Category" hint="Marketing counts towards the weekly limit. Utility is for service updates.">
                     <select className="select" value={t.category || 'marketing'} onChange={(e) => set({ category: e.target.value })}>
                       <option value="marketing">Marketing (offers, new designs)</option>
-                      <option value="utility">Utility (order or service update)</option>
+                      <option value="utility">Utility (service update)</option>
+                    </select>
+                  </Field>
+                  <Field label="Status">
+                    <select className="select" value={t.status} onChange={(e) => set({ status: e.target.value })}>
+                      <option value="approved">Ready to send</option>
+                      <option value="draft">Draft (cannot be sent)</option>
                     </select>
                   </Field>
                   <Field label="Language code" hint="en for English; en_US for Meta’s sample templates.">
                     <input className="input" value={t.language || 'en'} onChange={(e) => set({ language: e.target.value })} />
                   </Field>
+                  <Field label="Approved template ID" hint="Meta: the approved template’s name. Twilio: the Content SID (HX…).">
+                    <input className="input" value={t.provider_ref} onChange={(e) => set({ provider_ref: e.target.value })} placeholder="e.g. past_buyers_offer" />
+                  </Field>
                 </div>
-                <Field label="Status">
-                  <select className="select" value={t.status} onChange={(e) => set({ status: e.target.value })}>
-                    <option value="approved">Ready to send</option>
-                    <option value="draft">Draft (cannot be sent)</option>
-                  </select>
-                </Field>
-                <Field label="Approved template ID" hint="Twilio: the Content template SID (HX…). Meta Cloud API: the approved template’s name. Needed when the sender only accepts approved templates.">
-                  <input className="input" value={t.provider_ref} onChange={(e) => set({ provider_ref: e.target.value })} placeholder="e.g. past_buyers_offer" />
-                </Field>
-              </div>
+              </Extra>
             )}
-          </div>}
-
-          {isOwner && <SmsCard t={t} set={set} />}
-          {isOwner && id && <MetaCard t={t} onChange={(u) => setT((x) => ({ ...x, provider_ref: u.provider_ref || '', provider_status: u.provider_status, provider_reason: u.provider_reason }))} canSubmit={settings?.metaTemplatesReady} />}
+          </div>
 
           {tried && errors.length > 0 && (
             <Alert tone="bad"><b>Please fix:</b><ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>{errors.map((e) => <li key={e}>{e}</li>)}</ul></Alert>
           )}
-
-          <div className="action-bar">
-            {id ? <button className="btn ghost danger" onClick={remove}><Trash2 size={17} />Delete</button> : <span />}
-            <button className="btn primary lg" onClick={save} disabled={busy}>{busy ? <Spinner /> : id ? 'Save changes' : 'Save and send as an offer'}</button>
-          </div>
         </div>
 
-        <div className="stack sticky">
-          <PhonePreview body={t.body} values={EXAMPLES} buttons={t.buttons} imageUrl={t.image_url} businessName={settings?.businessName} caption="How Priya would see it (example details in gold)" />
-          <div className="card card-pad stack" style={{ gap: 10 }}>
-            <h3>Will customers care?</h3>
+        <aside className="stack sticky" style={{ gap: 10 }}>
+          <PhonePreview body={t.body} values={EXAMPLES} buttons={t.buttons} imageUrl={t.image_url} businessName={settings?.businessName} caption="Example customer: Priya" />
+          <div className="te-rules">
             {rules.map((r) => (
-              <div key={r.text} className={`rule ${r.ok ? 'yes' : 'no'}`}>
-                <span className="dot">{r.ok ? <Check size={13} strokeWidth={3} /> : null}</span>
-                {r.text}
-              </div>
+              <span key={r.text} className={`rule ${r.ok ? 'yes' : 'no'}`}><span className="dot">{r.ok ? <Check size={12} strokeWidth={3} /> : null}</span>{r.text}</span>
             ))}
-            <p className="subtle">Messages without a reason to open them get ignored, and too many ignored messages can get the WhatsApp number limited.</p>
           </div>
-        </div>
+        </aside>
       </div>
+
+      <div className="action-bar">
+        {id ? (
+          askDelete ? (
+            <span className="row wrap" style={{ gap: 8 }}>
+              <span>Delete this template?</span>
+              <button className="btn" onClick={() => setAskDelete(false)}>Keep</button>
+              <button className="btn danger" onClick={remove}><Trash2 size={16} />Yes, delete</button>
+            </span>
+          ) : <button className="btn ghost danger" onClick={() => setAskDelete(true)}><Trash2 size={17} />Delete</button>
+        ) : <span />}
+        <button className="btn primary lg" onClick={save} disabled={busy}>{busy ? <Spinner /> : id ? 'Save changes' : 'Save and use it'}</button>
+      </div>
+    </div>
+  );
+}
+
+/** "+ Add detail": a small menu of the customer and offer details to put where the cursor is. */
+function AddDetail({ details, onPick }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const close = (e) => !ref.current?.contains(e.target) && setOpen(false);
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [open]);
+  return (
+    <span className="te-detail" ref={ref}>
+      <button type="button" className="te-tool wide" onClick={() => setOpen((x) => !x)} aria-haspopup="menu" aria-expanded={open}><Plus size={14} />Add detail<ChevronDown size={14} /></button>
+      {open && (
+        <span className="te-menu" role="menu">
+          {details.map((v) => (
+            <button key={v.key} type="button" role="menuitem" onMouseDown={(e) => e.preventDefault()} onClick={() => { onPick(v.key); setOpen(false); }}>
+              <b>{v.label}</b><span className="subtle">e.g. {v.example}</span>
+            </button>
+          ))}
+        </span>
+      )}
+    </span>
+  );
+}
+
+/** One fold-out row: title and a one-line summary; the fields show when opened. */
+function Extra({ id, open, setOpen, icon: Icon, title, summary, children }) {
+  const on = open === id;
+  return (
+    <div className={`te-extra ${on ? 'on' : ''}`}>
+      <button type="button" className="te-extra-head" onClick={() => setOpen(on ? null : id)} aria-expanded={on}>
+        <Icon size={18} />
+        <span style={{ minWidth: 0, flex: 1 }}><b>{title}</b><span className="subtle te-sum">{summary}</span></span>
+        <ChevronDown size={18} style={{ transform: on ? 'rotate(180deg)' : undefined, transition: 'transform .15s' }} />
+      </button>
+      {on && <div className="te-extra-body">{children}</div>}
     </div>
   );
 }
@@ -282,43 +309,27 @@ function smsParts(text) {
   return text.length <= single ? 1 : Math.ceil(text.length / (unicode ? 67 : 153));
 }
 
-function SmsCard({ t, set }) {
-  const [open, setOpen] = useState(Boolean(t.sms_body));
+function SmsFields({ t, set }) {
   const example = render(t.sms_body || '', EXAMPLES).text;
   const parts = smsParts(example);
   return (
-    <div className="card">
-      <button className="card-head" onClick={() => setOpen((o) => !o)} style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer', borderBottom: open ? undefined : 'none' }}>
-        <span className="row" style={{ gap: 10 }}><MessageSquareText size={18} /><h3>SMS version (backup)</h3>{t.sms_body && <span className="badge info">Added</span>}</span>
-        <ChevronDown size={18} style={{ transform: open ? 'rotate(180deg)' : undefined }} />
-      </button>
-      {open && (
-        <div className="stack" style={{ padding: 20 }}>
-          <p className="subtle">Sent by SMS only to customers who are not on WhatsApp and agreed to SMS. The wording must match the template registered on the DLT portal, with the same placeholders.</p>
-          <Field label="SMS text">
-            <textarea className="textarea" rows={4} value={t.sms_body || ''} onChange={(e) => set({ sms_body: e.target.value })} placeholder="Hi {{name}}, 20% off making charges at Swathi Tanishq till {{offer_ends}}. -SWATHI" />
-          </Field>
-          {t.sms_body && (
-            <div className="stack-sm">
-              <div className="sms-bubble">{example}</div>
-              <span className="subtle num">{example.length} characters · {parts} SMS {parts === 1 ? 'part' : 'parts'} per customer (example values)</span>
-            </div>
-          )}
-          <Field label="DLT template ID" hint="The long number the DLT portal gives this SMS template. Needed before SMS can really be sent.">
-            <input className="input" value={t.sms_dlt_template_id || ''} onChange={(e) => set({ sms_dlt_template_id: e.target.value.replace(/\D/g, '') })} inputMode="numeric" placeholder="1107170000000000000" />
-          </Field>
-        </div>
-      )}
-    </div>
+    <>
+      <p className="subtle" style={{ margin: 0 }}>Sent by SMS only to customers who are not on WhatsApp and agreed to SMS. The wording must match the template registered on the DLT portal.</p>
+      <Field label="SMS text">
+        <textarea className="textarea" rows={3} value={t.sms_body || ''} onChange={(e) => set({ sms_body: e.target.value })} placeholder="Hi {{name}}, 20% off making charges at Swathi Tanishq till {{offer_ends}}. -SWATHI" />
+      </Field>
+      {t.sms_body && <span className="subtle num">{example.length} characters · {parts} SMS {parts === 1 ? 'part' : 'parts'} per customer</span>}
+      <Field label="DLT template ID" hint="The long number the DLT portal gives this SMS template.">
+        <input className="input" value={t.sms_dlt_template_id || ''} onChange={(e) => set({ sms_dlt_template_id: e.target.value.replace(/\D/g, '') })} inputMode="numeric" placeholder="1107170000000000000" />
+      </Field>
+    </>
   );
 }
 
-function MetaCard({ t, onChange, canSubmit }) {
+function MetaFields({ t, onChange, canSubmit }) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const status = t.provider_status;
-  const tone = status === 'APPROVED' ? 'ok' : status === 'REJECTED' ? 'bad' : status ? 'warn' : 'neutral';
-  const label = status === 'APPROVED' ? 'Approved by Meta' : status === 'REJECTED' ? 'Rejected by Meta' : status ? 'Waiting for Meta' : 'Not submitted';
   async function go(path, done) {
     setBusy(true);
     try {
@@ -332,21 +343,17 @@ function MetaCard({ t, onChange, canSubmit }) {
     }
   }
   return (
-    <div className="card card-pad stack">
-      <div className="row between wrap">
-        <span className="row" style={{ gap: 10 }}><BadgeCheck size={18} /><h3>WhatsApp approval (Meta)</h3></span>
-        <span className={`badge ${tone}`}>{label}</span>
-      </div>
-      <p className="subtle">
-        Meta must approve a template before it can go to customers through the WhatsApp Cloud API. Approval usually takes minutes to a day.
+    <>
+      <p className="subtle" style={{ margin: 0 }}>
+        Meta approves a template before it can go to customers. It usually takes minutes to a day.
         {t.provider_ref && <> Name at Meta: <code>{t.provider_ref}</code>.</>}
       </p>
       {status === 'REJECTED' && t.provider_reason && <Alert tone="bad">Reason: {t.provider_reason}. Edit the wording and submit again.</Alert>}
-      <div className="row wrap">
+      <div className="row wrap" style={{ gap: 8 }}>
         <button className="btn" disabled={busy || !canSubmit} onClick={() => go('submit-meta', () => 'Sent to Meta for approval')}>{busy ? <Spinner /> : status ? 'Submit again' : 'Submit to Meta'}</button>
         {t.provider_ref && <button className="btn ghost" disabled={busy} onClick={() => go('sync-meta', (u) => `Meta says: ${u.provider_status?.toLowerCase()}`)}><RefreshCw size={16} />Check status</button>}
       </div>
-      {!canSubmit && <span className="subtle">To submit from here, add META_WABA_ID and META_ACCESS_TOKEN to the server settings.</span>}
-    </div>
+      {!canSubmit && <span className="subtle">Connect WhatsApp in Settings first.</span>}
+    </>
   );
 }
