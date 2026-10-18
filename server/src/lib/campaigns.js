@@ -10,14 +10,16 @@ import { kick } from './dispatch.js';
 /**
  * Builds the WHERE clause for an audience. Placeholders continue from `params`
  * (pass the array you are building; it is appended to).
- * audience = { mode: 'all' | 'filter' | 'selected', cities: [], tags: [], search: '', contactIds: [] }
+ * audience = { mode: 'all' | 'filter' | 'selected', cities: [], tags: [], search: '', contactIds: [], excludeIds: [] }
+ * excludeIds: customers unticked by hand in "Pick customers" (ignored when picking by hand).
  */
 export function audienceWhere(clientId, audience = {}, params = []) {
   const p = (v) => {
     params.push(v);
     return `$${params.length}`;
   };
-  const where = [`c.client_id = ${p(clientId)}`];
+  // Deleted customers keep their row (for past reports) but never get messages.
+  const where = [`c.client_id = ${p(clientId)}`, "c.phone NOT LIKE 'deleted:%'"];
   const mode = audience.mode || 'all';
   if (mode === 'selected') {
     where.push(`c.id IN (SELECT value FROM json_each(${p((audience.contactIds || []).map(Number))}))`);
@@ -25,6 +27,8 @@ export function audienceWhere(clientId, audience = {}, params = []) {
     // Staff test phones (see POST /api/campaigns/test) only get messages when picked by hand.
     where.push(`NOT EXISTS (SELECT 1 FROM json_each(c.tags) t WHERE t.value = '${TEST_PHONE_TAG}')`);
   }
+  const excluded = (audience.excludeIds || []).map(Number).filter(Boolean);
+  if (mode !== 'selected' && excluded.length) where.push(`c.id NOT IN (SELECT value FROM json_each(${p(excluded)}))`);
   if (mode === 'filter') {
     const cities = (audience.cities || []).map((s) => String(s).toLowerCase()).filter(Boolean);
     if (cities.length) where.push(`lower(c.city) IN (SELECT value FROM json_each(${p(cities)}))`);
@@ -167,6 +171,44 @@ export async function previewAudience(clientId, { audience, template, variables,
     smsReady: Boolean(template?.sms_body),
     sample,
   };
+}
+
+/**
+ * The customers behind "Pick customers": everyone the filters match (ticks ignored), with why a
+ * customer cannot get this message (null when they can). Sendable customers come first.
+ * reason: 'stop' | 'consent' | 'cap' | 'details'
+ */
+export async function audienceList(clientId, { audience = {}, template, variables, channel = 'whatsapp', q = '', limit = 50, offset = 0 }) {
+  const base = { ...audience, mode: audience.mode === 'selected' ? 'all' : audience.mode, excludeIds: [] };
+  const { where, params } = audienceWhere(clientId, base);
+  const consent = channel === 'sms' ? 'c.sms_opt_in' : 'c.whatsapp_opt_in';
+  const { conds, capped } = await sendConditions(clientId, template, variables, { channel });
+  const conditions = [where];
+  if (q) {
+    params.push(`%${q}%`);
+    const digits = String(q).replace(/\D/g, '');
+    let phoneCond = '';
+    if (digits.length >= 3) {
+      params.push(`%${digits}%`);
+      phoneCond = ` OR c.phone LIKE $${params.length}`;
+    }
+    conditions.push(`(c.name LIKE $${params.length - (phoneCond ? 1 : 0)}${phoneCond})`);
+  }
+  const reason = `CASE WHEN c.opted_out_at IS NOT NULL THEN 'stop'
+                       WHEN ${consent} = 0 THEN 'consent'
+                       ${capped ? `WHEN ${capped} THEN 'cap'` : ''}
+                       ${conds.length ? `WHEN NOT (${conds.join(' AND ')}) THEN 'details'` : ''}
+                       ELSE NULL END`;
+  const w = conditions.join(' AND ');
+  const { rows } = await query(
+    `SELECT * FROM (SELECT c.id, c.name, c.phone, c.city, c.interests, c.last_purchase, ${reason} AS reason,
+                           ${offersThisWeekSql()} AS offers
+                      FROM contacts c WHERE ${w}) x
+      ORDER BY reason IS NOT NULL, name IS NULL, name, id LIMIT ${Math.min(Number(limit) || 50, 200)} OFFSET ${Math.max(Number(offset) || 0, 0)}`,
+    params,
+  );
+  const { rows: [{ total }] } = await query(`SELECT count(*) AS total FROM contacts c WHERE ${w}`, params);
+  return { customers: rows, total };
 }
 
 /**

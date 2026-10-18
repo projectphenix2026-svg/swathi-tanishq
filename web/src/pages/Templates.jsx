@@ -6,8 +6,9 @@ import { Pic, Skeleton, Spinner, useToast } from '../components/ui.jsx';
 import { Highlighted } from '../components/PhonePreview.jsx';
 import { dateOnly } from '../lib/format.js';
 import { toFriendly } from '../lib/friendly.js';
-import { OLD_READY_BODIES, READY_MESSAGES } from '../lib/ready.js';
-import { LANGS, readyIn } from '../lib/ready-lang.js';
+import { READY_MESSAGES } from '../lib/ready.js';
+import { LANGS, isReadyText, readyFor, readyIn } from '../lib/ready-lang.js';
+import { useAuth } from '../lib/auth.js';
 
 const STATUS = { approved: ['ok', 'Ready'], draft: ['neutral', 'Not finished'], rejected: ['bad', 'Needs a change'] };
 const READY_NAMES = new Set(READY_MESSAGES.flatMap((m) => LANGS.map((l) => readyIn(m, l.code).name)));
@@ -19,6 +20,7 @@ export default function Templates() {
   const [busy, setBusy] = useState(null);
   const navigate = useNavigate();
   const toast = useToast();
+  const { settings } = useAuth();
   useEffect(() => {
     api('/api/templates').then((r) => setList(r.templates)).catch(() => setList([]));
   }, []);
@@ -27,12 +29,12 @@ export default function Templates() {
   async function openReady(m) {
     setBusy(m.key);
     try {
-      const r = readyIn(m, lang);
+      const r = readyFor(m, lang, Boolean(settings?.salesCodes));
       let t = list.find((x) => x.name === r.name);
       if (!t) {
         ({ template: t } = await api('/api/templates', { method: 'POST', body: { name: r.name, body: r.body, sms_body: r.sms, buttons: r.buttons, language: r.language, category: 'marketing', status: 'approved' } }));
-      } else if (OLD_READY_BODIES.has(t.body)) {
-        ({ template: t } = await api(`/api/templates/${t.id}`, { method: 'PUT', body: { ...t, body: r.body, sms_body: t.sms_body || r.sms } }));
+      } else if (isReadyText(t.body) && t.body !== r.body) {
+        ({ template: t } = await api(`/api/templates/${t.id}`, { method: 'PUT', body: { ...t, body: r.body, sms_body: r.sms } }));
       }
       navigate(`/templates/${t.id}`);
     } catch (e) {
