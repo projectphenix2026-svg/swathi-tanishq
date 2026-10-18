@@ -5,6 +5,27 @@
 
 const NOW = `(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`;
 
+// The shop's own WhatsApp (Meta) account, added by the owner in Settings. The key and app secret
+// are stored encrypted (lib/secretbox.js). live = 1 means real messages go out through it.
+export const CONNECTION_TABLE = `
+CREATE TABLE IF NOT EXISTS whatsapp_connection (
+  client_id        INTEGER PRIMARY KEY REFERENCES clients(id),
+  phone_number_id  TEXT NOT NULL,
+  waba_id          TEXT NOT NULL,
+  token_sealed     TEXT NOT NULL,
+  app_secret_sealed TEXT,
+  verify_token     TEXT NOT NULL,
+  display_phone    TEXT,
+  verified_name    TEXT,
+  quality          TEXT,
+  token_expires_at TEXT,
+  token_hint       TEXT,
+  live             INTEGER NOT NULL DEFAULT 0,
+  checked_at       TEXT,
+  updated_by       INTEGER REFERENCES users(id),
+  updated_at       TEXT NOT NULL DEFAULT ${NOW}
+);`;
+
 export const SCHEMA = `
 CREATE TABLE IF NOT EXISTS clients (
   id                 INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -173,4 +194,5 @@ CREATE TABLE IF NOT EXISTS leads (
   updated_at  TEXT NOT NULL DEFAULT ${NOW}
 );
 CREATE INDEX IF NOT EXISTS leads_open_idx ON leads (client_id, status, created_at);
+${CONNECTION_TABLE}
 `;

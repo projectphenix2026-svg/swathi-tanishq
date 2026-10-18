@@ -6,6 +6,7 @@ import { config } from '../config.js';
 import { buildProvider, getProvider } from '../providers/index.js';
 import { applyStatus, recordInbound } from '../lib/messages.js';
 import { ensureClient } from '../db/index.js';
+import { savedMetaProvider, webhookVerifyToken } from '../lib/whatsapp-connection.js';
 
 const router = express.Router();
 const adapters = {};
@@ -13,6 +14,7 @@ const adapters = {};
 function adapter(name) {
   const active = getProvider();
   if (active.name === name) return active;
+  if (name === 'meta' && savedMetaProvider()) return savedMetaProvider();
   adapters[name] ??= buildProvider(name);
   return adapters[name];
 }
@@ -36,8 +38,9 @@ function handle(name) {
 router.post('/twilio', express.urlencoded({ extended: false }), handle('twilio'));
 
 // Meta: GET is the one-time subscription check, POST carries the events.
-router.get('/meta', (req, res) => {
-  if (req.query['hub.mode'] === 'subscribe' && config.meta.verifyToken && req.query['hub.verify_token'] === config.meta.verifyToken) {
+router.get('/meta', async (req, res) => {
+  const expected = await webhookVerifyToken();
+  if (req.query['hub.mode'] === 'subscribe' && expected && req.query['hub.verify_token'] === expected) {
     return res.send(req.query['hub.challenge']);
   }
   res.sendStatus(403);

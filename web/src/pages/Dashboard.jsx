@@ -157,7 +157,7 @@ export function ProviderBanner({ settings, compact }) {
   if (p.name === 'mock') {
     return (
       <Alert tone="warn" icon={null}>
-        <b>Test mode.</b> Nothing is sent to real phones. Messages pretend to be delivered and then read within about a minute, so you can try everything safely.
+        <b>Test mode.</b> Nothing is sent to real phones. Messages pretend to be delivered and then read within about a minute, so you can try everything safely. To send real messages, the owner connects the shop’s WhatsApp under <Link to="/settings">Settings → Connect WhatsApp</Link>.
       </Alert>
     );
   }

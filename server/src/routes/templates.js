@@ -3,6 +3,7 @@ import { query } from '../db/index.js';
 import { validateTemplate, cleanButtons, extractVariables, VARIABLES } from '../lib/template.js';
 import { buildProvider, getProvider } from '../providers/index.js';
 import { requireRole } from './auth.js';
+import { savedMetaProvider } from '../lib/whatsapp-connection.js';
 
 const router = express.Router();
 const canEdit = requireRole('admin', 'manager');
@@ -96,7 +97,8 @@ router.post('/:id/sync-meta', async (req, res) => {
 
 function metaProvider() {
   const p = getProvider();
-  return p.name === 'meta' ? p : buildProvider('meta');
+  if (p.name === 'meta') return p;
+  return savedMetaProvider() || buildProvider('meta');
 }
 
 function normalise(b = {}) {

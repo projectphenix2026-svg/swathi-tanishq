@@ -4,6 +4,7 @@ import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.js';
 import { Alert, Avatar, Field, Modal, Spinner, useToast } from '../components/ui.jsx';
 import { dateOnly, rate } from '../lib/format.js';
+import { ConnectWhatsApp } from './ConnectWhatsApp.jsx';
 
 const ROLE_TEXT = {
   admin: 'Everything, including staff, settings and approving big sends',
@@ -19,10 +20,11 @@ export default function Settings() {
       <div className="page-head">
         <div>
           <h1>Settings</h1>
-          <p>Sending channels, limits that protect the WhatsApp number, and staff logins.</p>
+          <p>The shop’s WhatsApp account, limits that protect the number, and staff logins.</p>
         </div>
       </div>
       <div className="stack">
+        {isAdmin && <ConnectWhatsApp />}
         <Channels settings={settings} />
         <Limits isAdmin={isAdmin} settings={settings} />
         {isAdmin ? <Staff me={user} /> : <Alert>Only the owner (an admin) can change limits and staff logins. Your role: <b>{settings?.role}</b>.</Alert>}
@@ -43,7 +45,7 @@ function Channels({ settings }) {
         <div style={{ flex: 1 }}>
           <b>WhatsApp</b>
           <div className="subtle">{wa.name === 'mock' ? 'Test mode: nothing is sent' : wa.label} · {rate(settings.costPerMessage)} per marketing message</div>
-          {wa.name === 'meta' && !settings.metaTemplatesReady && <div className="subtle" style={{ color: 'var(--warn)' }}>Add META_WABA_ID to submit templates to Meta from the app.</div>}
+          {wa.name === 'mock' && <div className="subtle">The owner connects the shop’s WhatsApp above, under Connect WhatsApp.</div>}
         </div>
         <span className={`badge ${wa.missing.length ? 'bad' : wa.name === 'mock' ? 'warn' : 'ok'}`}>{wa.missing.length ? 'Not set up' : wa.name === 'mock' ? 'Test mode' : 'Connected'}</span>
       </div>

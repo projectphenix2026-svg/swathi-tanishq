@@ -13,6 +13,8 @@ import webhookRoutes from './routes/webhooks.js';
 import occasionRoutes from './routes/occasions.js';
 import leadRoutes from './routes/leads.js';
 import offerRoutes from './routes/offers.js';
+import whatsappRoutes from './routes/whatsapp.js';
+import { refreshProvider } from './lib/whatsapp-connection.js';
 
 export function createApp() {
   const app = express();
@@ -24,6 +26,11 @@ export function createApp() {
   app.use(cookieParser());
 
   app.get('/health', (req, res) => res.json({ ok: true }));
+  // Use the shop's own WhatsApp account once the owner has connected it and switched it on.
+  app.use(async (req, res, next) => {
+    await refreshProvider().catch((err) => console.warn('[whatsapp] could not read the connection:', err.message));
+    next();
+  });
   app.use('/webhooks', webhookRoutes);
   app.use('/api/auth', authRoutes);
   app.use('/api/customers', requireAuth, customerRoutes);
@@ -34,6 +41,7 @@ export function createApp() {
   app.use('/api/occasions', requireAuth, occasionRoutes);
   app.use('/api/leads', requireAuth, leadRoutes);
   app.use('/api/offers', requireAuth, offerRoutes);
+  app.use('/api/whatsapp', requireAuth, whatsappRoutes);
 
   app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));
 
