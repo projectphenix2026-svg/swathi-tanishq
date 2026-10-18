@@ -12,9 +12,16 @@ import { Welcome, shouldWelcome } from './Welcome.jsx';
 // only when the owner switches sales codes on.
 const LINKS = [
   { to: '/', label: 'Home', pic: 'home', end: true },
-  { to: '/campaigns', label: 'Send', pic: 'megaphone' },
+  { to: '/campaigns', label: 'Send', pic: 'megaphone', also: ['/spending'], subs: [
+    { to: '/campaigns', label: 'Sent messages', end: true },
+    { to: '/spending', label: 'Spending' },
+  ] },
   { to: '/customers', label: 'Customers', pic: 'people' },
-  { to: '/occasions', label: 'Special days', pic: 'cake' },
+  { to: '/occasions', label: 'Special days', pic: 'cake', subs: [
+    { to: '/occasions#birthdays', label: 'Birthdays' },
+    { to: '/occasions#anniversaries', label: 'Anniversaries' },
+    { to: '/occasions#events', label: 'Festivals and events' },
+  ] },
   { to: '/inbox', label: 'Replies', pic: 'speech', badge: 'replies', also: ['/leads'] },
   { to: '/templates', label: 'Templates', pic: 'memo' },
 ];
@@ -67,7 +74,7 @@ export function Layout() {
         </div>
         <NavLink to="/campaigns/new" className="btn primary nav-send"><Plus size={18} />{t('Send a message')}</NavLink>
         <nav className="nav" aria-label="Main">
-          {links.map((l) => <SideLink key={l.to} link={l} counts={counts} pathname={location.pathname} t={t} exclude={l.to === '/campaigns' && sending} />)}
+          {links.map((l) => <SideLink key={l.to} link={l} counts={counts} pathname={location.pathname} hash={location.hash} t={t} exclude={l.to === '/campaigns' && sending} />)}
         </nav>
         <div className="sidebar-foot">
           <nav className="nav" aria-label="Settings"><SideLink link={SETTINGS} counts={counts} pathname={location.pathname} t={t} /></nav>
@@ -120,9 +127,16 @@ export function Layout() {
             </div>
             <div className="more-grid">
               <NavLink to="/campaigns" end className="more-item"><Pic name="megaphone" size={44} />{t('Sent messages')}</NavLink>
+              <NavLink to="/spending" className="more-item"><Pic name="moneybag" size={44} />{t('Spending')}</NavLink>
               {extra.map(({ to, label, pic }) => (
                 <NavLink key={to} to={to} className="more-item"><Pic name={pic} size={44} />{t(label)}</NavLink>
               ))}
+            </div>
+            <div className="stack-sm" style={{ padding: '0 16px 12px' }}>
+              <span className="label">{t('Special days')}</span>
+              <div className="chips">
+                {LINKS[3].subs.map((s) => <NavLink key={s.to} to={s.to} className="chip" onClick={() => setSheet(false)}>{t(s.label)}</NavLink>)}
+              </div>
             </div>
             <div className="stack-sm" style={{ padding: '0 16px 20px' }}>
               <span className="label">{t('Language')}</span>
@@ -136,14 +150,28 @@ export function Layout() {
   );
 }
 
-function SideLink({ link: { to, label, pic, end, badge, also }, counts, pathname, t, exclude }) {
+function SideLink({ link: { to, label, pic, end, badge, also, subs }, counts, pathname, hash = '', t, exclude }) {
   const sub = also?.some((p) => pathname.startsWith(p));
+  const open = !exclude && subs && (pathname.startsWith(to) || sub);
+  // A sub-link is on when its page (and #section, if it has one) is the one showing.
+  const subOn = (s) => {
+    const [path, part] = s.to.split('#');
+    if (part) return pathname === path && hash === `#${part}`;
+    return s.end ? pathname === path : pathname.startsWith(path);
+  };
   return (
-    <NavLink to={to} end={end} className={({ isActive }) => ((isActive || sub) && !exclude ? 'active' : '')}>
-      <Pic name={pic} size={22} plain />
-      {t(label)}
-      {badge && counts[badge] > 0 && <span className="count">{counts[badge]}</span>}
-    </NavLink>
+    <>
+      <NavLink to={to} end={end} className={({ isActive }) => ((isActive || sub) && !exclude ? 'active' : '')}>
+        <Pic name={pic} size={22} plain />
+        {t(label)}
+        {badge && counts[badge] > 0 && <span className="count">{counts[badge]}</span>}
+      </NavLink>
+      {open && (
+        <div className="nav-sub">
+          {subs.map((s) => <NavLink key={s.to} to={s.to} className={() => (subOn(s) ? 'on' : '')}>{t(s.label)}</NavLink>)}
+        </div>
+      )}
+    </>
   );
 }
 

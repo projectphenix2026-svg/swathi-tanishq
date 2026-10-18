@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { CheckCircle2, IndianRupee, Search, Ticket } from 'lucide-react';
+import { SearchBox, matches } from '../components/SearchBox.jsx';
 import { api } from '../lib/api.js';
 import { Alert, Field, Kpi, Spinner, useToast } from '../components/ui.jsx';
 import { dateOnly, dateTime, inr, num, phone } from '../lib/format.js';
@@ -13,6 +14,7 @@ export default function Offers() {
   const [amount, setAmount] = useState('');
   const [busy, setBusy] = useState(false);
   const [recent, setRecent] = useState(null);
+  const [q, setQ] = useState('');
 
   const loadRecent = () => api('/api/offers/recent').then(setRecent).catch(() => setRecent({ redemptions: [], month: { n: 0, revenue: 0 } }));
   useEffect(() => {
@@ -105,13 +107,13 @@ export default function Offers() {
             <Kpi icon={IndianRupee} tone="gold" label="Sales" value={inr(recent?.month.revenue || 0)} sub="this month" />
           </div>
           <div className="card">
-            <div className="card-head"><h3>Recently used</h3></div>
+            <div className="card-head wrap"><h3>Recently used</h3>{recent?.redemptions.length > 5 && <SearchBox value={q} onChange={setQ} placeholder="Search name or phone" style={{ flex: '0 1 220px' }} />}</div>
             {!recent ? (
               <div style={{ padding: 16 }}><Spinner /></div>
             ) : recent.redemptions.length === 0 ? (
               <p className="subtle" style={{ padding: 16 }}>No codes used yet. Add {'{{offer_code}}'} to a template to give every customer their own code.</p>
             ) : (
-              recent.redemptions.map((r) => (
+              recent.redemptions.filter((r) => matches(q, r.name, r.phone, r.source)).map((r) => (
                 <div key={r.id} className="list-item">
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <b>{r.name || phone(r.phone)}</b>

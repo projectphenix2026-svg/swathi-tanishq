@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Check, ChevronLeft, ChevronRight, Pencil, Plus, Send } from 'lucide-react';
 import { VARIABLES, extractVariables, valuesFor } from '@shared/template.js';
 import { api } from '../lib/api.js';
@@ -11,6 +11,7 @@ import { READY_WISHES } from '../lib/ready.js';
 import { useT } from '../lib/i18n.jsx';
 import { TemplateChooser } from '../components/TemplatePicker.jsx';
 import { CustomersStep } from '../components/CustomerPicker.jsx';
+import { WishPeople } from '../components/WishPeople.jsx';
 
 // Special days: a calendar of who has a birthday, anniversary or family day and which festivals
 // fall when, today's list with "Send now", and the automatic wishes (on/off, set up in 3 steps).
@@ -117,14 +118,19 @@ export default function Occasions() {
 
   const occ = data?.occasions || [];
   const first = (kind) => occ.find((o) => o.kind === kind);
-  const kinds = ['birthday', 'anniversary', 'personal', ...(settings?.salesCodes ? ['thank_you'] : [])];
+  const kinds = ['personal', ...(settings?.salesCodes ? ['thank_you'] : [])];
+  // The menu links straight to a section (#birthdays, #anniversaries, #events).
+  const { hash } = useLocation();
+  useEffect(() => {
+    if (data && hash) setTimeout(() => document.getElementById(hash.slice(1))?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+  }, [hash, Boolean(data)]);
 
   return (
     <div className="page">
       <div className="page-head compact">
         <div>
           <h1>Special days</h1>
-          <p>Birthdays, anniversaries, family days and festivals. Wishes go out by themselves, or send them yourself on the day.</p>
+          <p>Birthday and anniversary wishes go out by themselves. Add festivals and shop events when you want.</p>
         </div>
         {canEdit && <button className="btn primary" onClick={() => setEditing({ kind: 'festival' })}><Plus size={18} />Add festival or event</button>}
       </div>
@@ -141,7 +147,14 @@ export default function Occasions() {
             />
           </div>
 
-          <h2 style={{ marginTop: 6 }}>Automatic wishes</h2>
+          <div className="wp-intro">
+            <h2>Birthday and anniversary wishes</h2>
+            <p className="subtle">These are automatic: every customer with a birthday or anniversary saved gets a wish on the day. Nothing to set up.</p>
+          </div>
+          <WishPeople kind="birthday" canEdit={canEdit} today={data.today.date} reloadKey={data} onToggle={toggle} onEdit={(o) => setEditing(o)} />
+          <WishPeople kind="anniversary" canEdit={canEdit} today={data.today.date} reloadKey={data} onToggle={toggle} onEdit={(o) => setEditing(o)} />
+
+          <h2 id="events" style={{ marginTop: 6 }}>Festivals, events and family days</h2>
           <div className="wish-grid">
             {kinds.map((k) => (
               <KindCard key={k} kind={k} o={first(k)} data={data} canEdit={canEdit} onToggle={toggle} onEdit={(o) => setEditing(o || { kind: k })} />

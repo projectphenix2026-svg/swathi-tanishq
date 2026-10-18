@@ -242,7 +242,8 @@ export const EXTRA_COLUMNS = {
   // Meta's daily limit for this number: new customers it may message in 24 hours (-1 = no limit).
   whatsapp_connection: [['daily_limit', 'INTEGER'], ['limit_tier', 'TEXT'], ['limit_checked_at', 'TEXT']],
   // Last time the owner downloaded all the shop's data.
-  clients: [['last_export_at', 'TEXT'], ['sales_codes', 'INTEGER NOT NULL DEFAULT 0']],
+  // auto_wishes: which default wishes (birthday, anniversary) were set up once, so a deleted one stays deleted.
+  clients: [['last_export_at', 'TEXT'], ['sales_codes', 'INTEGER NOT NULL DEFAULT 0'], ['auto_wishes', 'TEXT']],
   // How an offer is sent: 'whatsapp' (optionally with SMS backup) or 'sms' (bulk SMS).
   campaigns: [['channel', "TEXT NOT NULL DEFAULT 'whatsapp'"]],
   // A shop event (festival, sale, store anniversary) that comes back on the same date every year.

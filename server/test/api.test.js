@@ -236,3 +236,43 @@ describe('API flow', () => {
     expect(customers.body.customers.map((c) => c.phone)).toEqual(['+919123456789']);
   });
 });
+
+describe('Spending', () => {
+  it('adds up message costs per day and by kind for a date range', async () => {
+    const agent = request.agent(createApp());
+    await agent.post('/api/auth/login').send({ email: 'staff@example.com', password: 'test-password-1' });
+    const today = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+    const r = await agent.get(`/api/dashboard/spending?from=${today}&to=${today}`);
+    expect(r.status).toBe(200);
+    expect(r.body.series).toHaveLength(1);
+    expect(r.body.total.sent).toBeGreaterThan(0);
+    expect(r.body.total.withGst).toBeCloseTo(r.body.total.cost * 1.18, 1);
+    expect(r.body.byKind.messages.sent).toBeGreaterThan(0);
+    expect(r.body.bySend[0]).toMatchObject({ kind: 'messages' });
+    expect((await agent.get('/api/dashboard/spending?from=2026-10-10&to=2026-10-01')).status).toBe(400);
+  });
+});
+
+describe('Automatic birthday and anniversary wishes', () => {
+  it('are set up once, and list who gets them', async () => {
+    const agent = request.agent(createApp());
+    await agent.post('/api/auth/login').send({ email: 'staff@example.com', password: 'test-password-1' });
+    const added = await agent.post('/api/customers').send({ name: 'Lakshmi Wish', phone: '+919811100077', city: 'Hyderabad', birthday: '1990-01-15', whatsapp_opt_in: true });
+    expect(added.status).toBe(201);
+    const list = (await agent.get('/api/occasions')).body.occasions;
+    const birthday = list.find((o) => o.kind === 'birthday');
+    expect(birthday).toMatchObject({ enabled: true, send_hour: 10 });
+    expect(list.filter((o) => o.kind === 'anniversary')).toHaveLength(1);
+
+    const people = await agent.get('/api/occasions/people/birthday');
+    const lakshmi = people.body.people.find((p) => p.name === 'Lakshmi Wish');
+    expect(lakshmi).toMatchObject({ status: 'yes' });
+    expect(people.body.counts.saved).toBeGreaterThanOrEqual(1);
+
+    // Deleting the wish keeps it deleted: it is not set up again.
+    await agent.delete(`/api/occasions/${birthday.id}`);
+    const again = (await agent.get('/api/occasions')).body.occasions;
+    expect(again.some((o) => o.id === birthday.id && o.enabled)).toBe(false);
+    expect(again.filter((o) => o.kind === 'birthday' && o.enabled)).toHaveLength(0);
+  });
+});

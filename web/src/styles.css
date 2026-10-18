@@ -763,3 +763,56 @@ a.chart-card:hover { border-color: var(--brand); }
 @media (max-width: 700px) { .te-button { grid-template-columns: minmax(0, 1fr) auto; } .te-button .seg { grid-column: 1 / -1; } }
 .te-rules { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
 .te-rules .rule { font-size: 0.82rem; }
+
+/* Spending */
+.tile-link { text-decoration: none; color: inherit; display: grid; }
+.tile-link:hover .kpi-tile { border-color: var(--brand); }
+.day-chart { display: grid; gap: 2px; height: 170px; align-items: end; border-bottom: 1px solid var(--border); margin-top: 8px; }
+.day { height: 100%; display: flex; flex-direction: column; justify-content: flex-end; position: relative; cursor: pointer; min-width: 0; padding-bottom: 18px; }
+.day .bar { display: block; width: 100%; max-width: 28px; margin: 0 auto; border-radius: 4px 4px 0 0; }
+.day.on .bar, .day:hover .bar { filter: brightness(1.2); }
+.day-lbl { position: absolute; bottom: 0; left: 0; font-size: 0.7rem; color: var(--text-3); white-space: nowrap; }
+.spend-grid { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); align-items: start; }
+@media (max-width: 860px) { .spend-grid { grid-template-columns: minmax(0, 1fr); } }
+.field-inline { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; }
+
+/* Special days: Birthdays and Anniversaries sections */
+.wp-intro h2 { margin: 6px 0 2px; }
+.wp-intro p { margin: 0; }
+.wish-people { scroll-margin-top: 80px; }
+#events { scroll-margin-top: 80px; }
+.wp-head { display: flex; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.wp-head h2 { margin: 0; font-size: 1.1rem; }
+.wp-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1px; background: var(--border); border-bottom: 1px solid var(--border); }
+.wp-stats > div { background: var(--surface); padding: 12px 20px; display: flex; flex-direction: column; gap: 2px; }
+.wp-stats b { font-size: 1.35rem; }
+.wp-stats span { color: var(--text-2); font-size: 0.85rem; }
+.wp-tools { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; padding: 12px 20px; }
+.wp-list { list-style: none; margin: 0; padding: 0; }
+.wp-list li { display: flex; align-items: center; gap: 14px; padding: 10px 20px; border-top: 1px solid var(--border); }
+.wp-date { display: flex; flex-direction: column; width: 84px; flex-shrink: 0; }
+.wp-date span { font-size: 0.78rem; color: var(--text-3); }
+.wp-empty { padding: 14px 20px; margin: 0; }
+.wp-more { margin: 8px 20px 0; }
+.wp-note { padding: 8px 20px 14px; margin: 0; font-size: 0.82rem; }
+@media (max-width: 560px) { .wp-list li { flex-wrap: wrap; gap: 6px 12px; } .wp-date { width: auto; flex-direction: row; gap: 8px; align-items: baseline; } }
+
+/* Menu: sub-links under the open section */
+.nav-sub { display: flex; flex-direction: column; gap: 1px; margin: 2px 0 6px 30px; padding-left: 12px; border-left: 2px solid var(--border); }
+.nav .nav-sub a { min-height: 34px; padding: 6px 10px; font-size: 0.88rem; font-weight: 500; color: var(--text-2); background: none; }
+.nav .nav-sub a:hover { background: var(--surface-2); color: var(--text); }
+.nav .nav-sub a.on { color: var(--brand); font-weight: 600; background: var(--brand-50); }
+
+/* Search and filters above lists */
+.list-tools { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.card.list-tools { border-bottom: 1px solid var(--border); }
+.search-box { position: relative; min-width: 0; }
+.search-box .input { padding-right: 34px; }
+.search-box input[type="search"]::-webkit-search-cancel-button { display: none; }
+.search-clear { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); border: none; background: none; color: var(--text-3); cursor: pointer; padding: 4px; display: grid; place-items: center; border-radius: 6px; }
+.search-clear:hover { background: var(--surface-2); color: var(--text); }
+.search-clear svg { position: static; transform: none; }
+
+.page > .tabs { margin-bottom: 16px; }
+.spending-page { display: flex; flex-direction: column; gap: 16px; }
+.spending-page > .tabs, .spending-page > .page-head { margin-bottom: 0; }
