@@ -14,12 +14,12 @@ const router = express.Router();
 router.get('/', async (req, res) => {
   const { rows } = await query(
     `SELECT c.*, t.name AS template_name,
-            count(m.id)::int AS total,
-            count(m.id) FILTER (WHERE m.status IN ('sent', 'delivered', 'read'))::int AS sent,
-            count(m.id) FILTER (WHERE m.status IN ('delivered', 'read'))::int AS delivered,
-            count(m.id) FILTER (WHERE m.status = 'read')::int AS read,
-            count(m.id) FILTER (WHERE m.status = 'failed')::int AS failed,
-            count(m.id) FILTER (WHERE m.status IN ('queued', 'retrying', 'sending'))::int AS pending
+            count(m.id) AS total,
+            count(m.id) FILTER (WHERE m.status IN ('sent', 'delivered', 'read')) AS sent,
+            count(m.id) FILTER (WHERE m.status IN ('delivered', 'read')) AS delivered,
+            count(m.id) FILTER (WHERE m.status = 'read') AS read,
+            count(m.id) FILTER (WHERE m.status = 'failed') AS failed,
+            count(m.id) FILTER (WHERE m.status IN ('queued', 'retrying', 'sending')) AS pending
        FROM campaigns c JOIN templates t ON t.id = c.template_id
        LEFT JOIN messages m ON m.campaign_id = c.id
       WHERE c.client_id = $1
@@ -89,7 +89,7 @@ router.post('/', canEdit, async (req, res) => {
   const { rows: [campaign] } = await query(
     `INSERT INTO campaigns (client_id, name, template_id, audience, variables, status, scheduled_at, cost_per_message, provider,
                             created_by, sms_fallback, expected_count, approved_by, approved_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, CASE WHEN $13::int IS NULL THEN NULL ELSE now() END) RETURNING *`,
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, CASE WHEN $13 IS NULL THEN NULL ELSE strftime('%Y-%m-%dT%H:%M:%fZ', 'now') END) RETURNING *`,
     [req.clientId, name, t.id, JSON.stringify(b.audience || { mode: 'all' }), JSON.stringify(b.variables || {}),
       needsApproval ? 'pending_approval' : 'scheduled', scheduledAt, config.costPerMessage, provider.name, req.user.id,
       Boolean(b.smsFallback), preview.sendable, needsApproval ? null : req.user.id],
@@ -102,7 +102,7 @@ router.post('/', canEdit, async (req, res) => {
 // An admin approves a big send; it then goes out (or waits for its scheduled time).
 router.post('/:id/approve', requireRole('admin'), async (req, res) => {
   const { rows: [c] } = await query(
-    `UPDATE campaigns SET status = 'scheduled', approved_by = $3, approved_at = now()
+    `UPDATE campaigns SET status = 'scheduled', approved_by = $3, approved_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
       WHERE id = $1 AND client_id = $2 AND status = 'pending_approval' RETURNING *`,
     [req.params.id, req.clientId, req.user.id],
   );
@@ -151,7 +151,7 @@ router.get('/:id/messages', async (req, res) => {
 // Scheduled sends can be cancelled until they start; a running send stops the rest.
 router.post('/:id/cancel', async (req, res) => {
   const { rows: [c] } = await query(
-    `UPDATE campaigns SET status = 'cancelled', completed_at = now()
+    `UPDATE campaigns SET status = 'cancelled', completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
       WHERE id = $1 AND client_id = $2 AND status IN ('scheduled', 'sending', 'pending_approval') RETURNING *`,
     [req.params.id, req.clientId],
   );

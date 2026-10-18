@@ -10,21 +10,21 @@ const KINDS = ['birthday', 'anniversary', 'festival'];
 router.get('/', async (req, res) => {
   const { rows } = await query(
     `SELECT o.*, t.name AS template_name, t.body AS template_body, t.buttons AS template_buttons,
-            (SELECT count(*)::int FROM messages m WHERE m.occasion_id = o.id AND m.channel = 'whatsapp'
-               AND m.status IN ('sent', 'delivered', 'read') AND m.created_at > now() - interval '30 days') AS sent_30d,
-            (SELECT count(*)::int FROM messages m WHERE m.occasion_id = o.id AND m.status = 'read'
-               AND m.created_at > now() - interval '30 days') AS read_30d,
-            (SELECT count(*)::int FROM redemptions r JOIN messages m ON m.id = r.message_id WHERE m.occasion_id = o.id) AS redeemed,
-            (SELECT COALESCE(sum(r.amount), 0)::float FROM redemptions r JOIN messages m ON m.id = r.message_id WHERE m.occasion_id = o.id) AS revenue
+            (SELECT count(*) FROM messages m WHERE m.occasion_id = o.id AND m.channel = 'whatsapp'
+               AND m.status IN ('sent', 'delivered', 'read') AND m.created_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-30 days')) AS sent_30d,
+            (SELECT count(*) FROM messages m WHERE m.occasion_id = o.id AND m.status = 'read'
+               AND m.created_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-30 days')) AS read_30d,
+            (SELECT count(*) FROM redemptions r JOIN messages m ON m.id = r.message_id WHERE m.occasion_id = o.id) AS redeemed,
+            (SELECT COALESCE(sum(r.amount), 0) FROM redemptions r JOIN messages m ON m.id = r.message_id WHERE m.occasion_id = o.id) AS revenue
        FROM occasions o JOIN templates t ON t.id = o.template_id
       WHERE o.client_id = $1 ORDER BY o.created_at`,
     [req.clientId],
   );
   const { rows: [dates] } = await query(
-    `SELECT count(*) FILTER (WHERE birthday IS NOT NULL)::int AS with_birthday,
-            count(*) FILTER (WHERE anniversary IS NOT NULL)::int AS with_anniversary,
-            count(*)::int AS total
-       FROM contacts WHERE client_id = $1 AND whatsapp_opt_in AND opted_out_at IS NULL`,
+    `SELECT count(*) FILTER (WHERE birthday IS NOT NULL) AS with_birthday,
+            count(*) FILTER (WHERE anniversary IS NOT NULL) AS with_anniversary,
+            count(*) AS total
+       FROM contacts WHERE client_id = $1 AND whatsapp_opt_in = 1 AND opted_out_at IS NULL`,
     [req.clientId],
   );
   res.json({ occasions: rows, dates, today: indiaNow() });
@@ -53,7 +53,7 @@ router.put('/:id', canEdit, async (req, res) => {
   if (input.error) return res.status(400).json({ error: input.error });
   const { rows: [o] } = await query(
     `UPDATE occasions SET name = $3, kind = $4, festival_date = $5, days_before = $6, send_hour = $7, template_id = $8,
-            variables = $9, audience = $10, sms_fallback = $11, enabled = $12, updated_at = now()
+            variables = $9, audience = $10, sms_fallback = $11, enabled = $12, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
       WHERE id = $1 AND client_id = $2 RETURNING *`,
     [req.params.id, req.clientId, input.name, input.kind, input.festival_date, input.days_before, input.send_hour, input.template_id,
       JSON.stringify(input.variables), JSON.stringify(input.audience), input.sms_fallback, input.enabled],
@@ -64,7 +64,7 @@ router.put('/:id', canEdit, async (req, res) => {
 
 router.patch('/:id/enabled', canEdit, async (req, res) => {
   const { rows: [o] } = await query(
-    `UPDATE occasions SET enabled = $3, updated_at = now() WHERE id = $1 AND client_id = $2 RETURNING *`,
+    `UPDATE occasions SET enabled = $3, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = $1 AND client_id = $2 RETURNING *`,
     [req.params.id, req.clientId, Boolean(req.body?.enabled)],
   );
   if (!o) return res.status(404).json({ error: 'Occasion not found.' });
@@ -79,9 +79,9 @@ router.post('/:id/run', requireRole('admin'), async (req, res) => {
 });
 
 router.delete('/:id', canEdit, async (req, res) => {
-  const { rows: [used] } = await query('SELECT count(*)::int AS n FROM messages WHERE occasion_id = $1', [req.params.id]);
+  const { rows: [used] } = await query('SELECT count(*) AS n FROM messages WHERE occasion_id = $1', [req.params.id]);
   if (used.n) {
-    await query('UPDATE occasions SET enabled = false WHERE id = $1 AND client_id = $2', [req.params.id, req.clientId]);
+    await query('UPDATE occasions SET enabled = 0 WHERE id = $1 AND client_id = $2', [req.params.id, req.clientId]);
     return res.json({ ok: true, disabled: true });
   }
   await query('DELETE FROM occasions WHERE id = $1 AND client_id = $2', [req.params.id, req.clientId]);

@@ -1,6 +1,6 @@
 // Offer codes at the billing counter: look a code up, then record the sale.
 import express from 'express';
-import { query } from '../db/index.js';
+import { query, indiaStartOf } from '../db/index.js';
 import { normaliseCode } from '../lib/offers.js';
 
 const router = express.Router();
@@ -45,7 +45,7 @@ router.post('/redeem', async (req, res) => {
   );
   if (!r) return res.status(409).json({ error: 'This code was just used.' });
   // A sale closes the customer's open lead.
-  await query(`UPDATE leads SET status = 'won', updated_by = $2, updated_at = now() WHERE contact_id = $1 AND status IN ('new', 'called')`, [m.contact_id, req.user.id]);
+  await query(`UPDATE leads SET status = 'won', updated_by = $2, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE contact_id = $1 AND status IN ('new', 'called')`, [m.contact_id, req.user.id]);
   res.status(201).json({ redemption: r });
 });
 
@@ -59,9 +59,9 @@ router.get('/recent', async (req, res) => {
     [req.clientId],
   );
   const { rows: [t] } = await query(
-    `SELECT count(*)::int AS n, COALESCE(sum(amount), 0)::float AS revenue FROM redemptions
-      WHERE client_id = $1 AND redeemed_at > date_trunc('month', now() AT TIME ZONE 'Asia/Kolkata') AT TIME ZONE 'Asia/Kolkata'`,
-    [req.clientId],
+    `SELECT count(*) AS n, COALESCE(sum(amount), 0) AS revenue FROM redemptions
+      WHERE client_id = $1 AND redeemed_at >= $2`,
+    [req.clientId, indiaStartOf('month')],
   );
   res.json({ redemptions: rows, month: t });
 });

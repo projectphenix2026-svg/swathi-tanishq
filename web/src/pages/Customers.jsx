@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Download, MapPin, Search, ShoppingBag, UserPlus, Users } from 'lucide-react';
-import { api, fileUrl } from '../lib/api.js';
+import { api } from '../lib/api.js';
+import { downloadSample } from '../lib/sample.js';
 import { Avatar, Empty, Field, Modal, OptInBadge, Skeleton, Spinner, useToast } from '../components/ui.jsx';
 import { dateOnly, num, phone } from '../lib/format.js';
 
@@ -46,7 +47,7 @@ export default function Customers() {
             actions={
               <>
                 <Link to="/customers/add" className="btn primary"><UserPlus size={18} />Add customers</Link>
-                <a href={fileUrl('/api/customers/sample.xlsx')} className="btn"><Download size={18} />Sample Excel file</a>
+                <button className="btn" onClick={downloadSample}><Download size={18} />Sample Excel file</button>
               </>
             }
           >

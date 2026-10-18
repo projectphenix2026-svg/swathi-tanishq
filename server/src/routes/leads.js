@@ -19,7 +19,7 @@ router.get('/', async (req, res) => {
     status ? [req.clientId, status] : [req.clientId],
   );
   const { rows: counts } = await query(
-    `SELECT status, count(*)::int AS n FROM leads WHERE client_id = $1 GROUP BY status`,
+    `SELECT status, count(*) AS n FROM leads WHERE client_id = $1 GROUP BY status`,
     [req.clientId],
   );
   res.json({ leads: rows, counts: Object.fromEntries(counts.map((r) => [r.status, r.n])) });
@@ -29,7 +29,7 @@ router.patch('/:id', async (req, res) => {
   const status = req.body?.status;
   if (status && !STATUSES.includes(status)) return res.status(400).json({ error: 'Unknown status.' });
   const { rows: [l] } = await query(
-    `UPDATE leads SET status = COALESCE($3, status), note = COALESCE($4, note), updated_by = $5, updated_at = now()
+    `UPDATE leads SET status = COALESCE($3, status), note = COALESCE($4, note), updated_by = $5, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
       WHERE id = $1 AND client_id = $2 RETURNING *`,
     [req.params.id, req.clientId, status || null, req.body?.note ?? null, req.user.id],
   );

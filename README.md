@@ -17,24 +17,49 @@ Settings for these phases (all in `server/.env`, see `.env.example`): `META_WABA
 
 ## How it fits together
 
+Everything runs on **Cloudflare's free plan**, so the site stays up with no laptop or server of our own:
+
 ```
-React web app (web/)  ──►  Express API (server/)  ──►  PostgreSQL (customers, templates, campaigns, messages)
-                                   │
-                                   └─►  Sending queue (BullMQ on Redis) ──►  Provider ──►  WhatsApp
-                                                                            (Twilio now, Meta Cloud API later)
-Provider webhooks (delivered / read / failed, customer replies)  ──►  API  ──►  reports and inbox
+Browser ──► Cloudflare Worker ──► pages and files (web/dist, React)
+                │
+                ├─► /api, /webhooks: the Express API (server/) running on Workers
+                │        └─► Cloudflare D1 (SQLite): customers, templates, campaigns, messages, occasions…
+                │
+                └─► Cron, every minute: send due messages (outbox) · birthday / anniversary / festival check
+                         └─► Provider ──► WhatsApp (Meta Cloud API; Twilio and test mode too) · SMS (MSG91)
+Provider webhooks (delivered / read / failed, customer replies) ──► /webhooks ──► reports and inbox
 ```
 
-- **One provider interface** (`server/src/providers/`). `MESSAGING_PROVIDER=mock | twilio | meta` in `.env` is the only switch. Twilio works today (sandbox included); the Meta Cloud API adapter is written to Meta's documentation but is a **stub until the Meta app exists**.
-- **Nothing is sent twice.** Every message row has a unique key (`campaign:<id>:contact:<id>`) and the worker can only claim a message that is still queued. Repeated jobs, double-clicks, restarts and re-launches find nothing to do.
-- **Retries.** Temporary errors (timeouts, 429, 5xx) are retried with exponential back-off, up to `SEND_MAX_ATTEMPTS`. Permanent errors (number not on WhatsApp, not opted in to the sandbox...) fail at once with a plain-language reason.
-- **Only consenting customers.** Campaigns go only to customers with WhatsApp opt-in who have not replied STOP. Opt-in date and source are stored per customer.
-- **No blank personalisation.** A customer missing a value the message needs (e.g. no last purchase) is skipped, never sent “Hi {{name}}”.
-- **Runs anywhere.** With no `DATABASE_URL` it uses embedded Postgres (PGlite); with no `REDIS_URL` it uses an in-process queue. Production should set both.
+- **One provider interface** (`server/src/providers/`). `MESSAGING_PROVIDER=mock | twilio | meta` is the only switch.
+- **The messages table is the sending queue** (an outbox). A campaign launch is one `INSERT … SELECT`, so 30,000 customers take one statement; each message is personalised (name, purchase, offer code) when it is sent. The Cron sends 20 due messages a minute (about 28,000 a day), and a launch or reply starts sending at once.
+- **Nothing is sent twice.** Every message has a unique key, and a message can only be claimed while it is queued or retrying, so overlapping runs, double-clicks and re-launches do nothing.
+- **Retries.** Temporary errors (timeouts, 429, 5xx) wait 30 s, 1 min, 2 min… up to `SEND_MAX_ATTEMPTS`. Permanent errors fail at once with a plain-language reason.
+- **Only consenting customers**, and **no blank personalisation**: a customer missing a value the message needs is skipped, never sent “Hi {{name}}”.
+- **Fits the free plan** (Cloudflare limits, Oct 2026: 100,000 requests a day, 10 ms CPU per request, D1 5 GB with 100,000 row writes a day, 5 Cron triggers). Excel/CSV files are read in the browser and saved 500 rows per request; launches are one SQL statement; passwords use WebCrypto.
 
-## Run it locally
+## Deploy to Cloudflare (one time)
 
-Needs Node.js 20 or newer (tested on 24).
+```bash
+npx wrangler login
+```
+
+```bash
+npx wrangler d1 create swathi-tanishq
+```
+
+Put the printed `database_id` into `wrangler.jsonc`, then set the secrets (each command asks for the value): `JWT_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`.
+
+```bash
+npx wrangler secret put JWT_SECRET
+```
+
+Deploy with `npm run deploy`, or merge to main: Cloudflare Workers Builds deploys every push to main. The tables are created on the first request, and the first admin login comes from `ADMIN_EMAIL` / `ADMIN_PASSWORD`. Non-secret settings (provider, business name, SMS mode, site address) are the `vars` in `wrangler.jsonc`; Meta, Twilio and MSG91 keys are added as secrets the same way when needed (`META_ACCESS_TOKEN`, `META_APP_SECRET`, `META_WEBHOOK_VERIFY_TOKEN`, …).
+
+To try the Cloudflare version locally (Cloudflare's own runtime with a local D1), put `JWT_SECRET`, `ADMIN_EMAIL` and `ADMIN_PASSWORD` in `.dev.vars` and run `npm run cf:dev`.
+
+## Run it locally (Node)
+
+Needs Node.js 22.5 or newer (it uses Node's built-in SQLite; tested on 24). Data is kept in `server/.data/swathi.db`.
 
 ```bash
 npm install
@@ -100,36 +125,33 @@ No other code changes. Test with a small send first: this adapter has not yet ru
 npm test
 ```
 
-93 tests across `server/test/`:
+90 tests across `server/test/` (they run on Node's in-memory SQLite, the same SQL as D1):
 
 | File | Covers |
 |---|---|
 | `phone.test.js` | +91 E.164 normalisation: spaces, dashes, 0 / 91 / 0091 prefixes, Excel numbers and scientific notation, landlines, too short / long |
 | `importer.test.js` | CSV (BOM, quoted commas, no header), .xlsx and .xls, column guessing, Indian date formats, opt-in words, duplicates in file and already saved, pasted lists |
-| `queue.test.js` | queue de-duplication, back-off retries, rate limit, scheduled jobs; the full send pipeline: personalisation, skips, no double sends, temporary vs permanent failures, cancelled campaigns, status order |
+| `outbox.test.js` | one personalised message per customer, skips, no double send under overlapping runs and re-launches, retry back-off, permanent failures, last attempt, scheduled and cancelled sends, status order, a 5,000-customer launch in one statement |
 | `providers.test.js` | Twilio request, Content templates, error mapping, signature check, webhook parsing; Meta template payload, signature check, webhook parsing |
-| `api.test.js` | sign-in, import preview/commit, form, template validation, campaign preview and send, audience-changed guard, inbox, STOP opt-out, double-click reply |
+| `api.test.js` | sign-in, import (existing-number check, 500-row chunks, consent), form, template validation, campaign preview and send, audience-changed guard, inbox, STOP opt-out, double-click reply |
 | `phases.test.js` | Meta template submission format; birthday on the day (once only), anniversary N days before, send time, 29 Feb; SMS fallback and SMS consent; unique offer codes and one-time redemption with revenue; hot leads and tags; weekly limit; viewer permissions; admin approval of big sends; staff management; .vcf and Google Sheets import |
 
 ## Project layout
 
 ```
-server/            Express API
-  src/config.js    all settings (from environment variables)
-  src/db/          schema.sql and the Postgres / PGlite connection
-  src/lib/         phone, importer, template, campaigns, sender (queue worker), messages (statuses, inbox)
-  src/providers/   twilio.js, meta.js (stub), mock.js, index.js (the switch)
-  src/queue/       BullMQ or in-process queue
-  src/routes/      auth, customers, templates, campaigns, inbox, dashboard, webhooks
+cloudflare/worker.js   Cloudflare entry: static pages + Express API on D1 + once-a-minute Cron
+wrangler.jsonc         Cloudflare settings: D1 binding, Cron, vars
+server/                Express API (also runs in Node for development and tests)
+  src/config.js        all settings (environment variables, or Cloudflare vars and secrets)
+  src/db/              schema.js and the D1 / Node SQLite connection
+  src/lib/             phone, import-basics, importer (used by the browser), template, campaigns,
+                       dispatch (outbox runner), sender, occasions, messages, offers, security
+  src/providers/       twilio.js, meta.js, sms.js (MSG91), mock.js, index.js (the switch)
+  src/routes/          auth, customers, templates, campaigns, occasions, inbox, leads, offers, dashboard, webhooks
+  src/runtime.js       start-up and the once-a-minute job, shared by Node and Cloudflare
   test/
-web/               React app (Vite)
-  src/pages/       Login, Dashboard, Customers, AddCustomers, Templates, TemplateEditor,
-                   Campaigns, CampaignBuilder, CampaignReport, Inbox
-index.html         the original starter page
+web/                   React app (Vite)
+index.html             the original starter page
 ```
 
-## Deploying (outline)
-
-- **Web:** Cloudflare (Workers Builds, already linked to this repo) reads `wrangler.jsonc`: it runs `npm run build` and serves `web/dist`. Set `VITE_API_URL` in the Cloudflare build settings to the API's address; until then the deployed site shows the sign-in page but cannot reach an API.
-- **API:** Render, Railway or a small VM with `NODE_ENV=production`, `DATABASE_URL`, `REDIS_URL`, `WEB_ORIGIN` = the Pages address, `PUBLIC_BASE_URL` = the API address. Cookies are `Secure; SameSite=None` in production, so both must be on HTTPS.
-- Keep secrets in the host's secret settings, never in the repo.
+Keep secrets in Cloudflare secrets (or `server/.env` / `.dev.vars` locally, both git-ignored), never in the repo.

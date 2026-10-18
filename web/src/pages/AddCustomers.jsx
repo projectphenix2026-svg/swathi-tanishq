@@ -4,7 +4,10 @@ import {
   AlertTriangle, ArrowLeft, CheckCircle2, ClipboardPaste, Copy, Download, FileSpreadsheet, MessageSquareText, RefreshCw, Send, Table, Upload, UserPlus, XCircle,
 } from 'lucide-react';
 import { normalizePhone } from '@shared/phone.js';
-import { api, fileUrl } from '../lib/api.js';
+// The Excel/CSV reader is loaded only when an import starts, so the app opens fast.
+const importer = () => import('@shared/importer.js');
+import { downloadSample } from '../lib/sample.js';
+import { api, apiText } from '../lib/api.js';
 import { Alert, Field, Spinner, useToast } from '../components/ui.jsx';
 import { num, plural } from '../lib/format.js';
 
@@ -73,9 +76,9 @@ function FileStep({ onPreview }) {
     }
     setBusy(true);
     try {
-      const form = new FormData();
-      form.append('file', file);
-      const r = await api('/api/customers/import/preview', { method: 'POST', form });
+      const { parseFile } = await importer();
+      const table = parseFile(await file.arrayBuffer(), file.name);
+      const r = await makePreview(table);
       onPreview({ ...r, file, source: `${file.name.split('.').pop().toUpperCase()} upload: ${file.name}` });
     } catch (e) {
       toast(e.message, 'bad');
@@ -109,11 +112,33 @@ function FileStep({ onPreview }) {
             <p className="muted" style={{ fontSize: '0.9rem' }}>Only a phone column is required. Name, city, last purchase and interests make messages personal.</p>
           </div>
         </div>
-        <a className="btn" href={fileUrl('/api/customers/sample.xlsx')}><Download size={18} />Sample Excel file</a>
+        <button className="btn" onClick={downloadSample}><Download size={18} />Sample Excel file</button>
       </div>
     </div>
   );
 }
+
+/** Builds the preview in the browser, then asks the server which numbers are already saved. */
+async function makePreview(table) {
+  const { buildPreview } = await importer();
+  const { rows, summary } = buildPreview(table);
+  const phones = rows.filter((r) => r.status === 'ok').map((r) => r.phone);
+  const existing = new Set();
+  for (let i = 0; i < phones.length; i += 5000) {
+    const r = await api('/api/customers/import/existing', { method: 'POST', body: { phones: phones.slice(i, i + 5000) } });
+    r.existing.forEach((p) => existing.add(p));
+  }
+  for (const r of rows) {
+    if (r.status === 'ok' && existing.has(r.phone)) {
+      r.status = 'exists';
+      r.reason = 'Already a customer';
+      summary.ok -= 1;
+      summary.exists += 1;
+    }
+  }
+  return { columns: table.columns, mapping: table.mapping, rows, summary, sampleRaw: table.rows.slice(0, 3), table };
+}
+
 
 /* ---------- Google Sheet link ---------- */
 function SheetStep({ onPreview }) {
@@ -124,7 +149,9 @@ function SheetStep({ onPreview }) {
     e.preventDefault();
     setBusy(true);
     try {
-      const r = await api('/api/customers/import/preview', { method: 'POST', body: { sheetUrl: url } });
+      const csv = await apiText('/api/customers/import/sheet', { sheetUrl: url });
+      const { parseFile } = await importer();
+      const r = await makePreview(parseFile(new TextEncoder().encode(csv), 'sheet.csv'));
       onPreview({ ...r, source: 'Google Sheet' });
     } catch (err) {
       toast(err.message, 'bad');
@@ -154,7 +181,8 @@ function PasteStep({ onPreview }) {
   async function check() {
     setBusy(true);
     try {
-      const r = await api('/api/customers/import/preview', { method: 'POST', body: { text } });
+      const { parsePasted } = await importer();
+      const r = await makePreview(parsePasted(text));
       onPreview({ ...r, source: 'Typed or pasted by staff' });
     } catch (e) {
       toast(e.message, 'bad');
@@ -203,6 +231,7 @@ function ImportReview({ preview, onBack, onDone, onRemap }) {
   const [tags, setTags] = useState('');
   const [busy, setBusy] = useState(false);
   const [remapping, setRemapping] = useState(false);
+  const [progress, setProgress] = useState(0);
   const s = preview.summary;
   const willAdd = s.ok + (updateExisting ? s.exists : 0);
   const optInColumn = preview.mapping.opt_in !== undefined;
@@ -210,14 +239,13 @@ function ImportReview({ preview, onBack, onDone, onRemap }) {
   const rows = useMemo(() => (show === 'all' ? preview.rows : preview.rows.filter((r) => r.status === show)).slice(0, 300), [show, preview.rows]);
 
   async function remap(field, value) {
-    if (!preview.file) return;
+    if (!preview.table) return;
     setRemapping(true);
     try {
-      const mapping = { ...preview.mapping, [field]: value === '' ? null : Number(value) };
-      const form = new FormData();
-      form.append('file', preview.file);
-      form.append('mapping', JSON.stringify(mapping));
-      const r = await api('/api/customers/import/preview', { method: 'POST', form });
+      const mapping = { ...preview.mapping };
+      if (value === '') delete mapping[field];
+      else mapping[field] = Number(value);
+      const r = await makePreview({ ...preview.table, mapping });
       onRemap({ ...preview, ...r });
     } catch (e) {
       toast(e.message, 'bad');
@@ -229,11 +257,20 @@ function ImportReview({ preview, onBack, onDone, onRemap }) {
   async function save() {
     setBusy(true);
     try {
-      const r = await api('/api/customers/import/commit', {
-        method: 'POST',
-        body: { rows: preview.rows, optIn: { confirmed: optIn || smsOptIn ? confirmed : true, value: optIn, sms: smsOptIn }, updateExisting, source, tags: tags.split(',') },
-      });
-      onDone(r);
+      // Saved 500 at a time, so a 30,000-row list fits the server's per-request limits.
+      const toSave = preview.rows.filter((r) => r.status === 'ok' || (updateExisting && r.status === 'exists'));
+      const total = { created: 0, updated: 0, skipped: preview.rows.length - toSave.length };
+      for (let i = 0; i < toSave.length; i += 500) {
+        setProgress(Math.round((i / toSave.length) * 100));
+        const r = await api('/api/customers/import/commit', {
+          method: 'POST',
+          body: { rows: toSave.slice(i, i + 500), optIn: { confirmed: optIn || smsOptIn ? confirmed : true, value: optIn, sms: smsOptIn }, updateExisting, source, tags: tags.split(',') },
+        });
+        total.created += r.created;
+        total.updated += r.updated;
+        total.skipped += r.skipped;
+      }
+      onDone(total);
     } catch (e) {
       toast(e.message, 'bad');
     } finally {
@@ -362,7 +399,7 @@ function ImportReview({ preview, onBack, onDone, onRemap }) {
       <div className="action-bar">
         <button className="btn ghost" onClick={onBack}><ArrowLeft size={18} />Start over</button>
         <button className="btn primary lg" onClick={save} disabled={busy || !willAdd || ((optIn || smsOptIn) && !confirmed)}>
-          {busy ? <Spinner /> : willAdd ? `Add ${plural(willAdd, 'customer')}` : 'Nothing to add'}
+          {busy ? <><Spinner />{willAdd > 500 ? ` Saving… ${progress}%` : ''}</> : willAdd ? `Add ${plural(willAdd, 'customer')}` : 'Nothing to add'}
         </button>
       </div>
       {s.invalid > 0 && <p className="subtle" style={{ textAlign: 'center' }}>{plural(s.invalid, 'row')} with number problems will be skipped. Fix them in your file and upload again any time; nobody is added twice.</p>}

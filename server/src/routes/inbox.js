@@ -1,7 +1,7 @@
 import express from 'express';
 import crypto from 'node:crypto';
 import { query } from '../db/index.js';
-import { enqueueMessage } from '../lib/sender.js';
+import { kick } from '../lib/dispatch.js';
 import { recordInbound } from '../lib/messages.js';
 import { getProvider } from '../providers/index.js';
 
@@ -14,7 +14,7 @@ router.get('/', async (req, res) => {
     `SELECT c.id AS contact_id, c.name, c.phone, c.city, c.opted_out_at,
             max(m.created_at) AS last_at,
             max(m.created_at) FILTER (WHERE m.direction = 'inbound') AS last_inbound_at,
-            count(*) FILTER (WHERE m.direction = 'inbound' AND m.seen_at IS NULL)::int AS unread,
+            count(*) FILTER (WHERE m.direction = 'inbound' AND m.seen_at IS NULL) AS unread,
             (SELECT body FROM messages x WHERE x.contact_id = c.id ORDER BY x.created_at DESC, x.id DESC LIMIT 1) AS last_body,
             (SELECT direction FROM messages x WHERE x.contact_id = c.id ORDER BY x.created_at DESC, x.id DESC LIMIT 1) AS last_direction
        FROM contacts c JOIN messages m ON m.contact_id = c.id
@@ -29,7 +29,7 @@ router.get('/', async (req, res) => {
 
 router.get('/unread-count', async (req, res) => {
   const { rows: [r] } = await query(
-    `SELECT count(*)::int AS n FROM messages WHERE client_id = $1 AND direction = 'inbound' AND seen_at IS NULL`,
+    `SELECT count(*) AS n FROM messages WHERE client_id = $1 AND direction = 'inbound' AND seen_at IS NULL`,
     [req.clientId],
   );
   res.json({ unread: r.n });
@@ -48,7 +48,7 @@ router.get('/:contactId', async (req, res) => {
       WHERE m.contact_id = $1 ORDER BY m.created_at, m.id`,
     [contact.id],
   );
-  await query(`UPDATE messages SET seen_at = now() WHERE contact_id = $1 AND direction = 'inbound' AND seen_at IS NULL`, [contact.id]);
+  await query(`UPDATE messages SET seen_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE contact_id = $1 AND direction = 'inbound' AND seen_at IS NULL`, [contact.id]);
   const lastInbound = [...messages].reverse().find((m) => m.direction === 'inbound');
   const windowOpen = lastInbound ? Date.now() - new Date(lastInbound.created_at).getTime() < 24 * 3600 * 1000 : false;
   res.json({ contact, messages, windowOpen, lastInboundAt: lastInbound?.created_at || null });
@@ -82,11 +82,11 @@ router.post('/:contactId/reply', async (req, res) => {
   const { rows: [m] } = await query(
     `INSERT INTO messages (client_id, contact_id, direction, idempotency_key, body, status, sent_by)
      VALUES ($1, $2, 'outbound', $3, $4, 'queued', $5)
-     ON CONFLICT (idempotency_key) DO UPDATE SET idempotency_key = EXCLUDED.idempotency_key
+     ON CONFLICT (idempotency_key) DO UPDATE SET idempotency_key = excluded.idempotency_key
      RETURNING *`,
     [req.clientId, contact.id, `reply:${req.user.id}:${requestId}`, body, req.user.id],
   );
-  await enqueueMessage(m);
+  kick();
   res.status(201).json({ message: m });
 });
 

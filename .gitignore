@@ -7,3 +7,6 @@ server/.data/
 *.log
 .DS_Store
 .data/
+
+.dev.vars
+.wrangler/

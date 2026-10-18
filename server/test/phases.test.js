@@ -10,16 +10,14 @@ import { setProvider, setSmsProvider } from '../src/providers/index.js';
 import { ProviderError } from '../src/providers/errors.js';
 import { createMetaProvider, metaTemplateName } from '../src/providers/meta.js';
 import { createSmsProvider, smsParts } from '../src/providers/sms.js';
-import { createMemoryQueue } from '../src/queue/memory.js';
-import { setQueue } from '../src/queue/index.js';
-import { processSendJob } from '../src/lib/sender.js';
+import { drain } from '../src/lib/dispatch.js';
+import '../src/lib/sender.js';
 import { runOccasion, addDays, indiaNow, upcoming } from '../src/lib/occasions.js';
 import { recordInbound } from '../src/lib/messages.js';
 import { parseVcard, sheetsCsvUrl, parseFile, buildPreview } from '../src/lib/importer.js';
 import { makeOfferCode, cleanPrefix } from '../src/lib/offers.js';
 
 let clientId;
-let queue;
 let provider;
 let admin;
 let manager;
@@ -83,8 +81,6 @@ beforeEach(async () => {
   provider = fakeWhatsApp();
   setProvider(provider);
   setSmsProvider(createSmsProvider({ mode: 'preview' }));
-  queue = createMemoryQueue({ handler: processSendJob, ratePerSecond: 0, backoffMs: () => 5 });
-  setQueue(queue);
 });
 
 describe('Phase 2: Meta template submission', () => {
@@ -123,12 +119,12 @@ describe('Phase 3: occasions', () => {
     await contact('Ravi', '+919123456789', { birthday: '1990-01-01' === `1990-${md}` ? '1991-06-15' : '1990-01-01' });
     const t = await template('Happy birthday {{name}}! Enjoy {{offer}} with code {{offer_code}}.', { category: 'utility' });
     const { rows: [o] } = await query(
-      `INSERT INTO occasions (client_id, name, kind, days_before, template_id, variables) VALUES ($1, 'Birthday', 'birthday', '{0}', $2, $3) RETURNING *`,
+      `INSERT INTO occasions (client_id, name, kind, days_before, template_id, variables) VALUES ($1, 'Birthday', 'birthday', '[0]', $2, $3) RETURNING *`,
       [clientId, t.id, JSON.stringify({ offer: 'a free gift' })],
     );
     expect((await runOccasion(o, { force: true })).queued).toBe(1);
     expect((await runOccasion(o, { force: true })).queued).toBe(0); // same day again: nothing new
-    await queue.onIdle();
+    await drain();
     expect(provider.sent).toHaveLength(1);
     expect(provider.sent[0].body).toMatch(/^Happy birthday Priya! Enjoy a free gift with code PRIYA-BDAY-\d{4}\.$/);
   });
@@ -138,11 +134,11 @@ describe('Phase 3: occasions', () => {
     await contact('Lakshmi', '+919988776655', { anniversary: `2015-${in7.slice(5)}` });
     const t = await template('Hi {{name}}, your anniversary is in {{days_left}} days. Gift ideas inside!', { category: 'utility' });
     const { rows: [o] } = await query(
-      `INSERT INTO occasions (client_id, name, kind, days_before, template_id) VALUES ($1, 'Anniversary', 'anniversary', '{7,0}', $2) RETURNING *`,
+      `INSERT INTO occasions (client_id, name, kind, days_before, template_id) VALUES ($1, 'Anniversary', 'anniversary', '[7,0]', $2) RETURNING *`,
       [clientId, t.id],
     );
     expect((await runOccasion(o, { force: true })).queued).toBe(1);
-    await queue.onIdle();
+    await drain();
     expect(provider.sent[0].body).toBe('Hi Lakshmi, your anniversary is in 7 days. Gift ideas inside!');
     const list = await upcoming(clientId, o, 10);
     expect(list.find((u) => u.before === 0)).toMatchObject({ occasionDate: in7, count: 1 });
@@ -151,7 +147,7 @@ describe('Phase 3: occasions', () => {
   it('waits for the send time unless forced', async () => {
     const t = await template('Hi {{name}}, happy festival from us, see you soon.');
     const { rows: [o] } = await query(
-      `INSERT INTO occasions (client_id, name, kind, festival_date, days_before, send_hour, template_id) VALUES ($1, 'Diwali', 'festival', $2, '{0}', 23, $3) RETURNING *`,
+      `INSERT INTO occasions (client_id, name, kind, festival_date, days_before, send_hour, template_id) VALUES ($1, 'Diwali', 'festival', $2, '[0]', 23, $3) RETURNING *`,
       [clientId, today, t.id],
     );
     await contact('Kiran', '+919000011111');
@@ -164,7 +160,7 @@ describe('Phase 3: occasions', () => {
     await contact('Leap', '+919811122233', { birthday: '2000-02-29' });
     const t = await template('Hi {{name}}, happy birthday, here is a little gift.', { category: 'utility' });
     const { rows: [o] } = await query(
-      `INSERT INTO occasions (client_id, name, kind, days_before, template_id) VALUES ($1, 'B', 'birthday', '{0}', $2) RETURNING *`,
+      `INSERT INTO occasions (client_id, name, kind, days_before, template_id) VALUES ($1, 'B', 'birthday', '[0]', $2) RETURNING *`,
       [clientId, t.id],
     );
     const feb28 = new Date('2027-02-28T12:00:00+05:30');
@@ -184,8 +180,8 @@ describe('Phase 4: SMS backup', () => {
     );
     provider.failNext = [new ProviderError('This number is not on WhatsApp.', { code: 63003 })];
     const { launchCampaign } = await import('../src/lib/campaigns.js');
-    await (await launchCampaign(clientId, cp, t)).enqueued;
-    await queue.onIdle();
+    await launchCampaign(clientId, cp, t);
+    await drain();
     const { rows } = await query('SELECT channel, status, body, fallback_of FROM messages WHERE contact_id = $1 ORDER BY id', [c.id]);
     expect(rows.map((r) => [r.channel, r.status])).toEqual([['whatsapp', 'failed'], ['sms', 'preview']]);
     expect(rows[1].body).toBe('Hi Priya, 20% off on gold chain at Swathi Tanishq this week. -SWATHI');
@@ -200,8 +196,8 @@ describe('Phase 4: SMS backup', () => {
     );
     provider.failNext = [new ProviderError('Not on WhatsApp', { code: 131026 })];
     const { launchCampaign } = await import('../src/lib/campaigns.js');
-    await (await launchCampaign(clientId, cp, t)).enqueued;
-    await queue.onIdle();
+    await launchCampaign(clientId, cp, t);
+    await drain();
     const { rows } = await query('SELECT channel FROM messages WHERE contact_id = $1', [c.id]);
     expect(rows.map((r) => r.channel)).toEqual(['whatsapp']);
   });
@@ -228,8 +224,7 @@ describe('Phase 5: offer codes, leads, weekly limit, roles', () => {
     const agent = await login('admin@example.com');
     const res = await agent.post('/api/campaigns').send({ name: 'Diwali', templateId: t.id, audience: { mode: 'all' }, variables: { offer: '10% off', code_prefix: 'diwali' } });
     expect(res.status).toBe(201);
-    await new Promise((r) => setTimeout(r, 30));
-    await queue.onIdle();
+    await drain();
     const { rows: [m] } = await query('SELECT offer_code, body FROM messages WHERE contact_id = $1', [c.id]);
     expect(m.offer_code).toMatch(/^PRIYA-DIWALI-\d{4}$/);
     expect(m.body).toContain(m.offer_code);
@@ -247,8 +242,8 @@ describe('Phase 5: offer codes, leads, weekly limit, roles', () => {
     const t = await template('Hi {{name}}, new bridal sets are here. Want a call?', { buttons: [{ type: 'quick_reply', text: 'Call me back' }, { type: 'quick_reply', text: 'Not now' }] });
     const { rows: [cp] } = await query(`INSERT INTO campaigns (client_id, name, template_id, cost_per_message, provider) VALUES ($1, 'Bridal', $2, 0.8631, 'fake') RETURNING *`, [clientId, t.id]);
     const { launchCampaign } = await import('../src/lib/campaigns.js');
-    await (await launchCampaign(clientId, cp, t)).enqueued;
-    await queue.onIdle();
+    await launchCampaign(clientId, cp, t);
+    await drain();
     await recordInbound(clientId, { providerMessageId: 'in1', from: '+919876543210', body: 'Call me back', provider: 'fake' });
     await recordInbound(clientId, { providerMessageId: 'in2', from: '+919876543210', body: 'Call me back', provider: 'fake' }); // tapped twice
     const { rows: leads } = await query('SELECT reason, status, campaign_id FROM leads WHERE contact_id = $1', [c.id]);
@@ -293,7 +288,7 @@ describe('Phase 5: offer codes, leads, weekly limit, roles', () => {
     const a = await login('admin@example.com');
     const ok = await a.post(`/api/campaigns/${res.body.campaign.id}/approve`);
     expect(ok.body.queued).toBe(2);
-    await queue.onIdle();
+    await drain();
     expect(provider.sent).toHaveLength(2);
   });
 

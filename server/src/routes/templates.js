@@ -12,7 +12,7 @@ router.get('/variables', (req, res) => res.json({ variables: VARIABLES }));
 
 router.get('/', async (req, res) => {
   const { rows } = await query(
-    `SELECT t.*, (SELECT count(*)::int FROM campaigns c WHERE c.template_id = t.id) AS used_in
+    `SELECT t.*, (SELECT count(*) FROM campaigns c WHERE c.template_id = t.id) AS used_in
        FROM templates t WHERE client_id = $1 ORDER BY updated_at DESC`,
     [req.clientId],
   );
@@ -50,7 +50,7 @@ router.put('/:id', canEdit, async (req, res) => {
   const { rows: [t] } = await query(
     `UPDATE templates SET ${COLS.map((c, i) => `${c} = $${i + 3}`).join(', ')},
             provider_status = CASE WHEN $${COLS.length + 3} THEN NULL ELSE provider_status END,
-            updated_at = now()
+            updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
       WHERE id = $1 AND client_id = $2 RETURNING *`,
     [req.params.id, req.clientId, ...values(input), textChanged && existing.provider_status !== null],
   );
@@ -76,7 +76,7 @@ router.post('/:id/submit-meta', canEdit, async (req, res) => {
   if (missing.length) return res.status(400).json({ error: `Meta is not set up yet. Missing: ${missing.join(', ')}.` });
   const result = await meta.submitTemplate(t, EXAMPLES);
   const { rows: [u] } = await query(
-    `UPDATE templates SET provider_ref = $2, provider_status = $3, provider_reason = NULL, updated_at = now() WHERE id = $1 RETURNING *`,
+    `UPDATE templates SET provider_ref = $2, provider_status = $3, provider_reason = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = $1 RETURNING *`,
     [t.id, result.name, result.status],
   );
   res.json({ template: withVars(u) });
@@ -88,7 +88,7 @@ router.post('/:id/sync-meta', async (req, res) => {
   const s = await metaProvider().templateStatus(t.provider_ref);
   if (!s) return res.status(404).json({ error: `Meta has no template named ${t.provider_ref}.` });
   const { rows: [u] } = await query(
-    `UPDATE templates SET provider_status = $2, provider_reason = $3, updated_at = now() WHERE id = $1 RETURNING *`,
+    `UPDATE templates SET provider_status = $2, provider_reason = $3, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = $1 RETURNING *`,
     [t.id, s.status, s.reason],
   );
   res.json({ template: withVars(u) });

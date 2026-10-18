@@ -6,12 +6,11 @@ import { createApp } from '../src/app.js';
 import { createUser } from '../src/routes/auth.js';
 import { setProvider } from '../src/providers/index.js';
 import { createMockProvider } from '../src/providers/mock.js';
-import { createMemoryQueue } from '../src/queue/memory.js';
-import { setQueue } from '../src/queue/index.js';
-import { processSendJob } from '../src/lib/sender.js';
+import { drain } from '../src/lib/dispatch.js';
+import '../src/lib/sender.js';
+import { parseFile, buildPreview } from '../src/lib/importer.js';
 
 let agent;
-let queue;
 let provider;
 
 beforeAll(async () => {
@@ -22,8 +21,6 @@ beforeAll(async () => {
   await createUser({ clientId, email: 'staff@example.com', password: 'test-password-1', name: 'Staff' });
   provider = createMockProvider();
   setProvider(provider);
-  queue = createMemoryQueue({ handler: processSendJob, ratePerSecond: 0 });
-  setQueue(queue);
   agent = request.agent(createApp());
 });
 afterAll(() => closeDb());
@@ -46,17 +43,29 @@ describe('API flow', () => {
     expect(res.headers['set-cookie'][0]).toMatch(/HttpOnly/);
   });
 
-  it('imports a CSV in two steps: preview, then save', async () => {
+  it('imports a CSV: the browser builds the preview, the server checks and saves', async () => {
     const csv = 'Name,Mobile,City,Last purchase\nPriya,98765 43210,Hyderabad,gold chain\nRavi,91234 56789,Warangal,ring\nBad,123,X,\n';
-    const preview = await agent.post('/api/customers/import/preview').attach('file', Buffer.from(csv), 'list.csv');
-    expect(preview.status).toBe(200);
-    expect(preview.body.summary).toMatchObject({ ok: 2, invalid: 1 });
+    const preview = buildPreview(parseFile(Buffer.from(csv), 'list.csv'));
+    expect(preview.summary).toMatchObject({ ok: 2, invalid: 1 });
+    const existing = await agent.post('/api/customers/import/existing').send({ phones: preview.rows.map((r) => r.phone).filter(Boolean) });
+    expect(existing.body.existing).toEqual([]);
     const save = await agent.post('/api/customers/import/commit').send({
-      rows: preview.body.rows,
+      rows: preview.rows.filter((r) => r.status === 'ok'),
       optIn: { confirmed: true, value: true },
       source: 'excel: list.csv',
     });
-    expect(save.body).toEqual({ created: 2, updated: 0, skipped: 1 });
+    expect(save.body).toEqual({ created: 2, updated: 0, skipped: 0 });
+    const again = await agent.post('/api/customers/import/existing').send({ phones: ['+919876543210', '+919000000000'] });
+    expect(again.body.existing).toEqual(['+919876543210']);
+    // Saving the same rows again adds nobody.
+    const repeat = await agent.post('/api/customers/import/commit').send({ rows: preview.rows.filter((r) => r.status === 'ok'), optIn: { confirmed: true, value: true } });
+    expect(repeat.body).toEqual({ created: 0, updated: 0, skipped: 2 });
+  });
+
+  it('refuses imports over 500 rows per request and unconfirmed consent', async () => {
+    const rows = Array.from({ length: 501 }, (_, i) => ({ phone: `+9190000${String(10000 + i)}`, status: 'ok' }));
+    expect((await agent.post('/api/customers/import/commit').send({ rows, optIn: { confirmed: true } })).status).toBe(400);
+    expect((await agent.post('/api/customers/import/commit').send({ rows: rows.slice(0, 1), optIn: { value: true } })).status).toBe(400);
   });
 
   it('adds one customer by form and refuses a duplicate', async () => {
@@ -106,8 +115,7 @@ describe('API flow', () => {
     expect(res.status).toBe(201);
     expect(res.body.queued).toBe(1);
     campaignId = res.body.campaign.id;
-    await new Promise((r) => setTimeout(r, 50));
-    await queue.onIdle();
+    await drain();
     const report = await agent.get(`/api/campaigns/${campaignId}`);
     expect(report.body.report).toMatchObject({ total: 1, sent: 1, failed: 0 });
     expect(report.body.campaign.status).toBe('completed');
@@ -135,7 +143,7 @@ describe('API flow', () => {
     const reply = await agent.post(`/api/inbox/${priya.contact_id}/reply`).send({ body: 'Yes, all week!', clientRequestId: 'abc' });
     await agent.post(`/api/inbox/${priya.contact_id}/reply`).send({ body: 'Yes, all week!', clientRequestId: 'abc' }); // double click
     expect(reply.status).toBe(201);
-    await queue.onIdle();
+    await drain();
     expect(provider.outbox.filter((m) => m.body === 'Yes, all week!')).toHaveLength(1);
     const customers = await agent.get('/api/customers?filter=opted_out');
     expect(customers.body.customers.map((c) => c.phone)).toEqual(['+919123456789']);

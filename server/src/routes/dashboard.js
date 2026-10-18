@@ -1,5 +1,5 @@
 import express from 'express';
-import { query } from '../db/index.js';
+import { query, indiaStartOf } from '../db/index.js';
 import { config } from '../config.js';
 import { getProvider, getSmsProvider } from '../providers/index.js';
 import { clientSettings } from '../lib/campaigns.js';
@@ -9,48 +9,48 @@ const router = express.Router();
 
 router.get('/', async (req, res) => {
   const { rows: [customers] } = await query(
-    `SELECT count(*)::int AS total,
-            count(*) FILTER (WHERE whatsapp_opt_in AND opted_out_at IS NULL)::int AS reachable
+    `SELECT count(*) AS total,
+            count(*) FILTER (WHERE whatsapp_opt_in = 1 AND opted_out_at IS NULL) AS reachable
        FROM contacts WHERE client_id = $1`,
     [req.clientId],
   );
   // This calendar month in India time.
   const { rows: [month] } = await query(
-    `SELECT count(*) FILTER (WHERE status IN ('sent', 'delivered', 'read'))::int AS sent,
-            count(*) FILTER (WHERE status IN ('delivered', 'read'))::int AS delivered,
-            count(*) FILTER (WHERE status = 'read')::int AS read,
-            count(*) FILTER (WHERE status = 'failed')::int AS failed,
-            COALESCE(sum(cost), 0)::float AS spend
+    `SELECT count(*) FILTER (WHERE status IN ('sent', 'delivered', 'read')) AS sent,
+            count(*) FILTER (WHERE status IN ('delivered', 'read')) AS delivered,
+            count(*) FILTER (WHERE status = 'read') AS read,
+            count(*) FILTER (WHERE status = 'failed') AS failed,
+            COALESCE(sum(cost), 0) AS spend
        FROM messages
       WHERE client_id = $1 AND direction = 'outbound'
-        AND created_at >= date_trunc('month', now() AT TIME ZONE 'Asia/Kolkata') AT TIME ZONE 'Asia/Kolkata'`,
-    [req.clientId],
+        AND created_at >= $2`,
+    [req.clientId, indiaStartOf('month')],
   );
   const { rows: [inbox] } = await query(
-    `SELECT count(*)::int AS unread FROM messages WHERE client_id = $1 AND direction = 'inbound' AND seen_at IS NULL`,
+    `SELECT count(*) AS unread FROM messages WHERE client_id = $1 AND direction = 'inbound' AND seen_at IS NULL`,
     [req.clientId],
   );
   const { rows: recent } = await query(
     `SELECT c.id, c.name, c.status, c.created_at, c.scheduled_at,
-            count(m.id)::int AS total,
-            count(m.id) FILTER (WHERE m.status IN ('delivered', 'read'))::int AS delivered,
-            count(m.id) FILTER (WHERE m.status = 'read')::int AS read
+            count(m.id) AS total,
+            count(m.id) FILTER (WHERE m.status IN ('delivered', 'read')) AS delivered,
+            count(m.id) FILTER (WHERE m.status = 'read') AS read
        FROM campaigns c LEFT JOIN messages m ON m.campaign_id = c.id
       WHERE c.client_id = $1 GROUP BY c.id ORDER BY c.created_at DESC LIMIT 5`,
     [req.clientId],
   );
-  const { rows: [t] } = await query('SELECT count(*)::int AS n FROM templates WHERE client_id = $1', [req.clientId]);
+  const { rows: [t] } = await query('SELECT count(*) AS n FROM templates WHERE client_id = $1', [req.clientId]);
   const { rows: [extra] } = await query(
-    `SELECT (SELECT count(*)::int FROM leads WHERE client_id = $1 AND status = 'new') AS new_leads,
-            (SELECT count(*)::int FROM campaigns WHERE client_id = $1 AND status = 'pending_approval') AS pending_approval,
-            (SELECT count(*)::int FROM occasions WHERE client_id = $1 AND enabled) AS occasions_on,
-            (SELECT count(*)::int FROM messages WHERE client_id = $1 AND occasion_id IS NOT NULL
-               AND created_at >= date_trunc('day', now() AT TIME ZONE 'Asia/Kolkata') AT TIME ZONE 'Asia/Kolkata') AS greetings_today,
-            (SELECT COALESCE(sum(amount), 0)::float FROM redemptions WHERE client_id = $1
-               AND redeemed_at >= date_trunc('month', now() AT TIME ZONE 'Asia/Kolkata') AT TIME ZONE 'Asia/Kolkata') AS revenue,
-            (SELECT count(*)::int FROM redemptions WHERE client_id = $1
-               AND redeemed_at >= date_trunc('month', now() AT TIME ZONE 'Asia/Kolkata') AT TIME ZONE 'Asia/Kolkata') AS redeemed`,
-    [req.clientId],
+    `SELECT (SELECT count(*) FROM leads WHERE client_id = $1 AND status = 'new') AS new_leads,
+            (SELECT count(*) FROM campaigns WHERE client_id = $1 AND status = 'pending_approval') AS pending_approval,
+            (SELECT count(*) FROM occasions WHERE client_id = $1 AND enabled = 1) AS occasions_on,
+            (SELECT count(*) FROM messages WHERE client_id = $1 AND occasion_id IS NOT NULL
+               AND created_at >= $3) AS greetings_today,
+            (SELECT COALESCE(sum(amount), 0) FROM redemptions WHERE client_id = $1
+               AND redeemed_at >= $2) AS revenue,
+            (SELECT count(*) FROM redemptions WHERE client_id = $1
+               AND redeemed_at >= $2) AS redeemed`,
+    [req.clientId, indiaStartOf('month'), indiaStartOf('day')],
   );
   res.json({ customers, month: { ...month, spend: Math.round(month.spend * 100) / 100 }, inbox, recent, templates: t.n, ...extra });
 });
