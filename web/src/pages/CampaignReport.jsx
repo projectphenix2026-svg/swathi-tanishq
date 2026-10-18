@@ -112,6 +112,12 @@ export default function CampaignReport() {
             <button className="btn lg" onClick={() => cancel({ ask: false })} disabled={cancelling}>{cancelling ? <Spinner /> : <><Undo2 size={18} />Undo</>}</button>
           </div>
         )}
+        {c.provider === 'mock' && (
+          <Alert tone="warn" icon={AlertCircle}>
+            <b>Test only: nothing reached these phones.</b> This offer was sent while the app is in test mode, so the ticks below are pretend,
+            to show how reports will look. Real messages go out once the shop’s WhatsApp (Meta) account is connected.
+          </Alert>
+        )}
         <div className="card card-pad">
           <p style={{ fontSize: '1.05rem', margin: 0 }}>
             <b>{num(r.sent)}</b> sent · <b>{num(r.delivered)}</b> reached phones · <b>{num(r.read)}</b> read it

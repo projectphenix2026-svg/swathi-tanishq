@@ -60,6 +60,7 @@ export default function Campaigns() {
                   <b style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</b>
                   <CampaignStatus status={c.status} />
                   {c.name.startsWith('Test · ') && <span className="badge neutral">Test to my phone</span>}
+                  {c.provider === 'mock' && <span className="badge warn">Test mode: not really sent</span>}
                 </div>
                 <div className="subtle">
                   {c.status === 'scheduled' ? `Goes out ${dateTime(c.scheduled_at)}` : dateTime(c.started_at || c.created_at)} · {c.template_name}
