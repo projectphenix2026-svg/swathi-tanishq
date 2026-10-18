@@ -783,7 +783,15 @@
   "What each role can do": "ఏ పాత్ర ఏం చేయగలదు",
   "WhatsApp and going live": "వాట్సాప్, లైవ్‌కు వెళ్లడం",
   "When staff send to this many customers, it waits for the owner’s OK.": "సిబ్బంది ఇంత మందికి పంపితే, యజమాని ఆమోదం కోసం ఆగుతుంది.",
-  "Who can sign in": "ఎవరు సైన్ ఇన్ చేయగలరు"
+  "Who can sign in": "ఎవరు సైన్ ఇన్ చేయగలరు",
+  "At least 8 characters.": "కనీసం 8 అక్షరాలు.",
+  "Change password": "పాస్‌వర్డ్ మార్చండి",
+  "Change the first password you were given to one only you know.": "మీకు ఇచ్చిన మొదటి పాస్‌వర్డ్‌ను మీకు మాత్రమే తెలిసిన దానిగా మార్చండి.",
+  "Current password": "ప్రస్తుత పాస్‌వర్డ్",
+  "Forgot it? Ask the owner: Settings → Staff → New password.": "మర్చిపోయారా? యజమానిని అడగండి: సెట్టింగ్‌లు → సిబ్బంది → కొత్త పాస్‌వర్డ్.",
+  "Password changed. Other phones and computers are signed out.": "పాస్‌వర్డ్ మారింది. ఇతర ఫోన్‌లు, కంప్యూటర్‌లు సైన్ అవుట్ అయ్యాయి.",
+  "Yes, remove": "అవును, తీసివేయండి",
+  "is signed out at once and can no longer sign in. Messages they sent stay in the reports.": "వెంటనే సైన్ అవుట్ అవుతారు, ఇక సైన్ ఇన్ చేయలేరు. వారు పంపిన సందేశాలు రిపోర్టుల్లో ఉంటాయి."
  },
  "hi": {
   "% read": "% ने पढ़ा",
@@ -1568,6 +1576,14 @@
   "What each role can do": "कौन क्या कर सकता है",
   "WhatsApp and going live": "व्हाट्सऐप और लाइव करना",
   "When staff send to this many customers, it waits for the owner’s OK.": "स्टाफ़ इतने ग्राहकों को भेजे तो मालिक की मंज़ूरी का इंतज़ार करता है।",
-  "Who can sign in": "कौन साइन इन कर सकता है"
+  "Who can sign in": "कौन साइन इन कर सकता है",
+  "At least 8 characters.": "कम से कम 8 अक्षर।",
+  "Change password": "पासवर्ड बदलें",
+  "Change the first password you were given to one only you know.": "आपको दिया गया पहला पासवर्ड बदलकर ऐसा रखें जो सिर्फ़ आपको पता हो।",
+  "Current password": "मौजूदा पासवर्ड",
+  "Forgot it? Ask the owner: Settings → Staff → New password.": "भूल गए? मालिक से कहें: सेटिंग्स → स्टाफ़ → नया पासवर्ड।",
+  "Password changed. Other phones and computers are signed out.": "पासवर्ड बदल गया। दूसरे फ़ोन और कंप्यूटर साइन आउट हो गए।",
+  "Yes, remove": "हाँ, हटाएँ",
+  "is signed out at once and can no longer sign in. Messages they sent stay in the reports.": "तुरंत साइन आउट हो जाते हैं और फिर साइन इन नहीं कर सकते। उनके भेजे संदेश रिपोर्ट में रहते हैं।"
  }
 }
