@@ -41,10 +41,10 @@ router.post('/', canEdit, async (req, res) => {
   const input = await normalise(req.clientId, req.body);
   if (input.error) return res.status(400).json({ error: input.error });
   const { rows: [o] } = await query(
-    `INSERT INTO occasions (client_id, name, kind, festival_date, days_before, send_hour, template_id, variables, audience, sms_fallback, enabled)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
+    `INSERT INTO occasions (client_id, name, kind, festival_date, days_before, send_hour, template_id, variables, audience, sms_fallback, enabled, repeat_yearly)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
     [req.clientId, input.name, input.kind, input.festival_date, input.days_before, input.send_hour, input.template_id,
-      JSON.stringify(input.variables), JSON.stringify(input.audience), input.sms_fallback, input.enabled],
+      JSON.stringify(input.variables), JSON.stringify(input.audience), input.sms_fallback, input.enabled, input.repeat_yearly],
   );
   res.status(201).json({ occasion: o });
 });
@@ -54,10 +54,10 @@ router.put('/:id', canEdit, async (req, res) => {
   if (input.error) return res.status(400).json({ error: input.error });
   const { rows: [o] } = await query(
     `UPDATE occasions SET name = $3, kind = $4, festival_date = $5, days_before = $6, send_hour = $7, template_id = $8,
-            variables = $9, audience = $10, sms_fallback = $11, enabled = $12, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+            variables = $9, audience = $10, sms_fallback = $11, enabled = $12, repeat_yearly = $13, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
       WHERE id = $1 AND client_id = $2 RETURNING *`,
     [req.params.id, req.clientId, input.name, input.kind, input.festival_date, input.days_before, input.send_hour, input.template_id,
-      JSON.stringify(input.variables), JSON.stringify(input.audience), input.sms_fallback, input.enabled],
+      JSON.stringify(input.variables), JSON.stringify(input.audience), input.sms_fallback, input.enabled, input.repeat_yearly],
   );
   if (!o) return res.status(404).json({ error: 'Occasion not found.' });
   res.json({ occasion: o });
@@ -91,7 +91,7 @@ router.delete('/:id', canEdit, async (req, res) => {
 
 async function normalise(clientId, b = {}) {
   const kind = KINDS.includes(b.kind) ? b.kind : null;
-  if (!kind) return { error: 'Choose birthday, anniversary, festival or after a purchase.' };
+  if (!kind) return { error: 'Choose birthday, anniversary, a festival or event, or after a purchase.' };
   const name = String(b.name || '').trim().slice(0, 80);
   if (!name) return { error: 'Give the occasion a name.' };
   const days = [...new Set((Array.isArray(b.days_before) ? b.days_before : [0]).map(Number).filter((n) => Number.isInteger(n) && n >= (kind === 'thank_you' ? 1 : 0) && n <= 30))];
@@ -101,7 +101,7 @@ async function normalise(clientId, b = {}) {
   let festival = null;
   if (kind === 'festival') {
     festival = String(b.festival_date || '').slice(0, 10);
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(festival)) return { error: 'Pick the festival date.' };
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(festival)) return { error: 'Pick the date of the festival or event.' };
   }
   const { rows: [t] } = await query('SELECT id, status FROM templates WHERE id = $1 AND client_id = $2', [b.template_id, clientId]);
   if (!t) return { error: 'Choose the message to send.' };
@@ -116,6 +116,7 @@ async function normalise(clientId, b = {}) {
     audience: typeof b.audience === 'object' && b.audience ? b.audience : { mode: 'all' },
     sms_fallback: Boolean(b.sms_fallback),
     enabled: b.enabled !== false,
+    repeat_yearly: kind === 'festival' && Boolean(b.repeat_yearly),
   };
 }
 

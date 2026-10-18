@@ -34,6 +34,25 @@ function dayKeys(target) {
 const column = (kind) => (kind === 'birthday' ? 'birthday' : 'anniversary');
 const festivalDay = (o) => (o.festival_date ? String(o.festival_date).slice(0, 10) : null);
 
+/** True when an event falls on `target` (YYYY-MM-DD); a yearly event matches its month and day in any later year. */
+function eventOn(o, target) {
+  const fest = festivalDay(o);
+  if (!fest) return false;
+  if (!o.repeat_yearly) return fest === target;
+  return target >= fest && dayKeys(target).includes(fest.slice(5));
+}
+
+/** The event's dates around `from`, for the upcoming list (a yearly event can fall in this year and next). */
+function eventDates(o, from) {
+  const fest = festivalDay(o);
+  if (!fest) return [];
+  if (!o.repeat_yearly) return [fest];
+  const y = Number(from.slice(0, 4));
+  return [y, y + 1]
+    .map((yr) => `${yr}-${fest.slice(5) === '02-29' && !isLeap(yr) ? '02-28' : fest.slice(5)}`)
+    .filter((d) => d >= fest);
+}
+
 /** Queues today's greetings for one occasion. Safe to run any number of times a day. */
 export async function runOccasion(occasion, { now = new Date(), force = false } = {}) {
   const { date: today, hour } = indiaNow(now);
@@ -49,7 +68,7 @@ export async function runOccasion(occasion, { now = new Date(), force = false } 
     let extraParams = [];
     let suffixDate = target;
     if (occasion.kind === 'festival') {
-      if (festivalDay(occasion) !== target) continue;
+      if (!eventOn(occasion, target)) continue;
     } else if (occasion.kind === 'thank_you') {
       // "After a purchase": customers who used a bill code `before` days ago (India date).
       suffixDate = addDays(today, -before);
@@ -115,17 +134,18 @@ export async function upcoming(clientId, occasion, days = 30, now = new Date()) 
     return list.sort((a, b) => a.sendOn.localeCompare(b.sendOn));
   }
   if (occasion.kind === 'festival') {
-    const fest = festivalDay(occasion);
     const { where, params } = audienceWhere(clientId, occasion.audience);
     const { rows: [r] } = await query(
       `SELECT count(*) AS n, (SELECT json_group_array(name) FROM (SELECT c.name FROM contacts c WHERE ${where} AND ${ELIGIBLE} LIMIT 3)) AS names
          FROM contacts c WHERE ${where} AND ${ELIGIBLE}`,
       params,
     );
-    for (const before of occasion.days_before || [0]) {
-      const sendOn = fest && addDays(fest, -before);
-      if (sendOn && sendOn >= today && sendOn <= addDays(today, days - 1) && r.n) {
-        list.push({ sendOn, occasionDate: fest, before, count: r.n, names: JSON.parse(r.names || '[]') });
+    for (const fest of eventDates(occasion, today)) {
+      for (const before of occasion.days_before || [0]) {
+        const sendOn = addDays(fest, -before);
+        if (sendOn >= today && sendOn <= addDays(today, days - 1) && r.n) {
+          list.push({ sendOn, occasionDate: fest, before, count: r.n, names: JSON.parse(r.names || '[]') });
+        }
       }
     }
     return list.sort((a, b) => a.sendOn.localeCompare(b.sendOn));

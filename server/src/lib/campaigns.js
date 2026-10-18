@@ -51,12 +51,26 @@ export const bodyFor = (template, channel) => (channel === 'sms' ? template?.sms
 const CUSTOMER_KEYS = { name: 'name', full_name: 'name', city: 'city', last_purchase: 'last_purchase', interests: 'interests' };
 const GENERATED = new Set(['offer_code', 'days_left']);
 
-/** SQL true when the customer already got `cap` marketing messages in the last 7 days. */
-function atCapSql(cap) {
+/** SQL: how many WhatsApp offers customer `c` got in the last 7 days (what the weekly limit counts). */
+export function offersThisWeekSql() {
   return `(SELECT count(*) FROM messages mm JOIN templates tt ON tt.id = mm.template_id
             WHERE mm.contact_id = c.id AND mm.channel = 'whatsapp' AND tt.category = 'marketing'
               AND mm.status IN ('queued', 'retrying', 'sending', 'sent', 'delivered', 'read')
-              AND mm.created_at > ${ago('7 days')}) >= ${Number(cap)}`;
+              AND mm.created_at > ${ago('7 days')})`;
+}
+
+/** SQL: the name and time of the last offer customer `c` got, as "name|time". */
+export function lastOfferSql() {
+  return `(SELECT COALESCE(cc.name, tt.name) || '|' || mm.created_at FROM messages mm
+             JOIN templates tt ON tt.id = mm.template_id LEFT JOIN campaigns cc ON cc.id = mm.campaign_id
+            WHERE mm.contact_id = c.id AND mm.channel = 'whatsapp' AND tt.category = 'marketing'
+              AND mm.status IN ('queued', 'retrying', 'sending', 'sent', 'delivered', 'read')
+            ORDER BY mm.created_at DESC LIMIT 1)`;
+}
+
+/** SQL true when the customer already got `cap` marketing messages in the last 7 days. */
+function atCapSql(cap) {
+  return `${offersThisWeekSql()} >= ${Number(cap)}`;
 }
 
 export async function clientSettings(clientId) {
@@ -73,8 +87,10 @@ export async function sendConditions(clientId, template, variables, { ignoreCap 
     .map((col) => `c.${col} IS NOT NULL AND trim(c.${col}) <> ''`);
   const campaignBlank = keys.some((k) => !CUSTOMER_KEYS[k] && !GENERATED.has(k) && !String(variables?.[k] || '').trim());
   const { weekly_cap: cap } = await clientSettings(clientId);
-  // The weekly limit protects the WhatsApp number; bulk SMS is not counted.
-  const capped = !ignoreCap && channel !== 'sms' && template?.category === 'marketing' && cap > 0 ? atCapSql(cap) : null;
+  // The weekly limit protects the WhatsApp number; bulk SMS is not counted. Before a message is
+  // picked (step 1 of Send an offer) it is counted as an offer, so the first number shown is already right.
+  const marketing = template ? template.category === 'marketing' : true;
+  const capped = !ignoreCap && channel !== 'sms' && marketing && cap > 0 ? atCapSql(cap) : null;
   return { keys, conds, campaignBlank, capped };
 }
 
@@ -106,9 +122,20 @@ export async function previewAudience(clientId, { audience, template, variables,
   for (const k of keys) if (!CUSTOMER_KEYS[k] && !GENERATED.has(k) && !String(variables?.[k] || '').trim()) missing[k] = counts.eligible;
 
   let atCap = 0;
+  let atCapPeople = [];
   if (capped) {
     const { rows: [m] } = await query(`SELECT count(*) AS n FROM contacts c WHERE ${where} AND ${ELIGIBLE} AND ${capped}`, params);
     atCap = m.n;
+    // Name them, so staff see exactly who already got offers and when.
+    const { rows } = await query(
+      `SELECT c.id, c.name, c.phone, ${offersThisWeekSql()} AS offers, ${lastOfferSql()} AS last
+         FROM contacts c WHERE ${where} AND ${ELIGIBLE} AND ${capped} ORDER BY c.name LIMIT 10`,
+      params,
+    );
+    atCapPeople = rows.map(({ last, ...r }) => {
+      const [lastOffer, lastAt] = String(last || '').split('|');
+      return { ...r, lastOffer: lastOffer || null, lastAt: lastAt || null };
+    });
   }
   let sendable = 0;
   if (!campaignBlank) {
@@ -124,15 +151,17 @@ export async function previewAudience(clientId, { audience, template, variables,
       WHERE ${where} AND ${ELIGIBLE} ORDER BY c.name IS NULL, c.name, c.id LIMIT 50`,
     params,
   );
-  const { approval_threshold: threshold } = await clientSettings(clientId);
+  const { approval_threshold: threshold, weekly_cap: weeklyCap } = await clientSettings(clientId);
   const costPerMessage = channel === 'sms' ? config.sms.costPerSms : config.costPerMessage;
   return {
     ...counts,
     channel,
     missing,
     atCap,
+    atCapPeople,
     sendable,
     approvalThreshold: threshold,
+    weeklyCap,
     costPerMessage,
     estimatedCost: round2(sendable * costPerMessage),
     smsReady: Boolean(template?.sms_body),

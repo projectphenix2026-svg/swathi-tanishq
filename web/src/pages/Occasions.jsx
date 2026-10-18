@@ -11,7 +11,7 @@ import { dateOnly, inr, num, pct, plural } from '../lib/format.js';
 const KINDS = {
   birthday: { label: 'Birthday', icon: CakeSlice, tone: 'tone-gold', hint: 'Uses each customer’s birthday from your list.' },
   anniversary: { label: 'Anniversary', icon: Heart, tone: 'tone-brand', hint: 'Uses each customer’s wedding anniversary.' },
-  festival: { label: 'Festival', icon: Sparkles, tone: 'tone-wa', hint: 'One date for everyone, e.g. Diwali or Akshaya Tritiya.' },
+  festival: { label: 'Festival or event', icon: Sparkles, tone: 'tone-wa', hint: 'Any date you choose: a festival, a sale, the shop’s anniversary, a new collection launch.' },
   thank_you: { label: 'After a purchase', icon: Star, tone: 'tone-gold', hint: 'A thank-you with a “Rate us on Google” button, the day after a bill code is used.' },
 };
 // "After a purchase": how many days after the bill code was used.
@@ -36,6 +36,29 @@ const WHEN = [
   { d: 0, label: 'On the day' },
 ];
 const HOURS = [8, 9, 10, 11, 12, 16, 17, 18, 19];
+
+// Quick ideas for "Add festival or event". Festivals that move each year carry this year's date
+// (check it before switching on); fixed-date days repeat every year.
+const EVENT_IDEAS = [
+  { name: 'Dhanteras', date: '2026-11-06' },
+  { name: 'Diwali', date: '2026-11-08' },
+  { name: 'Christmas', md: '12-25' },
+  { name: 'New Year', md: '01-01' },
+  { name: 'Sankranti', md: '01-14' },
+  { name: 'Republic Day sale', md: '01-26' },
+  { name: 'Valentine’s Day', md: '02-14' },
+  { name: 'Women’s Day', md: '03-08' },
+  { name: 'Independence Day sale', md: '08-15' },
+  { name: 'Shop anniversary', md: '' },
+  { name: 'Gold exhibition', date: '' },
+  { name: 'New collection launch', date: '' },
+];
+/** The next date (today or later) for a month-day like '12-25'. */
+function nextOn(md, today) {
+  const y = Number(today.slice(0, 4));
+  return `${y}-${md}` >= today ? `${y}-${md}` : `${y + 1}-${md}`;
+}
+const todayIndia = () => new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10);
 const CAMPAIGN_VARS = VARIABLES.filter((v) => v.source === 'campaign');
 const EXAMPLE_CUSTOMER = { name: 'Priya Sharma', city: 'Hyderabad', last_purchase: 'gold bangles', interests: 'bridal' };
 
@@ -78,9 +101,9 @@ export default function Occasions() {
       <div className="page-head">
         <div>
           <h1>Send offer</h1>
-          <p>Birthday, anniversary and festival wishes go out every morning on their own. Nobody has to press anything.</p>
+          <p>Birthday, anniversary, festival and shop-event wishes go out on their own. Add any event you like, on any date.</p>
         </div>
-        {canEdit && <button className="btn primary" onClick={() => setEditing({ kind: 'festival' })}><Plus size={18} />Add festival</button>}
+        {canEdit && <button className="btn primary" onClick={() => setEditing({ kind: 'festival' })}><Plus size={18} />Add festival or event</button>}
       </div>
       <div style={{ marginBottom: 16 }}><SectionTabs tabs={[{ to: '/campaigns', label: 'Offers sent' }, { to: '/occasions', label: 'Automatic wishes' }]} /></div>
 
@@ -155,7 +178,7 @@ function OccasionCard({ o, canEdit, onToggle, onEdit }) {
         <div style={{ flex: 1, minWidth: 0 }}>
           <h3>{o.name}</h3>
           <p className="subtle">
-            {o.kind === 'festival' ? `${dateOnly(o.festival_date)} · ` : ''}Sends {whenText(o.days_before, o.kind)}, at {hourText(o.send_hour)}
+            {o.kind === 'festival' ? (o.repeat_yearly ? `Every year on ${dateOnly(o.festival_date).replace(/ \d{4}$/, '')} · ` : `${dateOnly(o.festival_date)} · `) : ''}Sends {whenText(o.days_before, o.kind)}, at {hourText(o.send_hour)}
           </p>
         </div>
         {canEdit && (
@@ -203,7 +226,7 @@ function OccasionEditor({ initial, templates, businessName, onClose, onSaved }) 
   const toast = useToast();
   const isNew = !initial.id;
   const [o, setO] = useState({
-    name: initial.name || KINDS[initial.kind].label,
+    name: initial.name || (initial.kind === 'festival' ? '' : KINDS[initial.kind].label),
     kind: initial.kind,
     festival_date: initial.festival_date ? String(initial.festival_date).slice(0, 10) : '',
     days_before: initial.days_before || (initial.kind === 'festival' ? [3, 0] : initial.kind === 'thank_you' ? [1] : [0]),
@@ -212,6 +235,7 @@ function OccasionEditor({ initial, templates, businessName, onClose, onSaved }) 
     variables: initial.variables || {},
     sms_fallback: Boolean(initial.sms_fallback),
     enabled: initial.enabled ?? true,
+    repeat_yearly: Boolean(initial.repeat_yearly),
   });
   const [busy, setBusy] = useState(false);
   const [list, setList] = useState(templates);
@@ -233,7 +257,7 @@ function OccasionEditor({ initial, templates, businessName, onClose, onSaved }) 
     }
   }
   const needed = useMemo(() => (template ? CAMPAIGN_VARS.filter((v) => extractVariables(template.body).includes(v.key)) : []), [template]);
-  const values = { ...valuesFor(EXAMPLE_CUSTOMER, o.variables), days_left: String(Math.max(...o.days_before)), offer_code: `PRIYA-${o.kind === 'birthday' ? 'BDAY' : o.kind === 'anniversary' ? 'ANNIV' : o.kind === 'thank_you' ? 'THANKS' : 'FEST'}-4821` };
+  const values = { ...valuesFor(EXAMPLE_CUSTOMER, { store: businessName || '', ...o.variables }), days_left: String(Math.max(...o.days_before)), offer_code: `PRIYA-${o.kind === 'birthday' ? 'BDAY' : o.kind === 'anniversary' ? 'ANNIV' : o.kind === 'thank_you' ? 'THANKS' : 'FEST'}-4821` };
 
   const toggleDay = (d) => set({ days_before: o.days_before.includes(d) ? o.days_before.filter((x) => x !== d) : [...o.days_before, d] });
 
@@ -252,19 +276,45 @@ function OccasionEditor({ initial, templates, businessName, onClose, onSaved }) 
 
   return (
     <Modal
-      title={isNew ? `New ${KINDS[o.kind].label.toLowerCase()} greeting` : `Edit ${o.name}`}
+      title={isNew ? (o.kind === 'festival' ? 'New festival or event' : `New ${KINDS[o.kind].label.toLowerCase()} greeting`) : `Edit ${o.name}`}
       onClose={onClose}
       width={880}
-      footer={<><button className="btn" onClick={onClose}>Cancel</button><button className="btn primary" onClick={save} disabled={busy || !o.days_before.length || !o.template_id}>{busy ? <Spinner /> : isNew ? 'Switch on' : 'Save'}</button></>}
+      footer={<><button className="btn" onClick={onClose}>Cancel</button><button className="btn primary" onClick={save} disabled={busy || !o.days_before.length || !o.template_id || !o.name.trim() || (o.kind === 'festival' && !o.festival_date)}>{busy ? <Spinner /> : isNew ? 'Switch on' : 'Save'}</button></>}
     >
       <div className="two-col" style={{ gridTemplateColumns: 'minmax(0,1fr) 300px' }}>
         <div className="stack">
+          {o.kind === 'festival' && isNew && (
+            <Field label="Pick an idea, or type your own below">
+              <div className="chips">
+                {EVENT_IDEAS.map((e) => (
+                  <button
+                    key={e.name}
+                    type="button"
+                    className={`chip ${o.name === e.name ? 'on' : ''}`}
+                    onClick={() => set({ name: e.name, festival_date: e.md ? nextOn(e.md, todayIndia()) : e.date || o.festival_date, repeat_yearly: e.md !== undefined })}
+                  >
+                    {e.name}
+                  </button>
+                ))}
+              </div>
+            </Field>
+          )}
           <div className="form-grid two">
-            <Field label="Name"><input className="input" value={o.name} onChange={(e) => set({ name: e.target.value })} /></Field>
+            <Field label={o.kind === 'festival' ? 'Event name' : 'Name'}>
+              <input className="input" value={o.name} onChange={(e) => set({ name: e.target.value })} placeholder={o.kind === 'festival' ? 'e.g. Shop anniversary sale' : undefined} />
+            </Field>
             {o.kind === 'festival' && (
-              <Field label="Festival date"><input className="input" type="date" value={o.festival_date} onChange={(e) => set({ festival_date: e.target.value })} /></Field>
+              <Field label="Date" hint={o.repeat_yearly ? 'Sent on this date every year.' : 'Festival dates change each year; please check.'}>
+                <input className="input" type="date" value={o.festival_date} onChange={(e) => set({ festival_date: e.target.value })} />
+              </Field>
             )}
           </div>
+          {o.kind === 'festival' && (
+            <label className="check">
+              <span className="switch"><input type="checkbox" checked={o.repeat_yearly} onChange={(e) => set({ repeat_yearly: e.target.checked })} /><span /></span>
+              <span><b>Same date every year</b><span className="hint" style={{ display: 'block' }}>For the shop’s anniversary, Christmas or New Year. Leave off for festivals whose date changes.</span></span>
+            </label>
+          )}
           {isThanks && !hasThanksMessage && (
             <div className="card card-pad stack-sm" style={{ background: 'var(--surface-2)' }}>
               <b>Ready-made thank-you message</b>
