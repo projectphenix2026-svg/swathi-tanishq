@@ -588,3 +588,16 @@ code, .code { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; f
   .tpl-new { min-height: 90px; }
   .send-preview.empty { display: none; }
 }
+
+/* ---------- Customer form (redesign stage 3) ---------- */
+.cust-card { max-width: 640px; }
+.cust-form { display: flex; flex-direction: column; gap: 16px; }
+.req { color: var(--bad); }
+.day-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); }
+.day-kind { font-weight: 600; font-size: 0.9rem; min-width: 150px; }
+.day-label { flex: 1 1 180px; min-width: 0; height: 36px; }
+.day-picker { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.day-picker .select { height: 36px; width: auto; padding-right: 28px; }
+.day-picker .input { height: 36px; width: 76px; }
+.day-row .icon-btn { margin-left: auto; }
+.check.consent { padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; }

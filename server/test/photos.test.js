@@ -26,7 +26,7 @@ beforeAll(async () => {
   setProvider(provider);
   owner = request.agent(createApp());
   await owner.post('/api/auth/login').send({ email: 'owner@example.com', password: 'owner-password-1' });
-  await owner.post('/api/customers').send({ name: 'Priya', phone: '90000 70001', whatsapp_opt_in: true });
+  await owner.post('/api/customers').send({ city: 'Hyderabad', name: 'Priya', phone: '90000 70001', whatsapp_opt_in: true });
 });
 afterAll(() => closeDb());
 

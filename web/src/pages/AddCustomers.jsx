@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   AlertTriangle, ArrowLeft, CheckCircle2, ClipboardPaste, Copy, Download, FileSpreadsheet, MessageSquareText, RefreshCw, Send, Table, Upload, UserPlus, XCircle,
@@ -9,6 +9,8 @@ const importer = () => import('@shared/importer.js');
 import { downloadSample } from '../lib/sample.js';
 import { api, apiText } from '../lib/api.js';
 import { Alert, Field, Spinner, useToast } from '../components/ui.jsx';
+import { CustomerFields, customerBody, customerForm } from '../components/CustomerFields.jsx';
+import { useAuth } from '../lib/auth.js';
 import { num, plural } from '../lib/format.js';
 
 const TABS = [
@@ -34,7 +36,7 @@ export default function AddCustomers() {
       <div className="page-head">
         <div>
           <h1>Add customers</h1>
-          <p>Bring in your list once; every offer you send uses it. Numbers are tidied to +91 format automatically.</p>
+          <p>Bring in your list once; every message you send uses it. Numbers are tidied to +91 format automatically.</p>
         </div>
       </div>
 
@@ -229,12 +231,14 @@ function ImportReview({ preview, onBack, onDone, onRemap }) {
   const [updateExisting, setUpdateExisting] = useState(false);
   const [source, setSource] = useState(preview.source);
   const [tags, setTags] = useState('');
+  const [defaultCity, setDefaultCity] = useState('');
   const [busy, setBusy] = useState(false);
   const [remapping, setRemapping] = useState(false);
   const [progress, setProgress] = useState(0);
   const s = preview.summary;
   const willAdd = s.ok + (updateExisting ? s.exists : 0);
   const optInColumn = preview.mapping.opt_in !== undefined;
+  const noCity = preview.rows.filter((r) => (r.status === 'ok' || (updateExisting && r.status === 'exists')) && !String(r.city || '').trim()).length;
 
   const rows = useMemo(() => (show === 'all' ? preview.rows : preview.rows.filter((r) => r.status === show)).slice(0, 300), [show, preview.rows]);
 
@@ -264,7 +268,7 @@ function ImportReview({ preview, onBack, onDone, onRemap }) {
         setProgress(Math.round((i / toSave.length) * 100));
         const r = await api('/api/customers/import/commit', {
           method: 'POST',
-          body: { rows: toSave.slice(i, i + 500), optIn: { confirmed: optIn || smsOptIn ? confirmed : true, value: optIn, sms: smsOptIn }, updateExisting, source, tags: tags.split(',') },
+          body: { rows: toSave.slice(i, i + 500), optIn: { confirmed: optIn || smsOptIn ? confirmed : true, value: optIn, sms: smsOptIn }, updateExisting, source, tags: tags.split(','), defaultCity },
         });
         total.created += r.created;
         total.updated += r.updated;
@@ -279,7 +283,7 @@ function ImportReview({ preview, onBack, onDone, onRemap }) {
   }
 
   const fields = [
-    ['phone', 'Phone number', true], ['name', 'Name'], ['city', 'City'], ['last_purchase', 'Last purchase'],
+    ['phone', 'Phone number', true], ['name', 'Name'], ['city', 'City', true], ['last_purchase', 'Last purchase'],
     ['interests', 'Interests'], ['birthday', 'Birthday'], ['anniversary', 'Anniversary'], ['opt_in', 'Agreed to WhatsApp'],
   ];
 
@@ -351,6 +355,14 @@ function ImportReview({ preview, onBack, onDone, onRemap }) {
         </div>
       </div>
 
+      {noCity > 0 && (
+        <div className="card card-pad stack-sm" style={{ borderColor: defaultCity.trim() ? 'var(--border)' : 'var(--warn)' }}>
+          <h2>City for {plural(noCity, 'customer')} without one</h2>
+          <span className="subtle">Every customer needs a city. These rows have none in the file; type the city they belong to.</span>
+          <input id="import-city" className="input" style={{ maxWidth: 300 }} value={defaultCity} onChange={(e) => setDefaultCity(e.target.value)} placeholder="e.g. Hyderabad" autoComplete="off" />
+        </div>
+      )}
+
       <div className="card card-pad stack">
         <h2>WhatsApp permission</h2>
         <label className="check">
@@ -398,7 +410,7 @@ function ImportReview({ preview, onBack, onDone, onRemap }) {
 
       <div className="action-bar">
         <button className="btn ghost" onClick={onBack}><ArrowLeft size={18} />Start over</button>
-        <button className="btn primary lg" onClick={save} disabled={busy || !willAdd || ((optIn || smsOptIn) && !confirmed)}>
+        <button className="btn primary lg" onClick={save} disabled={busy || !willAdd || ((optIn || smsOptIn) && !confirmed) || (noCity > 0 && !defaultCity.trim())}>
           {busy ? <><Spinner />{willAdd > 500 ? ` Saving… ${progress}%` : ''}</> : willAdd ? `Add ${plural(willAdd, 'customer')}` : 'Nothing to add'}
         </button>
       </div>
@@ -429,28 +441,40 @@ function ImportDone({ result, onAgain }) {
 }
 
 /* ---------- One customer ---------- */
-const EMPTY = { name: '', phone: '', city: '', last_purchase: '', interests: '', birthday: '', anniversary: '', whatsapp_opt_in: true, sms_opt_in: false, opt_in_source: 'Agreed at the store' };
-
 function OneCustomer() {
   const toast = useToast();
-  const [f, setF] = useState(EMPTY);
+  const navigate = useNavigate();
+  const { settings } = useAuth();
+  const [f, setF] = useState(customerForm());
   const [errors, setErrors] = useState({});
   const [touched, setTouched] = useState(false);
   const [busy, setBusy] = useState(false);
-  const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }));
   const phone = f.phone ? normalizePhone(f.phone) : null;
+  // A field's error goes away as soon as it is filled in.
+  useEffect(() => {
+    setErrors((er) => Object.fromEntries(Object.entries(er).filter(([k]) => !String(f[k] ?? '').trim())));
+  }, [f]);
 
-  async function save(e) {
-    e.preventDefault();
+  async function save(e, again) {
+    e?.preventDefault();
     setTouched(true);
+    const missing = {};
+    if (!f.name.trim()) missing.name = 'Add the customer’s name.';
+    if (!phone?.ok) missing.phone = phone ? phone.reason : 'Add the WhatsApp number.';
+    if (!f.city.trim()) missing.city = 'Add the customer’s city or town.';
+    setErrors(missing);
+    if (Object.keys(missing).length) return;
     setBusy(true);
-    setErrors({});
     try {
-      const r = await api('/api/customers', { method: 'POST', body: f });
+      const r = await api('/api/customers', { method: 'POST', body: { ...customerBody(f), phone: f.phone, whatsapp_opt_in: f.whatsapp_opt_in, opt_in_source: 'Agreed at the store' } });
       toast(`${r.customer.name} added`);
-      setF({ ...EMPTY, opt_in_source: f.opt_in_source });
-      setTouched(false);
-      document.getElementById('one-name')?.focus();
+      if (again) {
+        setF({ ...customerForm(), city: f.city });
+        setTouched(false);
+        document.getElementById('cust-name')?.focus();
+      } else {
+        navigate('/customers');
+      }
     } catch (err) {
       setErrors(err.data?.fields || {});
       toast(err.message, 'bad');
@@ -459,42 +483,23 @@ function OneCustomer() {
     }
   }
 
+  const phoneField = (
+    <Field
+      label={<>WhatsApp number <span className="req">*</span></>}
+      htmlFor="cust-phone"
+      error={errors.phone || (touched || f.phone.replace(/\D/g, '').length >= 10 ? (phone && !phone.ok ? phone.reason : null) : null)}
+      hint={phone?.ok ? `Will be saved as ${phone.display}` : '10-digit mobile number; +91 is added for you'}
+    >
+      <input id="cust-phone" name="customer-phone" autoComplete="off" className={`input ${errors.phone ? 'invalid' : ''}`} value={f.phone} onChange={(e) => setF((x) => ({ ...x, phone: e.target.value }))} inputMode="tel" placeholder="98765 43210" />
+    </Field>
+  );
+
   return (
-    <form className="card card-pad stack" onSubmit={save} noValidate>
-      <div className="form-grid two">
-        <Field label="Name *" htmlFor="one-name" error={errors.name}>
-          <input id="one-name" className={`input ${errors.name ? 'invalid' : ''}`} value={f.name} onChange={set('name')} autoFocus placeholder="Priya Sharma" />
-        </Field>
-        <Field
-          label="WhatsApp number *"
-          htmlFor="one-phone"
-          error={errors.phone || (touched || (f.phone.replace(/\D/g, '').length >= 10) ? (phone && !phone.ok ? phone.reason : null) : null)}
-          hint={phone?.ok ? `Will be saved as ${phone.display}` : '10-digit mobile number; +91 is added for you'}
-        >
-          <input id="one-phone" className={`input ${errors.phone ? 'invalid' : ''}`} value={f.phone} onChange={set('phone')} inputMode="tel" placeholder="98765 43210" />
-        </Field>
-        <Field label="City"><input className="input" value={f.city} onChange={set('city')} placeholder="Hyderabad" /></Field>
-        <Field label="Last purchase" hint="Used as {{last_purchase}} in messages."><input className="input" value={f.last_purchase} onChange={set('last_purchase')} placeholder="Gold bangles" /></Field>
-        <Field label="Interests"><input className="input" value={f.interests} onChange={set('interests')} placeholder="Bridal, diamonds" /></Field>
-        <div />
-        <Field label="Birthday" error={errors.birthday}><input className="input" type="date" value={f.birthday} onChange={set('birthday')} /></Field>
-        <Field label="Anniversary" error={errors.anniversary}><input className="input" type="date" value={f.anniversary} onChange={set('anniversary')} /></Field>
-      </div>
-      <div className="divider" />
-      <label className="check">
-        <span className="switch"><input type="checkbox" checked={f.whatsapp_opt_in} onChange={set('whatsapp_opt_in')} /><span /></span>
-        <span><b>Customer agreed to receive WhatsApp offers</b><span className="hint" style={{ display: 'block' }}>Without this, they are saved but never sent offers.</span></span>
-      </label>
-      <label className="check">
-        <span className="switch"><input type="checkbox" checked={f.sms_opt_in} onChange={set('sms_opt_in')} /><span /></span>
-        <span><b>Customer agreed to receive SMS</b><span className="hint" style={{ display: 'block' }}>Only used as a backup if they are not on WhatsApp.</span></span>
-      </label>
-      {(f.whatsapp_opt_in || f.sms_opt_in) && (
-        <Field label="How did they agree?"><input className="input" value={f.opt_in_source} onChange={set('opt_in_source')} /></Field>
-      )}
-      {!f.name.trim() && touched && <Alert tone="warn" icon={AlertTriangle}>A name lets every message start with “Hi Priya”, not a generic greeting.</Alert>}
-      <div className="row" style={{ justifyContent: 'flex-end' }}>
+    <form className="card card-pad cust-card" onSubmit={(e) => save(e, false)} noValidate autoComplete="off">
+      <CustomerFields f={f} setF={setF} errors={errors} phoneField={phoneField} smsOn={settings?.sms?.live} />
+      <div className="row wrap" style={{ gap: 8, marginTop: 16 }}>
         <button className="btn primary lg" disabled={busy}>{busy ? <Spinner /> : <><UserPlus size={18} />Save customer</>}</button>
+        <button type="button" className="btn lg" disabled={busy} onClick={(e) => save(e, true)}>Save and add another</button>
       </div>
     </form>
   );

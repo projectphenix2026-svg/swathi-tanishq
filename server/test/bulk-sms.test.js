@@ -22,9 +22,9 @@ beforeAll(async () => {
   agent = request.agent(createApp());
   await agent.post('/api/auth/login').send({ email: 'owner@example.com', password: 'owner-password-1' });
   // Two agreed to SMS, one only to WhatsApp, one said STOP.
-  await agent.post('/api/customers').send({ name: 'Priya', phone: '90000 50001', whatsapp_opt_in: true, sms_opt_in: true });
-  await agent.post('/api/customers').send({ name: 'Ravi', phone: '90000 50002', sms_opt_in: true });
-  await agent.post('/api/customers').send({ name: 'Kiran', phone: '90000 50003', whatsapp_opt_in: true });
+  await agent.post('/api/customers').send({ city: 'Hyderabad', name: 'Priya', phone: '90000 50001', whatsapp_opt_in: true, sms_opt_in: true });
+  await agent.post('/api/customers').send({ city: 'Hyderabad', name: 'Ravi', phone: '90000 50002', sms_opt_in: true });
+  await agent.post('/api/customers').send({ city: 'Hyderabad', name: 'Kiran', phone: '90000 50003', whatsapp_opt_in: true });
   await query("UPDATE contacts SET sms_opt_in = 1 WHERE phone IN ('+919000050001', '+919000050002')");
 });
 afterAll(() => closeDb());

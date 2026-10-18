@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Download, MapPin, Search, ShoppingBag, Trash2, UserPlus, Users } from 'lucide-react';
+import { Download, Search, Trash2, UserPlus, Users } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.js';
 import { downloadSample } from '../lib/sample.js';
-import { Avatar, Empty, Field, Modal, OptInBadge, Skeleton, Spinner, useToast } from '../components/ui.jsx';
+import { Avatar, Empty, Modal, OptInBadge, Skeleton, Spinner, useToast } from '../components/ui.jsx';
+import { CustomerFields, customerBody, customerForm, dayText } from '../components/CustomerFields.jsx';
 import { dateOnly, num, phone } from '../lib/format.js';
 
 const FILTERS = [
@@ -92,7 +93,7 @@ export default function Customers() {
               <div className="table-wrap hide-mobile">
                 <table className="table">
                   <thead>
-                    <tr><th>Customer</th><th>Phone</th><th>City</th><th>Last purchase</th><th>WhatsApp</th><th>Added</th></tr>
+                    <tr><th>Customer</th><th>Phone</th><th>City</th><th>Special days</th><th>WhatsApp</th><th>Added</th></tr>
                   </thead>
                   <tbody>
                     {data.customers.map((c) => (
@@ -108,7 +109,7 @@ export default function Customers() {
                         </td>
                         <td className="num">{phone(c.phone)}</td>
                         <td>{c.city || <span className="subtle">—</span>}</td>
-                        <td>{c.last_purchase || <span className="subtle">—</span>}</td>
+                        <td className="subtle">{specialDays(c) || '—'}</td>
                         <td><OptInBadge c={c} /></td>
                         <td className="subtle">{dateOnly(c.created_at)}</td>
                       </tr>
@@ -146,30 +147,43 @@ export default function Customers() {
   );
 }
 
+/** "Birthday 14 March · Anniversary 2 May" for the list. */
+function specialDays(c) {
+  return [
+    c.birthday && `Birthday ${dayText(c.birthday)}`,
+    c.anniversary && `Anniversary ${dayText(c.anniversary)}`,
+    (c.dates || []).length ? `+${c.dates.length} more` : null,
+  ].filter(Boolean).join(' · ');
+}
+
 function EditCustomer({ c, onClose, onSaved }) {
   const toast = useToast();
-  const [f, setF] = useState({
-    name: c.name || '', city: c.city || '', last_purchase: c.last_purchase || '', interests: c.interests || '',
-    birthday: c.birthday ? String(c.birthday).slice(0, 10) : '', anniversary: c.anniversary ? String(c.anniversary).slice(0, 10) : '',
-    whatsapp_opt_in: c.whatsapp_opt_in && !c.opted_out_at,
-    sms_opt_in: Boolean(c.sms_opt_in),
-  });
+  const [f, setF] = useState(customerForm(c));
+  const [errors, setErrors] = useState({});
+  // A field's error goes away as soon as it is filled in.
+  useEffect(() => {
+    setErrors((er) => Object.fromEntries(Object.entries(er).filter(([k]) => !String(f[k] ?? '').trim())));
+  }, [f]);
   const [busy, setBusy] = useState(false);
   const [askDelete, setAskDelete] = useState(false);
-  const { user } = useAuth();
+  const { user, settings } = useAuth();
   const canDelete = user?.role !== 'viewer';
-  const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }));
   const changedOpt = f.whatsapp_opt_in !== (c.whatsapp_opt_in && !c.opted_out_at);
 
   const save = async () => {
+    if (!f.name.trim() || !f.city.trim()) {
+      setErrors({ name: f.name.trim() ? null : 'Add the customer’s name.', city: f.city.trim() ? null : 'Add the customer’s city or town.' });
+      return;
+    }
     setBusy(true);
     try {
-      const body = { name: f.name, city: f.city, last_purchase: f.last_purchase, interests: f.interests, birthday: f.birthday || null, anniversary: f.anniversary || null, sms_opt_in: f.sms_opt_in };
+      const body = customerBody(f);
       if (changedOpt) body.whatsapp_opt_in = f.whatsapp_opt_in;
       await api(`/api/customers/${c.id}`, { method: 'PATCH', body });
       toast('Customer saved');
       onSaved();
     } catch (e) {
+      setErrors(e.data?.fields || {});
       toast(e.message, 'bad');
     } finally {
       setBusy(false);
@@ -230,28 +244,7 @@ function EditCustomer({ c, onClose, onSaved }) {
             <div className="subtle">{consentLine}</div>
           </div>
         </div>
-        <div className="form-grid two">
-          <Field label="Name"><input className="input" value={f.name} onChange={set('name')} /></Field>
-          <Field label="City"><div className="input-icon"><MapPin size={16} /><input className="input" value={f.city} onChange={set('city')} /></div></Field>
-          <Field label="Last purchase"><div className="input-icon"><ShoppingBag size={16} /><input className="input" value={f.last_purchase} onChange={set('last_purchase')} /></div></Field>
-          <Field label="Interests"><input className="input" value={f.interests} onChange={set('interests')} placeholder="e.g. bridal, diamonds" /></Field>
-          <Field label="Birthday"><input className="input" type="date" value={f.birthday} onChange={set('birthday')} /></Field>
-          <Field label="Anniversary"><input className="input" type="date" value={f.anniversary} onChange={set('anniversary')} /></Field>
-        </div>
-        <label className="check card card-pad" style={{ padding: 14 }}>
-          <span className="switch"><input type="checkbox" checked={f.whatsapp_opt_in} onChange={set('whatsapp_opt_in')} /><span /></span>
-          <span>
-            <b>Can receive WhatsApp offers</b>
-            <span className="hint" style={{ display: 'block' }}>Only switch on if the customer agreed. Customers who reply STOP are switched off automatically.</span>
-          </span>
-        </label>
-        <label className="check card card-pad" style={{ padding: 14 }}>
-          <span className="switch"><input type="checkbox" checked={f.sms_opt_in} onChange={set('sms_opt_in')} /><span /></span>
-          <span>
-            <b>Can receive SMS (backup)</b>
-            <span className="hint" style={{ display: 'block' }}>Used only when WhatsApp can’t reach them.</span>
-          </span>
-        </label>
+        <CustomerFields f={f} setF={setF} errors={errors} smsOn={settings?.sms?.live} />
         {c.tags?.length > 0 && <div className="pill-list">{c.tags.map((t) => <span key={t} className="badge neutral">{t}</span>)}</div>}
       </div>
     </Modal>
