@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import { Check, Flame, MessageCircle, Phone, ShoppingBag, ThumbsDown, X } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { Avatar, Empty, Pic, SectionTabs, Skeleton, useToast } from '../components/ui.jsx';
-import { useAuth } from '../lib/auth.js';
 import { useT } from '../lib/i18n.jsx';
 import { ago, num, phone } from '../lib/format.js';
 
@@ -17,15 +16,11 @@ export default function Leads() {
   const toast = useToast();
   const [tab, setTab] = useState('');
   const [data, setData] = useState(null);
-  const [staff, setStaff] = useState(null);
-  const { settings } = useAuth();
   const { t } = useT();
-  const canSeeStaff = ['admin', 'manager'].includes(settings?.role);
 
   const load = useCallback(() => {
     api(`/api/leads${tab ? `?status=${tab}` : ''}`).then(setData).catch(() => setData({ leads: [], counts: {} }));
-    if (canSeeStaff) api('/api/leads/summary').then((r) => setStaff(r.staff)).catch(() => {});
-  }, [tab, canSeeStaff]);
+  }, [tab]);
   useEffect(() => {
     load();
     const t = setInterval(load, 15000);
@@ -48,24 +43,14 @@ export default function Leads() {
       <div className="page-head">
         <div>
           <h1>{t('Replies')}</h1>
-          <p>{t('Customers who tapped “Interested” or asked for a call. Call them today, while they’re keen.')}</p>
+          <p>{t('Customers who tapped “Interested”. Call them today, while they’re keen.')}</p>
         </div>
       </div>
-      <div style={{ marginBottom: 16 }}><SectionTabs tabs={[{ to: '/inbox', label: t('Messages') }, { to: '/leads', label: t('Call back list') }]} /></div>
+      <div style={{ marginBottom: 16 }}><SectionTabs tabs={[{ to: '/inbox', label: t('Chats') }, { to: '/leads', label: t('Interested') }]} /></div>
       {c.overdue > 0 && !tab && (
         <div className="alert bad" style={{ marginBottom: 12 }}>
           <Pic name="phone" size={30} />
           <div style={{ flex: 1 }}><b>{num(c.overdue)} {c.overdue === 1 ? 'customer has' : 'customers have'} waited more than a day.</b> Call them first: interest fades fast.</div>
-        </div>
-      )}
-      {canSeeStaff && staff?.length > 0 && (
-        <div className="card card-pad" style={{ marginBottom: 12 }}>
-          <b>This week’s calls</b>
-          <div className="row wrap" style={{ gap: 16, marginTop: 6 }}>
-            {staff.map((s) => (
-              <span key={s.id} className="subtle"><b style={{ color: 'var(--text)' }}>{s.name}</b> · {num(s.handled)} handled · {num(s.won)} bought</span>
-            ))}
-          </div>
         </div>
       )}
       <div className="chips" style={{ marginBottom: 16 }}>
@@ -80,7 +65,7 @@ export default function Leads() {
           <div className="stack" style={{ padding: 20 }}>{[0, 1, 2].map((i) => <Skeleton key={i} h={56} />)}</div>
         ) : data.leads.length === 0 ? (
           <Empty icon={Flame} title={tab ? 'Nobody here yet' : 'No one to call right now'}>
-            {tab ? 'Leads move here when you mark them.' : 'Add a quick-reply button like “Interested” or “Call me back” to a saved message. Everyone who taps it shows up here.'}
+            {tab ? 'Leads move here when you mark them.' : 'Keep the “Interested” button on your templates. Everyone who taps it shows up here.'}
           </Empty>
         ) : (
           data.leads.map((l) => (

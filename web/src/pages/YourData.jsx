@@ -1,4 +1,4 @@
-// Owner-only: download everything (customers, offers, bill codes) as one Excel file.
+// Owner-only: download everything (customers, offers, sales codes) as one Excel file.
 // Pulls the data in chunks of 2,000 rows, then builds the file in the browser.
 import { useState } from 'react';
 import { Download } from 'lucide-react';
@@ -47,12 +47,12 @@ export function YourData({ lastExportAt, onDone }) {
       }))), 'Offers');
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(codes.length ? codes.map((r) => ({
         Code: r.code, Customer: r.customer || '', Phone: r.phone, Offer: r.offer || '', 'Bill amount (₹)': r.amount, Date: day(r.redeemed_at), 'Entered by': r.entered_by || '', Note: r.note || '',
-      })) : [{ Code: 'No bill codes used yet' }]), 'Bill codes');
+      })) : [{ Code: 'No sales codes used yet' }]), 'Sales codes');
       const stamp = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '-');
       XLSX.writeFile(wb, `Swathi Tanishq data ${stamp}.xlsx`);
       await api('/api/export/done', { method: 'POST' }).catch(() => {});
       onDone?.();
-      toast(`Downloaded ${customers.length} customers, ${offers.length} offers and ${codes.length} bill codes`);
+      toast(`Downloaded ${customers.length} customers, ${offers.length} offers and ${codes.length} sales codes`);
     } catch (e) {
       toast(e.message, 'bad');
     } finally {
@@ -76,7 +76,7 @@ export function YourData({ lastExportAt, onDone }) {
           <span>
             <b>Download everything as Excel</b>
             <span className="subtle" style={{ display: 'block' }}>
-              Customers, offers and bill codes in one file.{' '}
+              Customers, offers and sales codes in one file.{' '}
               {lastExportAt ? `Last downloaded ${dateTime(lastExportAt)}.` : 'Not downloaded yet.'}
             </span>
           </span>

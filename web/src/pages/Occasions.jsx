@@ -12,9 +12,9 @@ const KINDS = {
   birthday: { label: 'Birthday', icon: CakeSlice, tone: 'tone-gold', hint: 'Uses each customer’s birthday from your list.' },
   anniversary: { label: 'Anniversary', icon: Heart, tone: 'tone-brand', hint: 'Uses each customer’s wedding anniversary.' },
   festival: { label: 'Festival or event', icon: Sparkles, tone: 'tone-wa', hint: 'Any date you choose: a festival, a sale, the shop’s anniversary, a new collection launch.' },
-  thank_you: { label: 'After a purchase', icon: Star, tone: 'tone-gold', hint: 'A thank-you with a “Rate us on Google” button, the day after a bill code is used.' },
+  thank_you: { label: 'After a purchase', icon: Star, tone: 'tone-gold', hint: 'A thank-you with a “Rate us on Google” button, the day after a sales code is used.' },
 };
-// "After a purchase": how many days after the bill code was used.
+// "After a purchase": how many days after the sales code was used.
 const AFTER = [
   { d: 1, label: 'The next day' },
   { d: 2, label: '2 days after' },
@@ -100,12 +100,11 @@ export default function Occasions() {
     <div className="page">
       <div className="page-head">
         <div>
-          <h1>Send offer</h1>
+          <h1>Special days</h1>
           <p>Birthday, anniversary, festival and shop-event wishes go out on their own. Add any event you like, on any date.</p>
         </div>
         {canEdit && <button className="btn primary" onClick={() => setEditing({ kind: 'festival' })}><Plus size={18} />Add festival or event</button>}
       </div>
-      <div style={{ marginBottom: 16 }}><SectionTabs tabs={[{ to: '/campaigns', label: 'Offers sent' }, { to: '/occasions', label: 'Automatic wishes' }]} /></div>
 
       {!data ? (
         <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))' }}>{[0, 1].map((i) => <div key={i} className="card card-pad"><Skeleton h={18} w="40%" /><Skeleton h={60} style={{ marginTop: 12 }} /></div>)}</div>
@@ -325,7 +324,7 @@ function OccasionEditor({ initial, templates, businessName, onClose, onSaved }) 
               </div>
             </div>
           )}
-          <Field label="When to send" hint={isThanks ? 'Counted from the day the bill code was used at the counter.' : 'Pick one or more. A week before is the best time for gift reminders.'}>
+          <Field label="When to send" hint={isThanks ? 'Counted from the day the sales code was used at the counter.' : 'Pick one or more. A week before is the best time for gift reminders.'}>
             <div className="chips">
               {(isThanks ? AFTER : WHEN).map((w) => (
                 <button key={w.d} type="button" className={`chip ${o.days_before.includes(w.d) ? 'on' : ''}`} onClick={() => toggleDay(w.d)}>{w.label}</button>
@@ -343,7 +342,7 @@ function OccasionEditor({ initial, templates, businessName, onClose, onSaved }) 
                 {list.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             ) : (
-              <Alert>No saved messages yet. <Link to="/templates/new">Write one first.</Link></Alert>
+              <Alert>No templates yet. <Link to="/templates/new">Write one first.</Link></Alert>
             )}
           </Field>
           {needed.length > 0 && (

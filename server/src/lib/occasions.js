@@ -70,7 +70,7 @@ export async function runOccasion(occasion, { now = new Date(), force = false } 
     if (occasion.kind === 'festival') {
       if (!eventOn(occasion, target)) continue;
     } else if (occasion.kind === 'thank_you') {
-      // "After a purchase": customers who used a bill code `before` days ago (India date).
+      // "After a purchase": customers who used a sales code `before` days ago (India date).
       suffixDate = addDays(today, -before);
       extraWhere = [`EXISTS (SELECT 1 FROM redemptions r WHERE r.contact_id = c.id AND date(r.redeemed_at, '+330 minutes') = $X1)`];
       extraParams = [suffixDate];

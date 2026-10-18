@@ -514,3 +514,26 @@ code, .code { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; f
 .lang-switch button { border: 0; background: none; padding: 4px 9px; border-radius: 7px; font: inherit; font-size: 0.82rem; color: var(--text-2); cursor: pointer; }
 .lang-switch button.on { background: var(--surface); color: var(--brand); font-weight: 700; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
 .sidebar-foot .lang-switch { align-self: flex-start; }
+
+/* ---------- Menu (redesign stage 1) ---------- */
+.nav-send { width: 100%; justify-content: center; margin: 0 0 14px; height: 42px; }
+.nav-send.active { box-shadow: none; }
+.mode-badge { align-self: flex-start; height: auto; padding: 4px 10px; white-space: normal; }
+.user-menu { position: relative; }
+.user-chip { width: 100%; border: none; cursor: pointer; font: inherit; color: inherit; text-align: left; }
+.user-chip:hover { background: var(--brand-50); }
+.user-pop {
+  position: absolute; bottom: calc(100% + 6px); left: 0; right: 0; z-index: 40; background: var(--surface);
+  border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-md, 0 8px 24px rgba(0,0,0,.12));
+  padding: 12px; display: flex; flex-direction: column; gap: 8px;
+}
+.user-pop .lang-switch { align-self: stretch; }
+.user-pop .btn { justify-content: flex-start; }
+.bottom-nav .send-tab {
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 3px; padding-bottom: 6px;
+  color: var(--brand); font-size: 0.7rem; font-weight: 700; text-decoration: none;
+}
+.bottom-nav .send-circle {
+  width: 46px; height: 46px; border-radius: 50%; background: var(--brand); color: #fff; display: grid; place-items: center;
+  margin-top: -18px; box-shadow: 0 4px 12px rgba(109, 26, 54, 0.35); border: 3px solid var(--surface);
+}

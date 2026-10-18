@@ -153,7 +153,7 @@ export function MessageStatus({ status }) {
   return <span className={`ticks ${tone}`}>{ticks && <span className="t" aria-hidden="true">{ticks}</span>}{label}</span>;
 }
 
-/** Tabs that join two related pages, e.g. Replies | Call back list. */
+/** Tabs that join two related pages, e.g. Replies | Interested. */
 export function SectionTabs({ tabs }) {
   return (
     <nav className="section-tabs" aria-label="Sections">

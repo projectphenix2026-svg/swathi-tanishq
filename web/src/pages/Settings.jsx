@@ -9,8 +9,8 @@ import { YourData } from './YourData.jsx';
 
 const ROLE_TEXT = {
   admin: 'Everything, including staff, settings and approving big sends',
-  manager: 'Customers, saved messages, offers and wishes',
-  viewer: 'Reports, replies, call back list and bill codes; cannot send offers',
+  manager: 'Customers, templates, offers and wishes',
+  viewer: 'Reports, replies, call back list and sales codes; cannot send offers',
 };
 
 export default function Settings() {
@@ -27,10 +27,43 @@ export default function Settings() {
       <div className="stack">
         {isAdmin && <ConnectWhatsApp />}
         <Channels settings={settings} />
+        {isAdmin && <SalesCodes settings={settings} onChange={reloadSettings} />}
         <Limits isAdmin={isAdmin} settings={settings} />
         {isAdmin && <YourData lastExportAt={settings?.lastExportAt} onDone={reloadSettings} />}
         {isAdmin ? <Staff me={user} /> : <Alert>Only the owner (an admin) can change limits and staff logins. Your role: <b>{settings?.role}</b>.</Alert>}
       </div>
+    </div>
+  );
+}
+
+/** Optional: a code in each message that staff type at the counter, to see which message brought a sale. */
+function SalesCodes({ settings, onChange }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  if (!settings) return null;
+  async function toggle(on) {
+    setBusy(true);
+    try {
+      await api('/api/dashboard/settings/sales-codes', { method: 'PUT', body: { on } });
+      toast(on ? 'Sales codes switched on' : 'Sales codes switched off');
+      onChange?.();
+    } catch (e) {
+      toast(e.message, 'bad');
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="card card-pad">
+      <label className="check">
+        <span className="switch"><input type="checkbox" checked={settings.salesCodes} disabled={busy} onChange={(e) => toggle(e.target.checked)} /><span /></span>
+        <span>
+          <b>Sales codes</b>
+          <span className="hint" style={{ display: 'block' }}>
+            Adds a code to each customer’s message (for example PRIYA-DIWALI-4821). When the customer shows it at billing, staff type it under Sales codes, and you see which message brought the sale. Off: no codes, and no Sales codes page.
+          </span>
+        </span>
+      </label>
     </div>
   );
 }

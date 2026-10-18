@@ -82,7 +82,7 @@ export default function CampaignReport() {
   const { campaign: c, report: r } = data;
   return (
     <div className="page">
-      <Link to="/campaigns" className="back"><ArrowLeft size={16} />Offers sent</Link>
+      <Link to="/campaigns" className="back"><ArrowLeft size={16} />Sent messages</Link>
       <div className="page-head">
         <div>
           <div className="row wrap" style={{ gap: 10 }}>
@@ -141,7 +141,7 @@ export default function CampaignReport() {
           <Kpi icon={CheckCheck} tone="wa" label="✓✓ Reached phone" value={num(r.delivered)} sub={`${pct(r.delivered, r.sent)}% of sent`} />
           <Kpi icon={CheckCheck} tone="info" label="Blue ✓✓ Read" value={num(r.read)} sub={`${pct(r.read, r.sent)}% of sent`} />
           <Kpi icon={MessageCircle} tone="gold" label="Replied" value={num(r.replied)} sub={<Link to="/inbox">Open replies</Link>} />
-          <Kpi icon={Flame} tone="bad" label="Call back list" value={num(r.leads)} sub={<Link to="/leads">Call list</Link>} />
+          <Kpi icon={Flame} tone="bad" label="Interested" value={num(r.leads)} sub={<Link to="/leads">See them</Link>} />
           <Kpi icon={Ticket} tone="brand" label="Bought with code" value={num(r.redeemed)} sub={`${inr(r.revenue)} in sales`} />
           <Kpi icon={IndianRupee} tone="gold" label="Sales per ₹1 spent" value={r.cost ? `₹${num(Math.round(r.revenue / r.cost))}` : '—'} sub={`${inr(r.cost)} spent`} />
           {(r.sms_total > 0 || c.sms_fallback) && <Kpi icon={MessageSquareText} tone="info" label="SMS backup" value={num(r.sms_total)} sub={r.sms_preview ? `${num(r.sms_preview)} trial only, not sent` : 'On'} />}

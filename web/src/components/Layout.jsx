@@ -1,30 +1,31 @@
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { useEffect, useState } from 'react';
-import { Gem, LogOut, Menu, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Gem, LogOut, Menu, Plus, X } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.js';
 import { Avatar, Pic } from './ui.jsx';
 import { SCREEN_LANGS, useT } from '../lib/i18n.jsx';
 
-// Four places for everyday work; the rest sits under More.
+// The six places in the app. Settings sits at the bottom of the menu; Sales codes appears
+// only when the owner switches sales codes on.
 const LINKS = [
-  { to: '/', label: 'Home', pic: 'home', end: true, main: true },
-  { to: '/campaigns', label: 'Send offer', pic: 'megaphone', main: true, also: ['/occasions'] },
-  { to: '/customers', label: 'Customers', pic: 'people', main: true },
-  { to: '/inbox', label: 'Replies', pic: 'speech', badge: 'replies', main: true, also: ['/leads'] },
-  { to: '/occasions', label: 'Birthday & festival wishes', pic: 'cake' },
-  { to: '/leads', label: 'Call back list', pic: 'phone', badge: 'leads' },
-  { to: '/updates', label: 'Order updates', pic: 'bag' },
-  { to: '/templates', label: 'Saved messages', pic: 'memo' },
-  { to: '/offers', label: 'Bill codes', pic: 'ticket' },
-  { to: '/settings', label: 'Settings', pic: 'gear' },
+  { to: '/', label: 'Home', pic: 'home', end: true },
+  { to: '/campaigns', label: 'Send', pic: 'megaphone' },
+  { to: '/customers', label: 'Customers', pic: 'people' },
+  { to: '/occasions', label: 'Special days', pic: 'cake' },
+  { to: '/inbox', label: 'Replies', pic: 'speech', badge: 'replies', also: ['/leads'] },
+  { to: '/templates', label: 'Templates', pic: 'memo' },
 ];
+const SALES_CODES = { to: '/offers', label: 'Sales codes', pic: 'ticket' };
+const SETTINGS = { to: '/settings', label: 'Settings', pic: 'gear' };
+// Phones: four places and a large Send button in the middle; the rest is under Menu.
+const PHONE = ['/', '/customers', 'send', '/occasions', '/inbox'];
 
 export function Layout() {
   const { user, logout, settings } = useAuth();
   const { t, lang, setLang } = useT();
   const [counts, setCounts] = useState({ unread: 0, leads: 0, replies: 0 });
-  const [more, setMore] = useState(false);
+  const [sheet, setSheet] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -35,18 +36,19 @@ export function Layout() {
         .then(([i, l]) => alive && setCounts({ unread: i.unread, leads: l.counts?.new || 0, replies: i.unread + (l.counts?.new || 0) }))
         .catch(() => {});
     load();
-    const t = setInterval(load, 15000);
+    const timer = setInterval(load, 15000);
     return () => {
       alive = false;
-      clearInterval(t);
+      clearInterval(timer);
     };
   }, []);
 
-  useEffect(() => setMore(false), [location.pathname]);
+  useEffect(() => setSheet(false), [location.pathname]);
 
   const signOut = () => logout().then(() => navigate('/login'));
-  const moreActive = ['/templates', '/offers', '/settings', '/updates'].some((p) => location.pathname.startsWith(p));
-  
+  const links = [...LINKS, ...(settings?.salesCodes ? [SALES_CODES] : [])];
+  const extra = [LINKS[5], ...(settings?.salesCodes ? [SALES_CODES] : []), SETTINGS];
+  const sending = location.pathname === '/campaigns/new';
 
   return (
     <div className="shell">
@@ -55,71 +57,72 @@ export function Layout() {
           <div className="brand-mark"><Gem size={19} /></div>
           <div>
             <div className="brand-name">{settings?.businessName || 'Swathi Tanishq'}</div>
-            <div className="brand-sub">{t('WhatsApp & SMS offers')}</div>
+            <div className="brand-sub">{t('WhatsApp messages')}</div>
           </div>
         </div>
+        <NavLink to="/campaigns/new" className="btn primary nav-send"><Plus size={18} />{t('Send a message')}</NavLink>
         <nav className="nav" aria-label="Main">
-          {LINKS.filter((l) => l.main).map((l) => <SideLink key={l.to} link={l} counts={counts} pathname={location.pathname} t={t} />)}
-          <div className="nav-group">{t('More')}</div>
-          {LINKS.filter((l) => !l.main).map((l) => <SideLink key={l.to} link={l} counts={counts} pathname={location.pathname} t={t} />)}
+          {links.map((l) => <SideLink key={l.to} link={l} counts={counts} pathname={location.pathname} t={t} exclude={l.to === '/campaigns' && sending} />)}
         </nav>
         <div className="sidebar-foot">
-          <LangSwitch lang={lang} setLang={setLang} label={t('Language')} />
-          {settings && <ProviderPill settings={settings} t={t} />}
-          <div className="user-chip">
-            <Avatar name={user.name} size={34} />
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ fontWeight: 600, fontSize: '0.88rem', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user.name}</div>
-              <div className="subtle" style={{ overflow: 'hidden', textOverflow: 'ellipsis', textTransform: 'capitalize' }}>{user.role}</div>
-            </div>
-            <button className="icon-btn" onClick={signOut} aria-label="Sign out" title="Sign out"><LogOut size={18} /></button>
-          </div>
+          {settings && <ModeBadge settings={settings} t={t} />}
+          <nav className="nav" aria-label="Settings"><SideLink link={SETTINGS} counts={counts} pathname={location.pathname} t={t} /></nav>
+          <UserMenu user={user} lang={lang} setLang={setLang} t={t} onSignOut={signOut} />
         </div>
       </aside>
 
       <div className="main">
         <header className="topbar">
-          <div className="row" style={{ gap: 10 }}>
+          <div className="row" style={{ gap: 10, minWidth: 0 }}>
             <div className="brand-mark" style={{ width: 32, height: 32 }}><Gem size={17} /></div>
-            <b>{settings?.businessName || 'Swathi Tanishq'}</b>
+            <b style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{settings?.businessName || 'Swathi Tanishq'}</b>
           </div>
           <span className="row" style={{ gap: 6 }}>
-            <LangSwitch lang={lang} setLang={setLang} label={t('Language')} compact />
-            <button className="icon-btn" onClick={signOut} aria-label="Sign out"><LogOut size={19} /></button>
+            {settings && <ModeBadge settings={settings} t={t} compact />}
+            <button className="icon-btn" onClick={() => setSheet(true)} aria-label={t('Menu')} aria-haspopup="dialog"><Menu size={21} /></button>
           </span>
         </header>
         <Outlet />
       </div>
 
       <nav className="bottom-nav" aria-label="Main">
-        {LINKS.filter((l) => l.main).map(({ to, label, pic, end, badge, also }) => (
-          <NavLink key={to} to={to} end={end} className={({ isActive }) => (isActive || also?.some((p) => location.pathname.startsWith(p)) ? 'active' : '')}>
-            <Pic name={pic} size={24} plain />
-            {t(label)}
-            {badge && counts[badge] > 0 && <span className="dot">{counts[badge]}</span>}
-          </NavLink>
-        ))}
-        <button className={`more-btn ${moreActive ? 'active' : ''}`} onClick={() => setMore(true)} aria-haspopup="dialog">
-          <Menu size={21} />
-          {t('More')}
-                  </button>
+        {PHONE.map((to) => {
+          if (to === 'send') {
+            return (
+              <NavLink key="send" to="/campaigns/new" className="send-tab">
+                <span className="send-circle"><Plus size={24} /></span>
+                {t('Send')}
+              </NavLink>
+            );
+          }
+          const { label, pic, end, badge, also } = LINKS.find((l) => l.to === to);
+          return (
+            <NavLink key={to} to={to} end={end} className={({ isActive }) => (isActive || also?.some((p) => location.pathname.startsWith(p)) ? 'active' : '')}>
+              <Pic name={pic} size={24} plain />
+              {t(label)}
+              {badge && counts[badge] > 0 && <span className="dot">{counts[badge]}</span>}
+            </NavLink>
+          );
+        })}
       </nav>
 
-      {more && (
-        <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && setMore(false)}>
-          <div className="modal" role="dialog" aria-label="More">
+      {sheet && (
+        <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && setSheet(false)}>
+          <div className="modal" role="dialog" aria-label={t('Menu')}>
             <div className="modal-head">
-              <h2>{t('More')}</h2>
-              <button className="icon-btn" onClick={() => setMore(false)} aria-label="Close"><X size={20} /></button>
+              <h2>{t('Menu')}</h2>
+              <button className="icon-btn" onClick={() => setSheet(false)} aria-label="Close"><X size={20} /></button>
             </div>
             <div className="more-grid">
-              {LINKS.filter((l) => !l.main).map(({ to, label, pic, badge }) => (
-                <NavLink key={to} to={to} className="more-item">
-                  <Pic name={pic} size={44} />
-                  {t(label)}
-                  {badge && counts[badge] > 0 && <span className="count hot">{counts[badge]}</span>}
-                </NavLink>
+              <NavLink to="/campaigns" end className="more-item"><Pic name="megaphone" size={44} />{t('Sent messages')}</NavLink>
+              {extra.map(({ to, label, pic }) => (
+                <NavLink key={to} to={to} className="more-item"><Pic name={pic} size={44} />{t(label)}</NavLink>
               ))}
+            </div>
+            <div className="stack-sm" style={{ padding: '0 16px 20px' }}>
+              <span className="label">{t('Language')}</span>
+              <LangSwitch lang={lang} setLang={setLang} label={t('Language')} />
+              <button className="btn" onClick={signOut} style={{ marginTop: 8 }}><LogOut size={17} />{t('Sign out')}</button>
             </div>
           </div>
         </div>
@@ -128,33 +131,67 @@ export function Layout() {
   );
 }
 
-function SideLink({ link: { to, label, pic, end, badge, also }, counts, pathname, t }) {
+function SideLink({ link: { to, label, pic, end, badge, also }, counts, pathname, t, exclude }) {
   const sub = also?.some((p) => pathname.startsWith(p));
   return (
-    <NavLink to={to} end={end} className={({ isActive }) => (isActive || sub ? 'active' : '')}>
+    <NavLink to={to} end={end} className={({ isActive }) => ((isActive || sub) && !exclude ? 'active' : '')}>
       <Pic name={pic} size={22} plain />
       {t(label)}
-      {badge && counts[badge] > 0 && <span className={`count ${badge === 'leads' ? 'hot' : ''}`}>{counts[badge]}</span>}
+      {badge && counts[badge] > 0 && <span className="count">{counts[badge]}</span>}
     </NavLink>
   );
 }
 
+/** The signed-in person; opens a small menu with the screen language and Sign out. */
+function UserMenu({ user, lang, setLang, t, onSignOut }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const close = (e) => !ref.current?.contains(e.target) && setOpen(false);
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [open]);
+  const role = user.role === 'admin' ? t('Owner') : t('Staff');
+  return (
+    <div className="user-menu" ref={ref}>
+      {open && (
+        <div className="user-pop" role="menu">
+          <span className="label">{t('Language')}</span>
+          <LangSwitch lang={lang} setLang={setLang} label={t('Language')} />
+          <button className="btn ghost sm" onClick={onSignOut} role="menuitem"><LogOut size={16} />{t('Sign out')}</button>
+        </div>
+      )}
+      <button className="user-chip" onClick={() => setOpen((x) => !x)} aria-expanded={open} aria-haspopup="menu">
+        <Avatar name={user.name} size={32} />
+        <span style={{ minWidth: 0, flex: 1, textAlign: 'left' }}>
+          <span style={{ display: 'block', fontWeight: 600, fontSize: '0.88rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.name}</span>
+          <span className="subtle" style={{ display: 'block' }}>{role} · {SCREEN_LANGS.find((l) => l.code === lang)?.label}</span>
+        </span>
+      </button>
+    </div>
+  );
+}
+
 /** English / తెలుగు / हिन्दी for the everyday screens; remembered on this device. */
-function LangSwitch({ lang, setLang, label, compact }) {
+function LangSwitch({ lang, setLang, label }) {
   return (
     <div className="lang-switch" role="group" aria-label={label}>
       {SCREEN_LANGS.map((l) => (
         <button key={l.code} type="button" className={lang === l.code ? 'on' : ''} onClick={() => setLang(l.code)} aria-pressed={lang === l.code} title={l.label}>
-          {compact ? l.short : l.label}
+          {l.label}
         </button>
       ))}
     </div>
   );
 }
 
-function ProviderPill({ settings, t }) {
+/** Which mode the app is in: Test mode (nothing reaches phones) or Live. */
+function ModeBadge({ settings, t, compact }) {
   const p = settings.provider;
-  const tone = p.name === 'mock' ? 'warn' : p.missing.length ? 'bad' : 'ok';
-  const text = p.name === 'mock' ? t('Test mode: nothing is sent') : p.missing.length ? `${p.label}: not set up` : `Sending via ${p.label}`;
-  return <span className={`badge ${tone}`} style={{ alignSelf: 'flex-start', height: 'auto', padding: '4px 10px', whiteSpace: 'normal' }}>{text}</span>;
+  const test = p.name === 'mock';
+  const broken = !test && p.missing.length;
+  const tone = test ? 'warn' : broken ? 'bad' : 'ok';
+  const text = test ? (compact ? t('Test mode') : t('Test mode: nothing is sent')) : broken ? t('WhatsApp not connected') : t('Live');
+  return <span className={`badge ${tone} mode-badge`}>{text}</span>;
 }

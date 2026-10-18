@@ -5,7 +5,7 @@ import { runOccasion, upcoming, indiaNow } from '../lib/occasions.js';
 
 const router = express.Router();
 const canEdit = requireRole('admin', 'manager');
-// thank_you = "After a purchase": a thank-you (with a Google review button) N days after a bill code is used.
+// thank_you = "After a purchase": a thank-you (with a Google review button) N days after a sales code is used.
 const KINDS = ['birthday', 'anniversary', 'festival', 'thank_you'];
 
 router.get('/', async (req, res) => {

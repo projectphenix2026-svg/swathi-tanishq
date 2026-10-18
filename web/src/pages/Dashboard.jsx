@@ -27,7 +27,7 @@ export default function Dashboard() {
           <h1>{t(`${greeting()}, {name}`, { name: first })}</h1>
           <p>{t('Here’s what needs you today.')}</p>
         </div>
-        <Link to="/campaigns/new" className="btn primary lg"><Plus size={19} />{t('Send an offer')}</Link>
+        <Link to="/campaigns/new" className="btn primary lg"><Plus size={19} />{t('Send a message')}</Link>
       </div>
 
       <div className="stack">
@@ -61,11 +61,11 @@ export default function Dashboard() {
 
             <div className="card">
               <div className="card-head">
-                <h2>{t('Recent offers')}</h2>
+                <h2>{t('Recent messages')}</h2>
                 <Link to="/campaigns" className="btn ghost sm">{t('See all')} <ChevronRight size={16} /></Link>
               </div>
               {d.recent.length === 0 ? (
-                <p className="muted" style={{ padding: 20 }}>No offers sent yet. Your first one takes about 5 minutes.</p>
+                <p className="muted" style={{ padding: 20 }}>Nothing sent yet. Your first one takes about 5 minutes.</p>
               ) : (
                 d.recent.map((c) => (
                   <Link key={c.id} to={`/campaigns/${c.id}`} className="list-item" style={{ textDecoration: 'none', color: 'inherit' }}>
@@ -100,7 +100,7 @@ function Today({ d, isOwner, t, lang }) {
     d.occasions_on
       ? { to: '/occasions', pic: 'cake', title: d.greetings_today ? t('{n} went out today', { n: plural(d.greetings_today, 'wish', 'wishes'), count: d.greetings_today }) : t('No birthdays or anniversaries today'), text: t('Wishes go out every morning on their own.'), done: true }
       : { to: '/occasions', pic: 'cake', title: t('Switch on birthday wishes'), text: t('Wishes go out every morning on their own.'), action: t('Set up') },
-    copyDue && { to: '/settings#your-data', pic: 'chart', title: 'Download this week’s copy of your data', text: 'One click: customers, offers and bill codes in Excel.', action: 'Download' },
+    copyDue && { to: '/settings#your-data', pic: 'chart', title: 'Download this week’s copy of your data', text: 'One click: customers, offers and sales codes in Excel.', action: 'Download' },
     last && { to: `/campaigns/${last.id}`, pic: 'megaphone', title: t('Your “{name}”: {sent} sent, {read} read it', { name: last.name, sent: num(last.total), read: num(last.read) }), text: d.redeemed ? t('This month {n} bought with their code ({amount}).', { n: plural(d.redeemed, 'customer'), count: d.redeemed, amount: inr(d.revenue) }) : t('When a customer buys with their code, it shows here.'), done: true },
   ].filter(Boolean);
   const nothingToDo = !d.new_leads && !d.inbox.unread && !d.pending_approval;
@@ -111,8 +111,8 @@ function Today({ d, isOwner, t, lang }) {
         {nothingToDo && (
           <div className="today-item">
             <span className="emoji" aria-hidden="true"><Pic name="check" size={36} /></span>
-            <div className="what"><b>{t('Nothing waiting for you')}</b><span className="subtle">{t('A good day to send an offer.')}</span></div>
-            <Link to="/campaigns/new" className="btn primary sm">{t('Send offer')}</Link>
+            <div className="what"><b>{t('Nothing waiting for you')}</b><span className="subtle">{t('A good day to send a message.')}</span></div>
+            <Link to="/campaigns/new" className="btn primary sm">{t('Send a message')}</Link>
           </div>
         )}
         {items.map((it) => (
@@ -131,7 +131,7 @@ function GettingStarted({ d }) {
   const steps = [
     { done: d.customers.total > 0, title: 'Add your customers', text: 'From phone contacts, an Excel file, or type them in.', to: '/customers/add', icon: Users },
     { done: d.templates > 0, title: 'Pick a ready-made message', text: 'Diwali, wedding season, new collection… each customer’s name is added for you.', to: '/campaigns/new', icon: FileText },
-    { done: d.recent.length > 0, title: 'Send your first offer', text: 'See exactly how it looks and what it costs before you send.', to: '/campaigns/new', icon: Send },
+    { done: d.recent.length > 0, title: 'Send your first message', text: 'See exactly how it looks and what it costs before you send.', to: '/campaigns/new', icon: Send },
   ];
   const next = steps.findIndex((s) => !s.done);
   return (

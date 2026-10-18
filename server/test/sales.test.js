@@ -29,28 +29,6 @@ beforeAll(async () => {
 });
 afterAll(() => closeDb());
 
-describe('Order and repair updates', () => {
-  it('sends a cheap service message to one customer at once', async () => {
-    const res = await owner.post('/api/campaigns/updates').send({ kind: 'order', item: 'gold chain', contactId: priya.id });
-    expect(res.status).toBe(201);
-    await drain();
-    expect(provider.outbox.at(-1)).toMatchObject({ to: '+919000060001' });
-    expect(provider.outbox.at(-1).body).toMatch(/^Hi Priya, good news: your gold chain is ready for pickup at /);
-    const { rows: [m] } = await query('SELECT cost FROM messages WHERE campaign_id = $1', [res.body.campaign.id]);
-    expect(m.cost).toBe(config.utilityCostPerMessage);
-    const list = await owner.get('/api/campaigns/updates');
-    expect(list.body.updates[0]).toMatchObject({ customer: 'Priya', name: 'Order ready · Priya' });
-    // Updates stay out of the offers list.
-    expect((await owner.get('/api/campaigns')).body.campaigns.some((c) => c.name.startsWith('Order ready'))).toBe(false);
-  });
-
-  it('refuses customers who did not agree, and needs an item', async () => {
-    const { rows: [ravi] } = await query("SELECT id FROM contacts WHERE name = 'Ravi'");
-    expect((await owner.post('/api/campaigns/updates').send({ kind: 'repair', item: 'ring', contactId: ravi.id })).body.error).toMatch(/has not agreed/);
-    expect((await owner.post('/api/campaigns/updates').send({ kind: 'repair', item: '', contactId: priya.id })).status).toBe(400);
-  });
-});
-
 describe('After a purchase: thank-you + Google review', () => {
   it('thanks customers the day after they used a bill code, once', async () => {
     const t = await owner.post('/api/templates').send({
@@ -94,5 +72,14 @@ describe('Call back reminders', () => {
     const sum = await owner.get('/api/leads/summary');
     expect(sum.body.staff[0]).toMatchObject({ name: 'Owner', handled: 1, called: 1 });
     expect((await owner.get('/api/leads')).body.counts.overdue).toBe(0);
+  });
+});
+
+describe('Sales codes switch', () => {
+  it('is off at first and only the owner can switch it', async () => {
+    expect((await owner.get('/api/dashboard/settings')).body.salesCodes).toBe(false);
+    expect((await owner.put('/api/dashboard/settings/sales-codes').send({ on: true })).body.salesCodes).toBe(true);
+    expect((await owner.get('/api/dashboard/settings')).body.salesCodes).toBe(true);
+    expect((await owner.post('/api/campaigns/updates').send({ kind: 'order' })).status).toBe(404);
   });
 });
