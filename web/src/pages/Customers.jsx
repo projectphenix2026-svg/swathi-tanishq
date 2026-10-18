@@ -202,7 +202,6 @@ function EditCustomer({ c, onClose, onSaved }) {
     <div className="row" style={{ gap: 8, width: '100%', justifyContent: 'space-between' }}>
       <span className="row" style={{ gap: 8 }}>
         {canDelete ? <button className="btn ghost danger" onClick={() => setAskDelete(true)}><Trash2 size={16} />Delete customer</button> : null}
-        <Link className="btn ghost" to={`/updates?contact=${c.id}`}>Order ready message</Link>
       </span>
       <span className="row" style={{ gap: 8 }}>
         <button className="btn" onClick={onClose}>Cancel</button>

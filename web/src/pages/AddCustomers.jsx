@@ -421,7 +421,7 @@ function ImportDone({ result, onAgain }) {
         <div className="row wrap" style={{ justifyContent: 'center' }}>
           <button className="btn" onClick={onAgain}><RefreshCw size={18} />Add more</button>
           <button className="btn" onClick={() => navigate('/customers')}>View customers</button>
-          <button className="btn primary" onClick={() => navigate('/campaigns/new')}><Send size={18} />Send an offer</button>
+          <button className="btn primary" onClick={() => navigate('/campaigns/new')}><Send size={18} />Send a message</button>
         </div>
       </div>
     </div>

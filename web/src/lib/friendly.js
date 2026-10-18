@@ -1,5 +1,5 @@
 // Staff see personal details as [Customer name], [Last purchase] … instead of {{name}}.
-// The saved message keeps {{name}}; these two functions translate in both directions.
+// The template keeps {{name}}; these two functions translate in both directions.
 import { VARIABLES } from '@shared/template.js';
 
 const BY_KEY = Object.fromEntries(VARIABLES.map((v) => [v.key, v.label]));

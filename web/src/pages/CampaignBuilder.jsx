@@ -123,10 +123,10 @@ export default function CampaignBuilder() {
 
   return (
     <div className="page">
-      <Link to="/campaigns" className="back"><ArrowLeft size={16} />Send offer</Link>
+      <Link to="/campaigns" className="back"><ArrowLeft size={16} />Sent messages</Link>
       <div className="page-head">
         <div>
-          <h1>{t('Send an offer')}</h1>
+          <h1>{t('Send a message')}</h1>
           <p>{t('Four short steps. You see the message and the cost as you go.')}</p>
         </div>
       </div>
@@ -416,7 +416,7 @@ function MessageStep({ t, templates, templateId, setTemplateId, setTemplates, ch
   const usesCode = extractVariables(templates?.find((t) => t.id === templateId)?.body || '').includes('offer_code');
   if (!templates) return <div className="card card-pad"><Spinner /></div>;
 
-  // A ready-made message is saved once (as a saved message), then reused.
+  // A ready-made message is saved once (as a template), then reused.
   async function pickReady(m) {
     setBusyKey(m.key);
     try {
@@ -484,7 +484,7 @@ function MessageStep({ t, templates, templateId, setTemplateId, setTemplates, ch
 
       <div className="card card-pad stack">
         <div className="row between">
-          <h3>Or one of your saved messages</h3>
+          <h3>Or one of your templates</h3>
           <Link to="/templates/new" className="btn ghost sm">Write my own</Link>
         </div>
         {own.length === 0 ? (
@@ -542,8 +542,8 @@ function MessageStep({ t, templates, templateId, setTemplateId, setTemplates, ch
       {usesCode && (
         <div className="card card-pad stack">
           <div>
-            <h2>Bill codes</h2>
-            <p className="subtle">Every customer gets their own code, like {exampleCode('Priya', variables.code_prefix)}. Staff type it in under Bill codes when the customer buys, so you see real sales from this offer.</p>
+            <h2>Sales codes</h2>
+            <p className="subtle">Every customer gets their own code, like {exampleCode('Priya', variables.code_prefix)}. Staff type it in under Sales codes when the customer buys, so you see real sales from this offer.</p>
           </div>
           <Field label="Word in the code" hint="Letters and numbers, up to 10. E.g. DIWALI, BRIDAL.">
             <input className="input" style={{ maxWidth: 240, textTransform: 'uppercase' }} value={variables.code_prefix || ''} maxLength={10} onChange={(e) => setVariables((x) => ({ ...x, code_prefix: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '') }))} placeholder="OFFER" />
@@ -590,7 +590,7 @@ function WhenStep({ t, channel, when, setWhen, template, preview, settings }) {
           <b>SMS backup</b>
           <span className="hint" style={{ display: 'block' }}>
             {!smsReady
-              ? 'This message has no SMS version yet. Add one on the saved message page to use SMS backup.'
+              ? 'This message has no SMS version yet. Add one on the template page to use SMS backup.'
               : `Customers who are not on WhatsApp and agreed to SMS get the SMS version instead${settings?.sms?.live ? ` (${rate(settings.sms.costPerSms)} each)` : ' (preview only until DLT registration is done)'}.`}
             {smsReady && smsCustomers === 0 && ' None of the first customers here have SMS consent yet.'}
           </span>
@@ -646,7 +646,7 @@ function ReviewStep({ t, name, setName, template, audience, picked, when, sendCo
         )}
         {preview && settings?.role !== 'admin' && sendCount >= preview.approvalThreshold && (
           <Alert tone="info" icon={ShieldCheck}>
-            This goes to {num(sendCount)} customers, so the owner must approve it first. You’ll find it under Send offer as “Waiting for owner’s OK”.
+            This goes to {num(sendCount)} customers, so the owner must approve it first. You’ll find it under Sent messages as “Waiting for owner’s OK”.
           </Alert>
         )}
         {sendCount >= 500 && (
@@ -724,7 +724,7 @@ function defaultLater() {
 
 /** What one customer's SMS will say, with its length (SMS are billed per 160-character part). */
 function SmsPreview({ text, values, live }) {
-  if (!text) return <Alert tone="warn" icon={AlertTriangle}>This message has no SMS version yet. Pick a ready-made message, or add an SMS version on its saved message page.</Alert>;
+  if (!text) return <Alert tone="warn" icon={AlertTriangle}>This message has no SMS version yet. Pick a ready-made message, or add an SMS version on its template page.</Alert>;
   const { text: out, missing } = render(text, values || {});
   const unicode = /[^\x20-\x7E\n\r]/.test(out);
   const parts = out.length <= (unicode ? 70 : 160) ? 1 : Math.ceil(out.length / (unicode ? 67 : 153));

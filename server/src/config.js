@@ -34,7 +34,6 @@ export const config = {
   // mock | twilio | meta
   provider: (env.MESSAGING_PROVIDER || 'mock').toLowerCase(),
   // Meta's India rate for utility messages (order and repair updates), before GST.
-  utilityCostPerMessage: Number(env.UTILITY_COST_INR ?? 0.115),
   costPerMessage: Number(env.COST_PER_MESSAGE_INR || 0.8631),
   maxAttempts: Number(env.SEND_MAX_ATTEMPTS || 4),
   validateWebhooks: bool(env.VALIDATE_WEBHOOK_SIGNATURES, true),

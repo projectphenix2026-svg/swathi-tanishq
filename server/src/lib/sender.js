@@ -46,7 +46,7 @@ export async function processSendJob(messageId) {
   let values = msg.template_values;
   let body = msg.body;
   if (msg.channel === 'sms' && template && !body) {
-    // Bulk SMS: personalise the SMS version the same way (name, offer, bill code...).
+    // Bulk SMS: personalise the SMS version the same way (name, offer, sales code...).
     values = valuesFor(contact, msg.variables || {});
     if (extractVariables(template.sms_body || '').includes('offer_code')) {
       values.offer_code = await reserveCode(msg, contact, cleanPrefix(msg.variables?.code_prefix, 'OFFER'));

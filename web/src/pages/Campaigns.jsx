@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, Send } from 'lucide-react';
 import { api } from '../lib/api.js';
-import { CampaignStatus, Empty, SectionTabs, Skeleton } from '../components/ui.jsx';
+import { CampaignStatus, Empty, Skeleton } from '../components/ui.jsx';
 import { dateTime, num, pct } from '../lib/format.js';
 
 export function Funnel({ total, sent, delivered, read, failed }) {
@@ -30,19 +30,18 @@ export default function Campaigns() {
     <div className="page">
       <div className="page-head">
         <div>
-          <h1>Send offer</h1>
-          <p>Every offer you sent, and how many customers got it and read it.</p>
+          <h1>Sent messages</h1>
+          <p>Everything you sent, and how many customers got it and read it.</p>
         </div>
-        <Link to="/campaigns/new" className="btn primary"><Plus size={18} />Send an offer</Link>
+        <Link to="/campaigns/new" className="btn primary"><Plus size={18} />Send a message</Link>
       </div>
 
-      <div style={{ marginBottom: 16 }}><SectionTabs tabs={[{ to: '/campaigns', label: 'Offers sent' }, { to: '/occasions', label: 'Automatic wishes' }]} /></div>
       {!list ? (
         <div className="card stack" style={{ padding: 20 }}>{[0, 1, 2].map((i) => <Skeleton key={i} h={48} />)}</div>
       ) : list.length === 0 ? (
         <div className="card">
-          <Empty icon={Send} title="No offers sent yet" actions={<Link to="/campaigns/new" className="btn primary"><Plus size={18} />Send your first offer</Link>}>
-            Pick who gets it, tap a ready-made message, check how it looks and what it costs, and send. It takes about five minutes.
+          <Empty icon={Send} title="Nothing sent yet" actions={<Link to="/campaigns/new" className="btn primary"><Plus size={18} />Send your first message</Link>}>
+            Pick a template, pick customers, check how it looks and what it costs, and send. It takes a few minutes.
           </Empty>
         </div>
       ) : (

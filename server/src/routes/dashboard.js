@@ -63,7 +63,7 @@ router.get('/settings', async (req, res) => {
   const p = getProvider();
   const sms = getSmsProvider();
   const limits = await clientSettings(req.clientId);
-  const { rows: [cl] } = await query('SELECT last_export_at FROM clients WHERE id = $1', [req.clientId]);
+  const { rows: [cl] } = await query('SELECT last_export_at, sales_codes FROM clients WHERE id = $1', [req.clientId]);
   res.json({
     businessName: config.businessName,
     provider: { name: p.name, label: p.label, stub: Boolean(p.stub), missing: p.missingConfig() },
@@ -76,6 +76,8 @@ router.get('/settings', async (req, res) => {
     approvalThreshold: limits.approval_threshold,
     role: req.user.role,
     lastExportAt: cl?.last_export_at || null,
+    // Sales codes (a code in each message, typed at the counter) are optional and off at first.
+    salesCodes: Boolean(cl?.sales_codes),
     sandbox:
       p.name === 'twilio'
         ? { number: process.env.TWILIO_SANDBOX_DISPLAY_NUMBER || config.twilio.whatsappFrom, joinCode: process.env.TWILIO_SANDBOX_JOIN_CODE || '' }
@@ -91,6 +93,13 @@ router.put('/settings', requireRole('admin'), async (req, res) => {
   if (!Number.isInteger(threshold) || threshold < 1) return res.status(400).json({ error: 'Approval size: a whole number of customers, 1 or more.' });
   await query('UPDATE clients SET weekly_cap = $2, approval_threshold = $3 WHERE id = $1', [req.clientId, cap, threshold]);
   res.json({ weeklyCap: cap, approvalThreshold: threshold });
+});
+
+// The owner switches sales codes on or off.
+router.put('/settings/sales-codes', requireRole('admin'), async (req, res) => {
+  const on = Boolean(req.body?.on);
+  await query('UPDATE clients SET sales_codes = $2 WHERE id = $1', [req.clientId, on ? 1 : 0]);
+  res.json({ salesCodes: on });
 });
 
 export default router;

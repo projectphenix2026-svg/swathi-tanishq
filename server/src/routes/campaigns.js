@@ -68,7 +68,7 @@ async function sendableTemplate(clientId, templateId, channel = 'whatsapp') {
   if (!t) return { error: 'Choose a message.' };
   if (t.status !== 'approved') return { error: 'This message is not ready to send yet.' };
   if (channel === 'sms') {
-    if (!t.sms_body) return { error: 'This message has no SMS version yet. Add one on its saved message page (SMS version).' };
+    if (!t.sms_body) return { error: 'This message has no SMS version yet. Add one on its template page (SMS version).' };
     const missing = getSmsProvider().missingConfig();
     if (missing.length) return { error: `SMS sending is not set up yet. Missing: ${missing.join(', ')}.` };
     return { t };
@@ -77,83 +77,10 @@ async function sendableTemplate(clientId, templateId, channel = 'whatsapp') {
   const missingConfig = provider.missingConfig();
   if (missingConfig.length) return { error: `Sending is not set up yet. Missing: ${missingConfig.join(', ')}.` };
   if (provider.name === 'meta' && (!t.provider_ref || (t.provider_status && t.provider_status !== 'APPROVED'))) {
-    return { error: 'WhatsApp (Meta) has not approved this message yet. Submit it from the saved message page and check back.' };
+    return { error: 'WhatsApp (Meta) has not approved this message yet. Submit it from the template page and check back.' };
   }
   return { t };
 }
-
-// Order and repair updates: one service (utility) message to one customer, sent at once.
-// The two messages are created the first time they are used.
-const UPDATES = {
-  order: {
-    label: 'Order ready',
-    name: '📦 Order ready',
-    body: 'Hi {{name}}, good news: your {{item}} is ready for pickup at {{store}}. Please bring your bill or receipt. See you soon!',
-    sms: 'Hi {{name}}, your {{item}} is ready for pickup at {{store}}. Please bring your bill. -SWATHI',
-  },
-  repair: {
-    label: 'Repair ready',
-    name: '🔧 Repair ready',
-    body: 'Hi {{name}}, your {{item}} has been repaired and is ready for pickup at {{store}}. Thank you for your patience!',
-    sms: 'Hi {{name}}, your {{item}} is repaired and ready for pickup at {{store}}. -SWATHI',
-  },
-};
-
-router.get('/updates', async (req, res) => {
-  const { rows } = await query(
-    `SELECT c.id, c.name, c.channel, c.created_at, ct.name AS customer, ct.phone, m.status, m.error_message, u.name AS sent_by
-       FROM campaigns c JOIN messages m ON m.campaign_id = c.id JOIN contacts ct ON ct.id = m.contact_id
-       LEFT JOIN users u ON u.id = c.created_by
-      WHERE c.client_id = $1 AND (c.name LIKE 'Order ready ·%' OR c.name LIKE 'Repair ready ·%')
-      ORDER BY c.created_at DESC LIMIT 50`,
-    [req.clientId],
-  );
-  res.json({ updates: rows, costPerMessage: config.utilityCostPerMessage });
-});
-
-router.post('/updates', async (req, res) => {
-  const b = req.body || {};
-  const kind = UPDATES[b.kind];
-  if (!kind) return res.status(400).json({ error: 'Choose Order ready or Repair ready.' });
-  const item = String(b.item || '').trim().slice(0, 60);
-  if (!item) return res.status(400).json({ error: 'Type what is ready, e.g. “gold chain”.' });
-  const channel = b.channel === 'sms' ? 'sms' : 'whatsapp';
-  const { rows: [ct] } = await query(`SELECT * FROM contacts WHERE id = $1 AND client_id = $2 AND phone NOT LIKE 'deleted:%'`, [b.contactId, req.clientId]);
-  if (!ct) return res.status(404).json({ error: 'Choose the customer.' });
-  if (!ct.name) return res.status(400).json({ error: 'Add the customer’s name first (Customers → tap them).' });
-  if (ct.opted_out_at || !(channel === 'sms' ? ct.sms_opt_in : ct.whatsapp_opt_in)) {
-    return res.status(400).json({ error: `${ct.name} has not agreed to ${channel === 'sms' ? 'SMS' : 'WhatsApp'} messages. Ask them at the counter, then tick it on their customer page.` });
-  }
-  let { rows: [t] } = await query('SELECT * FROM templates WHERE client_id = $1 AND name = $2', [req.clientId, kind.name]);
-  if (!t) {
-    ({ rows: [t] } = await query(
-      `INSERT INTO templates (client_id, name, category, language, body, buttons, status, sms_body)
-       VALUES ($1, $2, 'utility', 'en', $3, '[]', 'approved', $4) RETURNING *`,
-      [req.clientId, kind.name, kind.body, kind.sms],
-    ));
-  }
-  const { error } = await sendableTemplate(req.clientId, t.id, channel);
-  if (error) return res.status(400).json({ error });
-  const provider = channel === 'sms' ? getSmsProvider() : getProvider();
-  const audience = { mode: 'selected', contactIds: [ct.id] };
-  const variables = { item, store: config.businessName };
-  const { rows: [campaign] } = await query(
-    `INSERT INTO campaigns (client_id, name, template_id, audience, variables, status, started_at, cost_per_message, provider,
-                            created_by, expected_count, approved_by, approved_at, channel)
-     VALUES ($1, $2, $3, $4, $5, 'sending', ${NOW}, $6, $7, $8, 1, $8, ${NOW}, $9) RETURNING *`,
-    [req.clientId, `${kind.label} · ${ct.name}`, t.id, JSON.stringify(audience), JSON.stringify(variables),
-      channel === 'sms' ? config.sms.costPerSms : config.utilityCostPerMessage, provider.name, req.user.id, channel],
-  );
-  const queued = await queueMessages(req.clientId, {
-    audience, template: t, variables, keyPrefix: `campaign:${campaign.id}:contact:`, campaignId: campaign.id, ignoreCap: true, channel,
-  });
-  if (!queued) {
-    await query(`UPDATE campaigns SET status = 'cancelled', completed_at = ${NOW} WHERE id = $1`, [campaign.id]);
-    return res.status(400).json({ error: 'The message could not be prepared for this customer.' });
-  }
-  kick();
-  res.status(201).json({ campaign, to: ct.name });
-});
 
 // "Send a test to my phone": the message as one customer would get it, to a staff phone.
 // The phone is saved once as a customer tagged test-phone, which normal sends leave out.

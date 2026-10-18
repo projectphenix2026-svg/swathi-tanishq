@@ -92,7 +92,7 @@ export default function TemplateEditor() {
   }
 
   async function remove() {
-    if (!confirm('Delete this saved message?')) return;
+    if (!confirm('Delete this template?')) return;
     try {
       await api(`/api/templates/${id}`, { method: 'DELETE' });
       toast('Message deleted');
@@ -112,7 +112,7 @@ export default function TemplateEditor() {
 
   return (
     <div className="page">
-      <Link to="/templates" className="back"><ArrowLeft size={16} />Saved messages</Link>
+      <Link to="/templates" className="back"><ArrowLeft size={16} />Templates</Link>
       <div className="page-head">
         <div>
           <h1>{id ? 'Edit message' : 'Write a message'}</h1>
@@ -174,7 +174,7 @@ export default function TemplateEditor() {
             <div className="row between">
               <div>
                 <h3>Buttons</h3>
-                <p className="subtle">Up to 2. Customers who tap “Interested” go to your Call back list.</p>
+                <p className="subtle">Up to 2. Customers who tap “Interested” go to Replies → Interested.</p>
               </div>
               <button className="btn sm" disabled={t.buttons.length >= 2} onClick={() => set({ buttons: [...t.buttons, { type: 'url', text: '', url: 'https://' }] })}>
                 <Plus size={16} />Add button

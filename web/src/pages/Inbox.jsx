@@ -33,7 +33,7 @@ export default function Inbox() {
         <div style={{ padding: '18px 16px 12px', borderBottom: '1px solid var(--border)' }}>
           <h1 style={{ fontSize: '1.3rem' }}>{t('Replies')}</h1>
           <p className="subtle" style={{ marginBottom: 10 }}>{t('What customers wrote back, newest first.')}</p>
-          <div style={{ marginBottom: 10 }}><SectionTabs tabs={[{ to: '/inbox', label: t('Messages') }, { to: '/leads', label: t('Call back list') }]} /></div>
+          <div style={{ marginBottom: 10 }}><SectionTabs tabs={[{ to: '/inbox', label: t('Chats') }, { to: '/leads', label: t('Interested') }]} /></div>
           <div className="chips">
             <button className={`chip ${filter === 'all' ? 'on' : ''}`} onClick={() => setFilter('all')}>{t('All')}</button>
             <button className={`chip ${filter === 'unread' ? 'on' : ''}`} onClick={() => setFilter('unread')}>{t('Unread')}</button>
@@ -189,7 +189,7 @@ function Thread({ contactId, onChange }) {
         {optedOut ? (
           <div className="row subtle" style={{ gap: 8 }}><Lock size={16} />This customer replied STOP, so no more messages can be sent.</div>
         ) : !windowOpen ? (
-          <div className="row subtle" style={{ gap: 8 }}><Clock size={16} />More than 24 hours since they last wrote. WhatsApp only allows a free reply within 24 hours; reach them with a saved message (send an offer) template instead.</div>
+          <div className="row subtle" style={{ gap: 8 }}><Clock size={16} />More than 24 hours since they last wrote. WhatsApp only allows a free reply within 24 hours; reach them with a template (send an offer) template instead.</div>
         ) : (
           <>
             <div className="chips no-scrollbar" style={{ flexWrap: 'nowrap', overflowX: 'auto' }}>

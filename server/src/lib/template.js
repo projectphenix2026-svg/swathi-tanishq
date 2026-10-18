@@ -10,10 +10,9 @@ export const VARIABLES = [
   { key: 'offer', label: 'Offer', source: 'campaign', example: '20% off making charges' },
   { key: 'offer_ends', label: 'Offer ends', source: 'campaign', example: '31 Oct' },
   { key: 'store', label: 'Store', source: 'campaign', example: 'Swathi Tanishq, Kukatpally' },
-  { key: 'item', label: 'Item', source: 'campaign', example: 'gold chain' },
   { key: 'days_left', label: 'Days to go', source: 'occasion', example: '7' },
   // Made for each customer when the message is created; staff enter it at billing.
-  { key: 'offer_code', label: 'Bill code', source: 'generated', example: 'PRIYA-DIWALI-4821' },
+  { key: 'offer_code', label: 'Sales code', source: 'generated', example: 'PRIYA-DIWALI-4821' },
 ];
 
 const KNOWN = new Set(VARIABLES.map((v) => v.key));
@@ -45,7 +44,6 @@ export function valuesFor(contact, campaignVars = {}) {
     offer: campaignVars.offer || '',
     offer_ends: campaignVars.offer_ends || '',
     store: campaignVars.store || '',
-    item: campaignVars.item || '',
     offer_code: campaignVars.offer_code || '',
     days_left: campaignVars.days_left ?? '',
   };
