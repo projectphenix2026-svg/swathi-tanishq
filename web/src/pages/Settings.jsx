@@ -1,47 +1,138 @@
 import { useEffect, useState } from 'react';
-import { MessageSquareText, ShieldCheck, Smartphone, UserPlus } from 'lucide-react';
+import { KeyRound, UserPlus } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.js';
-import { Alert, Avatar, Field, Modal, Spinner, useToast } from '../components/ui.jsx';
+import { Avatar, Field, Modal, Pic, Spinner, useToast } from '../components/ui.jsx';
 import { dateOnly, rate } from '../lib/format.js';
+import { SCREEN_LANGS, useT } from '../lib/i18n.jsx';
 import { ConnectWhatsApp } from './ConnectWhatsApp.jsx';
 import { YourData } from './YourData.jsx';
 import { GoLive } from './GoLive.jsx';
 
-const ROLE_TEXT = {
-  admin: 'Everything, including staff, settings and approving big sends',
-  manager: 'Customers, templates, offers and wishes',
-  viewer: 'Reports, replies, call back list and sales codes; cannot send offers',
-};
+// Settings in sections: a menu on the left (chips on phones) and one section at a time.
+// The owner sees every section; staff see their own account and the shop's sending rules.
+const SECTIONS = [
+  { id: 'go-live', label: 'WhatsApp and going live', pic: 'speech', owner: true },
+  { id: 'messages', label: 'Message rules', pic: 'megaphone' },
+  { id: 'staff', label: 'Staff', pic: 'people', owner: true },
+  { id: 'your-data', label: 'Your data', pic: 'chart', owner: true },
+  { id: 'account', label: 'My account', pic: 'gear' },
+];
+// Two everyday roles: the owner (everything) and staff (send, customers, replies). "View only"
+// stays for logins that already have it.
+const ROLES = [
+  { value: 'admin', label: 'Owner', text: 'Everything: going live, settings, staff, approving big sends.' },
+  { value: 'manager', label: 'Staff', text: 'Sends messages, adds customers, answers replies, records sales codes.' },
+  { value: 'viewer', label: 'View only', text: 'Sees reports and replies; cannot send.' },
+];
 
 export default function Settings() {
   const { settings, user, reloadSettings } = useAuth();
-  const isAdmin = settings?.role === 'admin';
+  const isOwner = settings?.role === 'admin';
+  const sections = SECTIONS.filter((s) => isOwner || !s.owner);
+  const fromHash = () => {
+    const h = window.location.hash.slice(1);
+    return sections.some((s) => s.id === h) ? h : h === 'connect-whatsapp' ? 'go-live' : sections[0].id;
+  };
+  const [section, setSection] = useState(fromHash);
   const [version, setVersion] = useState(0);
-  // Links like /settings#go-live scroll to that card once the page has drawn.
   useEffect(() => {
-    if (!window.location.hash) return undefined;
-    const timer = setTimeout(() => document.querySelector(window.location.hash)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 400);
-    return () => clearTimeout(timer);
-  }, []);
+    // Owner-only sections appear once the login's role has loaded; pick the right one again.
+    setSection(fromHash());
+    const onHash = () => setSection(fromHash());
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOwner]);
+  const open = (id) => {
+    setSection(id);
+    window.history.replaceState(null, '', `#${id}`);
+  };
+  const current = sections.find((s) => s.id === section) || sections[0];
+
   return (
-    <div className="page" style={{ maxWidth: 900 }}>
-      <div className="page-head">
-        <div>
-          <h1>Settings</h1>
-          <p>Going live, the shop’s WhatsApp account, limits that protect the number, and staff logins.</p>
+    <div className="page settings-page">
+      <div className="page-head compact"><h1>Settings</h1></div>
+      <div className="settings-layout">
+        <nav className="settings-nav" aria-label="Settings sections">
+          {sections.map((s) => (
+            <button key={s.id} type="button" className={s.id === current.id ? 'on' : ''} onClick={() => open(s.id)} aria-current={s.id === current.id ? 'page' : undefined}>
+              <Pic name={s.pic} size={22} plain />{s.label}
+            </button>
+          ))}
+        </nav>
+        <div className="settings-body stack">
+          <h2 className="settings-title">{current.label}</h2>
+          {current.id === 'go-live' && (
+            <>
+              <GoLive onChange={() => setVersion((v) => v + 1)} />
+              <ConnectWhatsApp key={version} />
+            </>
+          )}
+          {current.id === 'messages' && (
+            <>
+              <Limits isOwner={isOwner} settings={settings} />
+              {isOwner && <SalesCodes settings={settings} onChange={reloadSettings} />}
+              <SmsStatus settings={settings} />
+            </>
+          )}
+          {current.id === 'staff' && <Staff me={user} />}
+          {current.id === 'your-data' && <YourData lastExportAt={settings?.lastExportAt} onDone={reloadSettings} />}
+          {current.id === 'account' && <Account user={user} isOwner={isOwner} />}
         </div>
       </div>
-      <div className="stack">
-        {isAdmin && <GoLive onChange={() => setVersion((v) => v + 1)} />}
-        {isAdmin && <ConnectWhatsApp key={version} />}
-        <Channels settings={settings} />
-        {isAdmin && <SalesCodes settings={settings} onChange={reloadSettings} />}
-        <Limits isAdmin={isAdmin} settings={settings} />
-        {isAdmin && <YourData lastExportAt={settings?.lastExportAt} onDone={reloadSettings} />}
-        {isAdmin ? <Staff me={user} /> : <Alert>Only the owner (an admin) can change limits and staff logins. Your role: <b>{settings?.role}</b>.</Alert>}
-      </div>
     </div>
+  );
+}
+
+/** A section card with a title and one line of help. */
+function Block({ title, hint, children, id }) {
+  return (
+    <div className="card card-pad stack" id={id} style={{ gap: 12 }}>
+      <div>
+        <h3>{title}</h3>
+        {hint && <p className="subtle" style={{ marginTop: 2 }}>{hint}</p>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function Limits({ isOwner, settings }) {
+  const toast = useToast();
+  const { reloadSettings } = useAuth();
+  const [cap, setCap] = useState(settings?.weeklyCap ?? 2);
+  const [threshold, setThreshold] = useState(settings?.approvalThreshold ?? 500);
+  const [busy, setBusy] = useState(false);
+  async function save(e) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      await api('/api/dashboard/settings', { method: 'PUT', body: { weeklyCap: Number(cap), approvalThreshold: Number(threshold) } });
+      toast('Limits saved');
+      reloadSettings?.();
+    } catch (err) {
+      toast(err.message, 'bad');
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <form onSubmit={save}>
+      <Block title="Sending limits" hint="These protect the shop’s WhatsApp number. Only the owner can change them.">
+        <div className="settings-rows">
+          <label className="settings-row" htmlFor="weekly-cap">
+            <span><b>Messages per customer per week</b><span className="subtle">Birthday and anniversary wishes don’t count. 2 keeps the number’s quality healthy. 0 = no limit.</span></span>
+            <input id="weekly-cap" className="input num-input" type="number" min="0" max="14" value={cap} onChange={(e) => setCap(e.target.value)} disabled={!isOwner} />
+          </label>
+          <label className="settings-row" htmlFor="approval">
+            <span><b>Owner approves sends to this many or more</b><span className="subtle">When staff send to this many customers, it waits for the owner’s OK.</span></span>
+            <input id="approval" className="input num-input" type="number" min="1" value={threshold} onChange={(e) => setThreshold(e.target.value)} disabled={!isOwner} />
+          </label>
+        </div>
+        {isOwner && <button className="btn primary" style={{ alignSelf: 'flex-start' }} disabled={busy}>{busy ? <Spinner /> : 'Save limits'}</button>}
+      </Block>
+    </form>
   );
 }
 
@@ -63,88 +154,25 @@ function SalesCodes({ settings, onChange }) {
     }
   }
   return (
-    <div className="card card-pad">
-      <label className="check">
+    <Block title="Sales codes" hint="A code in each customer’s message (like PRIYA-DIWALI-4821). Staff type it at billing, so you see which message brought the sale.">
+      <label className="check consent">
         <span className="switch"><input type="checkbox" checked={settings.salesCodes} disabled={busy} onChange={(e) => toggle(e.target.checked)} /><span /></span>
-        <span>
-          <b>Sales codes</b>
-          <span className="hint" style={{ display: 'block' }}>
-            Adds a code to each customer’s message (for example PRIYA-DIWALI-4821). When the customer shows it at billing, staff type it under Sales codes, and you see which message brought the sale. Off: no codes, and no Sales codes page.
-          </span>
-        </span>
+        <span><b>{settings.salesCodes ? 'On' : 'Off'}</b><span className="hint" style={{ display: 'block' }}>Off: no codes in messages, and no Sales codes page.</span></span>
       </label>
-    </div>
+    </Block>
   );
 }
 
-function Channels({ settings }) {
+function SmsStatus({ settings }) {
   if (!settings) return null;
-  const wa = settings.provider;
   const sms = settings.sms;
   return (
-    <div className="card">
-      <div className="card-head"><h2>Channels</h2></div>
-      <div className="list-item">
-        <span className="kpi-icon tone-wa" style={{ width: 40, height: 40, borderRadius: 12 }}><Smartphone size={20} /></span>
-        <div style={{ flex: 1 }}>
-          <b>WhatsApp</b>
-          <div className="subtle">{wa.name === 'mock' ? 'Test mode: nothing is sent' : wa.label} · {rate(settings.costPerMessage)} per marketing message</div>
-          {wa.name === 'mock' && <div className="subtle">The owner connects the shop’s WhatsApp above, under Connect WhatsApp.</div>}
-        </div>
-        <span className={`badge ${wa.missing.length ? 'bad' : wa.name === 'mock' ? 'warn' : 'ok'}`}>{wa.missing.length ? 'Not set up' : wa.name === 'mock' ? 'Test mode' : 'Connected'}</span>
+    <Block title="SMS" hint="For customers without WhatsApp. India needs DLT registration before SMS can really be sent.">
+      <div className="row between wrap" style={{ gap: 8 }}>
+        <span>{sms.live ? `${sms.label} · ${rate(sms.costPerSms)} per SMS` : 'Not switched on yet. Ask the app’s maker after DLT registration (about ₹5,900, 1–2 weeks).'}</span>
+        <span className={`badge ${sms.live ? 'ok' : 'neutral'}`}>{sms.live ? 'On' : 'Off'}</span>
       </div>
-      <div className="list-item">
-        <span className="kpi-icon tone-info" style={{ width: 40, height: 40, borderRadius: 12 }}><MessageSquareText size={20} /></span>
-        <div style={{ flex: 1 }}>
-          <b>SMS backup</b>
-          <div className="subtle">{sms.live ? `${sms.label} · ${rate(sms.costPerSms)} per SMS` : 'Preview: the app records exactly what would be sent. Switch on after DLT registration (SMS_MODE=msg91).'}</div>
-        </div>
-        <span className={`badge ${sms.missing.length ? 'bad' : sms.live ? 'ok' : 'warn'}`}>{sms.missing.length ? 'Not set up' : sms.live ? 'Live' : 'Preview'}</span>
-      </div>
-      <div className="list-item">
-        <span className="kpi-icon tone-brand" style={{ width: 40, height: 40, borderRadius: 12 }}><ShieldCheck size={20} /></span>
-        <div style={{ flex: 1 }}>
-          <b>Delivery updates and replies</b>
-          <div className="subtle">{settings.webhooksReachable ? 'Webhooks are set up: delivered/read ticks and replies arrive instantly.' : 'No public address yet: replies cannot arrive and Meta read receipts are not recorded.'}</div>
-        </div>
-        <span className={`badge ${settings.webhooksReachable ? 'ok' : 'warn'}`}>{settings.webhooksReachable ? 'On' : 'Off'}</span>
-      </div>
-    </div>
-  );
-}
-
-function Limits({ isAdmin, settings }) {
-  const toast = useToast();
-  const { reloadSettings } = useAuth();
-  const [cap, setCap] = useState(settings?.weeklyCap ?? 2);
-  const [threshold, setThreshold] = useState(settings?.approvalThreshold ?? 500);
-  const [busy, setBusy] = useState(false);
-  async function save(e) {
-    e.preventDefault();
-    setBusy(true);
-    try {
-      await api('/api/dashboard/settings', { method: 'PUT', body: { weeklyCap: Number(cap), approvalThreshold: Number(threshold) } });
-      toast('Limits saved');
-      reloadSettings?.();
-    } catch (err) {
-      toast(err.message, 'bad');
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <form className="card card-pad stack" onSubmit={save}>
-      <h2>Limits</h2>
-      <div className="form-grid two">
-        <Field label="Offers per customer per week" hint="Marketing messages only; birthday and anniversary greetings don’t count. 0 = no limit. Two a week keeps the WhatsApp number’s quality rating healthy.">
-          <input className="input" type="number" min="0" max="14" value={cap} onChange={(e) => setCap(e.target.value)} disabled={!isAdmin} />
-        </Field>
-        <Field label="Needs an admin’s approval from" hint="Offers to this many customers or more, created by managers, wait for an admin to approve.">
-          <input className="input" type="number" min="1" value={threshold} onChange={(e) => setThreshold(e.target.value)} disabled={!isAdmin} />
-        </Field>
-      </div>
-      {isAdmin && <div className="row" style={{ justifyContent: 'flex-end' }}><button className="btn primary" disabled={busy}>{busy ? <Spinner /> : 'Save limits'}</button></div>}
-    </form>
+    </Block>
   );
 }
 
@@ -152,6 +180,7 @@ function Staff({ me }) {
   const toast = useToast();
   const [users, setUsers] = useState(null);
   const [adding, setAdding] = useState(false);
+  const [resetting, setResetting] = useState(null);
   const load = () => api('/api/auth/users').then((r) => setUsers(r.users)).catch(() => setUsers([]));
   useEffect(() => {
     load();
@@ -159,41 +188,42 @@ function Staff({ me }) {
   async function changeRole(u, role) {
     try {
       await api(`/api/auth/users/${u.id}`, { method: 'PATCH', body: { role } });
-      toast(`${u.name} is now ${role === 'admin' ? 'an admin' : `a ${role}`}`);
+      toast(`${u.name} is now ${ROLES.find((r) => r.value === role).label}`);
       load();
     } catch (e) {
       toast(e.message, 'bad');
     }
   }
   return (
-    <div className="card">
-      <div className="card-head">
-        <h2>Staff logins</h2>
-        <button className="btn sm primary" onClick={() => setAdding(true)}><UserPlus size={16} />Add staff</button>
-      </div>
-      {!users ? (
-        <div style={{ padding: 16 }}><Spinner /></div>
-      ) : (
-        users.map((u) => (
-          <div key={u.id} className="list-item" style={{ flexWrap: 'wrap' }}>
-            <Avatar name={u.name} seed={u.email} />
-            <div style={{ flex: '1 1 200px', minWidth: 0 }}>
-              <b>{u.name}{u.id === me.id ? ' (you)' : ''}</b>
-              <div className="subtle">{u.email} · added {dateOnly(u.created_at)}</div>
-            </div>
-            <select className="select" style={{ width: 'auto', minHeight: 38 }} value={u.role} onChange={(e) => changeRole(u, e.target.value)} disabled={u.id === me.id} aria-label={`Role for ${u.name}`}>
-              <option value="admin">Admin</option>
-              <option value="manager">Manager</option>
-              <option value="viewer">Viewer</option>
-            </select>
+    <>
+      <Block title="Who can sign in" hint="Each person has their own login. Share a first password in person.">
+        {!users ? <Spinner /> : (
+          <div className="staff-list">
+            {users.map((u) => (
+              <div key={u.id} className="staff-row">
+                <Avatar name={u.name} seed={u.email} size={36} />
+                <span style={{ flex: '1 1 180px', minWidth: 0 }}>
+                  <b>{u.name}{u.id === me.id ? ' (you)' : ''}</b>
+                  <span className="subtle" style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis' }}>{u.email} · added {dateOnly(u.created_at)}</span>
+                </span>
+                <select className="select sm" value={u.role} onChange={(e) => changeRole(u, e.target.value)} disabled={u.id === me.id} aria-label={`Role for ${u.name}`}>
+                  {ROLES.filter((r) => r.value !== 'viewer' || u.role === 'viewer').map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+                </select>
+                {u.id !== me.id && <button className="btn ghost sm" onClick={() => setResetting(u)}><KeyRound size={15} />New password</button>}
+              </div>
+            ))}
           </div>
-        ))
-      )}
-      <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)' }} className="stack-sm">
-        {Object.entries(ROLE_TEXT).map(([r, t]) => <span key={r} className="subtle"><b style={{ textTransform: 'capitalize', color: 'var(--text-2)' }}>{r}:</b> {t}</span>)}
-      </div>
+        )}
+        <button className="btn primary" style={{ alignSelf: 'flex-start' }} onClick={() => setAdding(true)}><UserPlus size={16} />Add staff</button>
+      </Block>
+      <Block title="What each role can do">
+        <div className="stack-sm">
+          {ROLES.slice(0, 2).map((r) => <span key={r.value}><b>{r.label}:</b> <span className="subtle">{r.text}</span></span>)}
+        </div>
+      </Block>
       {adding && <AddStaff onClose={() => setAdding(false)} onSaved={() => { setAdding(false); load(); }} />}
-    </div>
+      {resetting && <ResetPassword u={resetting} onClose={() => setResetting(null)} />}
+    </>
   );
 }
 
@@ -217,19 +247,70 @@ function AddStaff({ onClose, onSaved }) {
   return (
     <Modal title="Add staff" onClose={onClose} footer={<><button className="btn" onClick={onClose}>Cancel</button><button className="btn primary" onClick={save} disabled={busy}>{busy ? <Spinner /> : 'Add'}</button></>}>
       <div className="stack">
-        <Field label="Name"><input className="input" value={f.name} onChange={set('name')} /></Field>
-        <Field label="Email"><input className="input" type="email" value={f.email} onChange={set('email')} /></Field>
+        <Field label="Name"><input id="staff-name" className="input" value={f.name} onChange={set('name')} autoComplete="off" /></Field>
+        <Field label="Email"><input id="staff-email" className="input" type="email" value={f.email} onChange={set('email')} autoComplete="off" /></Field>
         <Field label="First password" hint="At least 8 characters. Share it with them in person; they can sign in straight away.">
-          <input className="input" type="text" value={f.password} onChange={set('password')} autoComplete="new-password" />
+          <input id="staff-password" className="input" type="text" value={f.password} onChange={set('password')} autoComplete="new-password" />
         </Field>
         <Field label="Role">
-          <select className="select" value={f.role} onChange={set('role')}>
-            <option value="manager">Manager: {ROLE_TEXT.manager}</option>
-            <option value="viewer">Viewer: {ROLE_TEXT.viewer}</option>
-            <option value="admin">Admin: {ROLE_TEXT.admin}</option>
-          </select>
+          <div className="options">
+            {ROLES.slice(0, 2).map((r) => (
+              <button key={r.value} type="button" className={`option ${f.role === r.value ? 'on' : ''}`} onClick={() => setF((x) => ({ ...x, role: r.value }))}>
+                <span className="radio" />
+                <span><span className="option-title">{r.label}</span><span className="subtle" style={{ display: 'block' }}>{r.text}</span></span>
+              </button>
+            ))}
+          </div>
         </Field>
       </div>
     </Modal>
+  );
+}
+
+function ResetPassword({ u, onClose }) {
+  const toast = useToast();
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  async function save() {
+    setBusy(true);
+    try {
+      await api(`/api/auth/users/${u.id}`, { method: 'PATCH', body: { password } });
+      toast(`New password set for ${u.name}`);
+      onClose();
+    } catch (e) {
+      toast(e.message, 'bad');
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Modal title={`New password for ${u.name}`} onClose={onClose} footer={<><button className="btn" onClick={onClose}>Cancel</button><button className="btn primary" onClick={save} disabled={busy || password.length < 8}>{busy ? <Spinner /> : 'Set password'}</button></>}>
+      <Field label="New password" hint="At least 8 characters. Tell them in person.">
+        <input id="reset-password" className="input" type="text" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" />
+      </Field>
+    </Modal>
+  );
+}
+
+function Account({ user, isOwner }) {
+  const { setLanguage } = useAuth();
+  const { lang } = useT();
+  return (
+    <>
+      <Block title="Signed in as">
+        <div className="row" style={{ gap: 12 }}>
+          <Avatar name={user.name} size={44} />
+          <span><b>{user.name}</b><span className="subtle" style={{ display: 'block' }}>{user.email} · {isOwner ? 'Owner' : user.role === 'viewer' ? 'View only' : 'Staff'}</span></span>
+        </div>
+      </Block>
+      <Block title="Language" hint="The whole app opens in this language for you, on any phone or computer.">
+        <div className="lang-switch" role="group" aria-label="Language" style={{ alignSelf: "flex-start" }}>
+          {SCREEN_LANGS.map((l) => (
+            <button key={l.code} type="button" className={lang === l.code ? 'on' : ''} onClick={() => setLanguage(l.code)} aria-pressed={lang === l.code}>{l.label}</button>
+          ))}
+        </div>
+      </Block>
+      {!isOwner && <Block title="Password" hint="Forgot it or want a new one? Ask the owner: Settings → Staff → New password." />}
+    </>
   );
 }

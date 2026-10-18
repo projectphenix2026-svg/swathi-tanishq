@@ -93,7 +93,7 @@ router.get('/users', requireAuth, requireRole('admin'), async (req, res) => {
 
 router.post('/users', requireAuth, requireRole('admin'), async (req, res) => {
   const { email, name, password, role = 'manager' } = req.body || {};
-  if (!ROLES.includes(role)) return res.status(400).json({ error: 'Choose a role: admin, manager or viewer.' });
+  if (!ROLES.includes(role)) return res.status(400).json({ error: 'Choose a role: Owner, Staff or View only.' });
   if (!/^\S+@\S+\.\S+$/.test(String(email || ''))) return res.status(400).json({ error: 'Enter a valid email address.' });
   const { rows: [taken] } = await query('SELECT client_id FROM users WHERE email = $1', [email]);
   if (taken) return res.status(409).json({ error: 'That email already has a login.' });
@@ -110,10 +110,10 @@ router.patch('/users/:id', requireAuth, requireRole('admin'), async (req, res) =
   const { rows: [u] } = await query('SELECT * FROM users WHERE id = $1 AND client_id = $2', [req.params.id, req.clientId]);
   if (!u) return res.status(404).json({ error: 'Staff member not found.' });
   if (role) {
-    if (!ROLES.includes(role)) return res.status(400).json({ error: 'Choose a role: admin, manager or viewer.' });
+    if (!ROLES.includes(role)) return res.status(400).json({ error: 'Choose a role: Owner, Staff or View only.' });
     if (u.role === 'admin' && role !== 'admin') {
       const { rows: [{ n }] } = await query(`SELECT count(*) AS n FROM users WHERE client_id = $1 AND role = 'admin'`, [req.clientId]);
-      if (n <= 1) return res.status(409).json({ error: 'Keep at least one admin.' });
+      if (n <= 1) return res.status(409).json({ error: 'Keep at least one owner.' });
     }
     await query('UPDATE users SET role = $2 WHERE id = $1', [u.id, role]);
   }
