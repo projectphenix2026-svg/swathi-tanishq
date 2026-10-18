@@ -192,7 +192,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .grid { display: grid; gap: 16px; }
 .grid.kpis { grid-template-columns: repeat(2, 1fr); }
 @media (min-width: 700px) { .grid.kpis { grid-template-columns: repeat(4, 1fr); } }
-.two-col { display: grid; gap: 20px; }
+.two-col { display: grid; gap: 20px; grid-template-columns: minmax(0, 1fr); }
 @media (min-width: 1000px) { .two-col { grid-template-columns: minmax(0, 1fr) 360px; align-items: start; } .sticky { position: sticky; top: 24px; } }
 .divider { height: 1px; background: var(--border); margin: 4px 0; }
 
@@ -495,3 +495,9 @@ code, .code { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; f
 .bottom-nav a:not(.active) .pic, .nav a:not(.active) .pic { filter: saturate(0.75); opacity: 0.85; }
 .bottom-nav a.active .pic { transform: scale(1.08); }
 .ready-card .emoji .pic { filter: drop-shadow(0 2px 3px rgba(0,0,0,.12)); }
+/* Phones: the Send button (with its cost) gets its own full-width line. */
+@media (max-width: 759px) {
+  .action-bar { flex-wrap: wrap; }
+  .action-bar > .row { flex: 1 1 auto; justify-content: flex-end; }
+  .action-bar .btn.wa.lg { flex: 1 1 100%; justify-content: center; white-space: normal; }
+}
