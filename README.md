@@ -53,7 +53,7 @@ Put the printed `database_id` into `wrangler.jsonc`, then set the secrets (each 
 npx wrangler secret put JWT_SECRET
 ```
 
-Deploy with `npm run deploy`, or merge to main: Cloudflare Workers Builds deploys every push to main. The tables are created on the first request, and the first admin login comes from `ADMIN_EMAIL` / `ADMIN_PASSWORD`. Non-secret settings (provider, business name, SMS mode, site address) are the `vars` in `wrangler.jsonc`; Meta, Twilio and MSG91 keys are added as secrets the same way when needed (`META_ACCESS_TOKEN`, `META_APP_SECRET`, `META_WEBHOOK_VERIFY_TOKEN`, …).
+Deploy with `npm run deploy` (the trial runs at https://swathi-tanishq.projectphenix2026.workers.dev). The tables are created on the first request, and the first admin login comes from `ADMIN_EMAIL` / `ADMIN_PASSWORD`. Non-secret settings (provider, business name, SMS mode, site address) are the `vars` in `wrangler.jsonc`; Meta, Twilio and MSG91 keys are added as secrets the same way when needed (`META_ACCESS_TOKEN`, `META_APP_SECRET`, `META_WEBHOOK_VERIFY_TOKEN`, …).
 
 To try the Cloudflare version locally (Cloudflare's own runtime with a local D1), put `JWT_SECRET`, `ADMIN_EMAIL` and `ADMIN_PASSWORD` in `.dev.vars` and run `npm run cf:dev`.
 

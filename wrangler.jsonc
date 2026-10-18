@@ -18,7 +18,7 @@
     {
       "binding": "DB",
       "database_name": "swathi-tanishq",
-      "database_id": "00000000-0000-0000-0000-000000000000"
+      "database_id": "785862c3-52ab-4f85-b926-18fe75a23381"
     }
   ],
   "triggers": { "crons": ["* * * * *"] },
@@ -28,7 +28,7 @@
     // mock = test mode (nothing is sent) | meta | twilio
     "MESSAGING_PROVIDER": "mock",
     "COST_PER_MESSAGE_INR": "0.8631",
-    "PUBLIC_BASE_URL": "https://swathi-tanishq.trishaank123.workers.dev",
+    "PUBLIC_BASE_URL": "https://swathi-tanishq.projectphenix2026.workers.dev",
     "SMS_MODE": "preview",
     "OCCASION_CHECK_MINUTES": "15",
     "STATUS_POLL_SECONDS": "0"

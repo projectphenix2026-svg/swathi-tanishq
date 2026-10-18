@@ -10,3 +10,5 @@ server/.data/
 
 .dev.vars
 .wrangler/
+
+.cloudflare-login.txt
