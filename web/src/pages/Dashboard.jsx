@@ -29,7 +29,6 @@ export default function Dashboard() {
       </div>
 
       <div className="stack">
-        <ProviderBanner settings={settings} compact />
         {!d ? (
           <div className="kpi-row">{[0, 1, 2, 3, 4].map((i) => <div key={i} className="card kpi-tile"><Skeleton h={12} w="60%" /><Skeleton h={26} w="40%" style={{ marginTop: 10 }} /></div>)}</div>
         ) : d.error ? (

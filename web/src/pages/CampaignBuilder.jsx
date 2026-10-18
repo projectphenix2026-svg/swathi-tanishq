@@ -7,7 +7,6 @@ import { useAuth } from '../lib/auth.js';
 import { Alert, Avatar, Field, Pic, Spinner, useToast } from '../components/ui.jsx';
 import { Highlighted, PhonePreview } from '../components/PhonePreview.jsx';
 import { PhotoPicker } from '../components/PhotoPicker.jsx';
-import { ProviderBanner } from './Dashboard.jsx';
 import { ago, dateTime, inr, num, phone, plural } from '../lib/format.js';
 import { READY_MESSAGES } from '../lib/ready.js';
 import { LANGS, isReadyText, readyFor, readyIn } from '../lib/ready-lang.js';
@@ -516,7 +515,6 @@ function ReviewStep({ t, name, setName, template, when, setWhen, channel, setCha
     : [filters.cities.length && filters.cities.map(cap).join(', '), filters.tags.length && filters.tags.join(', '), filters.search && `“${filters.search}”`].filter(Boolean).join(' · ') || 'Everyone';
   return (
     <div className="stack">
-      <ProviderBanner settings={settings} compact />
       <div className="card card-pad stack" style={{ gap: 14 }}>
         <div className="send-line">
           <b>{template?.name}</b> <span className="arrow">→</span> <b>{plural(sendCount, 'customer')}</b> <span className="subtle">({who})</span>

@@ -6,6 +6,7 @@ import { Alert, Avatar, Field, Modal, Spinner, useToast } from '../components/ui
 import { dateOnly, rate } from '../lib/format.js';
 import { ConnectWhatsApp } from './ConnectWhatsApp.jsx';
 import { YourData } from './YourData.jsx';
+import { GoLive } from './GoLive.jsx';
 
 const ROLE_TEXT = {
   admin: 'Everything, including staff, settings and approving big sends',
@@ -16,16 +17,24 @@ const ROLE_TEXT = {
 export default function Settings() {
   const { settings, user, reloadSettings } = useAuth();
   const isAdmin = settings?.role === 'admin';
+  const [version, setVersion] = useState(0);
+  // Links like /settings#go-live scroll to that card once the page has drawn.
+  useEffect(() => {
+    if (!window.location.hash) return undefined;
+    const timer = setTimeout(() => document.querySelector(window.location.hash)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 400);
+    return () => clearTimeout(timer);
+  }, []);
   return (
     <div className="page" style={{ maxWidth: 900 }}>
       <div className="page-head">
         <div>
           <h1>Settings</h1>
-          <p>The shop’s WhatsApp account, limits that protect the number, and staff logins.</p>
+          <p>Going live, the shop’s WhatsApp account, limits that protect the number, and staff logins.</p>
         </div>
       </div>
       <div className="stack">
-        {isAdmin && <ConnectWhatsApp />}
+        {isAdmin && <GoLive onChange={() => setVersion((v) => v + 1)} />}
+        {isAdmin && <ConnectWhatsApp key={version} />}
         <Channels settings={settings} />
         {isAdmin && <SalesCodes settings={settings} onChange={reloadSettings} />}
         <Limits isAdmin={isAdmin} settings={settings} />

@@ -5,6 +5,8 @@ import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.js';
 import { Avatar, Pic } from './ui.jsx';
 import { SCREEN_LANGS, useT } from '../lib/i18n.jsx';
+import { ModeBar } from './ModeBar.jsx';
+import { Welcome, shouldWelcome } from './Welcome.jsx';
 
 // The six places in the app. Settings sits at the bottom of the menu; Sales codes appears
 // only when the owner switches sales codes on.
@@ -26,6 +28,7 @@ export function Layout() {
   const { t, lang, setLang } = useT();
   const [counts, setCounts] = useState({ unread: 0, leads: 0, replies: 0 });
   const [sheet, setSheet] = useState(false);
+  const [welcome, setWelcome] = useState(() => shouldWelcome(user));
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -65,7 +68,6 @@ export function Layout() {
           {links.map((l) => <SideLink key={l.to} link={l} counts={counts} pathname={location.pathname} t={t} exclude={l.to === '/campaigns' && sending} />)}
         </nav>
         <div className="sidebar-foot">
-          {settings && <ModeBadge settings={settings} t={t} />}
           <nav className="nav" aria-label="Settings"><SideLink link={SETTINGS} counts={counts} pathname={location.pathname} t={t} /></nav>
           <UserMenu user={user} lang={lang} setLang={setLang} t={t} onSignOut={signOut} />
         </div>
@@ -78,12 +80,13 @@ export function Layout() {
             <b style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{settings?.businessName || 'Swathi Tanishq'}</b>
           </div>
           <span className="row" style={{ gap: 6 }}>
-            {settings && <ModeBadge settings={settings} t={t} compact />}
             <button className="icon-btn" onClick={() => setSheet(true)} aria-label={t('Menu')} aria-haspopup="dialog"><Menu size={21} /></button>
           </span>
         </header>
+        <ModeBar settings={settings} />
         <Outlet />
       </div>
+      {welcome && settings && <Welcome user={user} testMode={settings.provider.name === 'mock'} onClose={() => setWelcome(false)} />}
 
       <nav className="bottom-nav" aria-label="Main">
         {PHONE.map((to) => {
@@ -184,14 +187,4 @@ function LangSwitch({ lang, setLang, label }) {
       ))}
     </div>
   );
-}
-
-/** Which mode the app is in: Test mode (nothing reaches phones) or Live. */
-function ModeBadge({ settings, t, compact }) {
-  const p = settings.provider;
-  const test = p.name === 'mock';
-  const broken = !test && p.missing.length;
-  const tone = test ? 'warn' : broken ? 'bad' : 'ok';
-  const text = test ? (compact ? t('Test mode') : t('Test mode: nothing is sent')) : broken ? t('WhatsApp not connected') : t('Live');
-  return <span className={`badge ${tone} mode-badge`}>{text}</span>;
 }
