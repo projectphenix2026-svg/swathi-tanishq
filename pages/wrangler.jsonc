@@ -1,0 +1,9 @@
+// Cloudflare Pages project: https://swathi-tanishq.pages.dev
+// Deploy with `npm run deploy:pages` from the repo root (after `npm run deploy` for the Worker).
+{
+  "name": "swathi-tanishq",
+  "pages_build_output_dir": "./dist",
+  "compatibility_date": "2025-09-15",
+  // The Worker that runs the API, webhooks and Cron (see ../wrangler.jsonc).
+  "services": [{ "binding": "API", "service": "swathi-tanishq" }]
+}
