@@ -693,3 +693,4 @@ a.chart-card:hover { border-color: var(--brand); }
 .gl-steps .tick { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-2); color: var(--text-2); font-weight: 700; font-size: 0.8rem; flex-shrink: 0; }
 .gl-steps li.done .tick { background: var(--ok); color: #fff; }
 .gl-steps li.done b { color: var(--text-2); }
+.select.sm { height: 34px; width: auto; padding-right: 30px; font-size: 0.85rem; }

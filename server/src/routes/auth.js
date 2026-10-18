@@ -46,6 +46,15 @@ router.post('/logout', (req, res) => {
 
 router.get('/me', requireAuth, (req, res) => res.json({ user: publicUser(req.user) }));
 
+// Each person chooses their own app language; it is saved with their login.
+const LANGUAGES = ['en', 'te', 'hi'];
+router.patch('/me', requireAuth, async (req, res) => {
+  const language = req.body?.language;
+  if (!LANGUAGES.includes(language)) return res.status(400).json({ error: 'Choose English, Telugu or Hindi.' });
+  await query('UPDATE users SET language = $2 WHERE id = $1', [req.user.id, language]);
+  res.json({ user: publicUser({ ...req.user, language }) });
+});
+
 export async function requireAuth(req, res, next) {
   try {
     const token = req.cookies?.[COOKIE];
@@ -129,7 +138,7 @@ export async function createUser({ clientId, email, name, password, role = 'admi
 }
 
 function publicUser(u) {
-  return { id: u.id, email: u.email, name: u.name, role: u.role };
+  return { id: u.id, email: u.email, name: u.name, role: u.role, language: u.language || 'en' };
 }
 
 export default router;

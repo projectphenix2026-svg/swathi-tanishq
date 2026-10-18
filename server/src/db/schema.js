@@ -237,4 +237,6 @@ export const EXTRA_COLUMNS = {
   campaigns: [['channel', "TEXT NOT NULL DEFAULT 'whatsapp'"]],
   // A shop event (festival, sale, store anniversary) that comes back on the same date every year.
   occasions: [['repeat_yearly', 'INTEGER NOT NULL DEFAULT 0']],
+  // Each person's app language (en | te | hi): the whole app opens in it, on any device.
+  users: [['language', "TEXT NOT NULL DEFAULT 'en'"]],
 };

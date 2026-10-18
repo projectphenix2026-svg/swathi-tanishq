@@ -3,6 +3,7 @@ import { AuthCtx } from './lib/auth.js';
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { api, setUnauthorizedHandler } from './lib/api.js';
 import { Layout } from './components/Layout.jsx';
+import { useT } from './lib/i18n.jsx';
 import { Spinner } from './components/ui.jsx';
 import Login from './pages/Login.jsx';
 import Dashboard from './pages/Dashboard.jsx';
@@ -25,6 +26,12 @@ export default function App() {
   const [settings, setSettings] = useState(null);
   const navigate = useNavigate();
   const location = useLocation();
+  const { setLang } = useT();
+  // The whole app opens in the language saved with this person's login.
+  useEffect(() => {
+    if (user?.language) setLang(user.language);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.language]);
 
   const loadSettings = useCallback(() => api('/api/dashboard/settings').then(setSettings).catch(() => {}), []);
 
@@ -54,12 +61,17 @@ export default function App() {
         setUser(r.user);
         loadSettings();
       },
+      async setLanguage(language) {
+        setLang(language);
+        const r = await api('/api/auth/me', { method: 'PATCH', body: { language } });
+        setUser(r.user);
+      },
       async logout() {
         await api('/api/auth/logout', { method: 'POST' }).catch(() => {});
         setUser(null);
       },
     }),
-    [user, settings, loadSettings],
+    [user, settings, loadSettings, setLang],
   );
 
   if (user === undefined) {
