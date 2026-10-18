@@ -1,15 +1,19 @@
 import { useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  AlertTriangle, ArrowLeft, CheckCircle2, ClipboardPaste, Copy, Download, FileSpreadsheet, RefreshCw, Send, Upload, UserPlus, XCircle,
+  AlertTriangle, ArrowLeft, CheckCircle2, ClipboardPaste, Copy, Download, FileSpreadsheet, MessageSquareText, RefreshCw, Send, Table, Upload, UserPlus, XCircle,
 } from 'lucide-react';
 import { normalizePhone } from '@shared/phone.js';
-import { api, fileUrl } from '../lib/api.js';
+// The Excel/CSV reader is loaded only when an import starts, so the app opens fast.
+const importer = () => import('@shared/importer.js');
+import { downloadSample } from '../lib/sample.js';
+import { api, apiText } from '../lib/api.js';
 import { Alert, Field, Spinner, useToast } from '../components/ui.jsx';
 import { num, plural } from '../lib/format.js';
 
 const TABS = [
-  { key: 'file', label: 'Excel or CSV', icon: FileSpreadsheet },
+  { key: 'file', label: 'Excel, CSV or contacts', icon: FileSpreadsheet },
+  { key: 'sheet', label: 'Google Sheet', icon: Table },
   { key: 'paste', label: 'Type or paste numbers', icon: ClipboardPaste },
   { key: 'one', label: 'One customer', icon: UserPlus },
 ];
@@ -48,6 +52,7 @@ export default function AddCustomers() {
             ))}
           </div>
           {tab === 'file' && <FileStep onPreview={setPreview} />}
+          {tab === 'sheet' && <SheetStep onPreview={setPreview} />}
           {tab === 'paste' && <PasteStep onPreview={setPreview} />}
           {tab === 'one' && <OneCustomer />}
         </div>
@@ -65,15 +70,15 @@ function FileStep({ onPreview }) {
 
   async function upload(file) {
     if (!file) return;
-    if (!/\.(xlsx|xls|csv)$/i.test(file.name)) {
-      toast('Please choose an Excel (.xlsx, .xls) or CSV file.', 'bad');
+    if (!/\.(xlsx|xls|csv|vcf)$/i.test(file.name)) {
+      toast('Please choose an Excel (.xlsx, .xls), CSV or phone contacts (.vcf) file.', 'bad');
       return;
     }
     setBusy(true);
     try {
-      const form = new FormData();
-      form.append('file', file);
-      const r = await api('/api/customers/import/preview', { method: 'POST', form });
+      const { parseFile } = await importer();
+      const table = parseFile(await file.arrayBuffer(), file.name);
+      const r = await makePreview(table);
       onPreview({ ...r, file, source: `${file.name.split('.').pop().toUpperCase()} upload: ${file.name}` });
     } catch (e) {
       toast(e.message, 'bad');
@@ -96,8 +101,8 @@ function FileStep({ onPreview }) {
       >
         <div className="icon">{busy ? <Spinner size={26} /> : <Upload size={26} />}</div>
         <h2>{busy ? 'Reading your file…' : 'Drop your customer file here'}</h2>
-        <p className="muted">or <b style={{ color: 'var(--brand)' }}>choose a file</b> · Excel (.xlsx, .xls) or CSV · up to 50,000 rows</p>
-        <input ref={input} type="file" accept=".xlsx,.xls,.csv" hidden onChange={(e) => upload(e.target.files[0])} />
+        <p className="muted">or <b style={{ color: 'var(--brand)' }}>choose a file</b> · Excel (.xlsx, .xls), CSV or phone contacts (.vcf) · up to 50,000 rows</p>
+        <input ref={input} type="file" accept=".xlsx,.xls,.csv,.vcf" hidden onChange={(e) => upload(e.target.files[0])} />
       </div>
       <div className="card card-pad row between wrap">
         <div className="row">
@@ -107,9 +112,62 @@ function FileStep({ onPreview }) {
             <p className="muted" style={{ fontSize: '0.9rem' }}>Only a phone column is required. Name, city, last purchase and interests make messages personal.</p>
           </div>
         </div>
-        <a className="btn" href={fileUrl('/api/customers/sample.xlsx')}><Download size={18} />Sample Excel file</a>
+        <button className="btn" onClick={downloadSample}><Download size={18} />Sample Excel file</button>
       </div>
     </div>
+  );
+}
+
+/** Builds the preview in the browser, then asks the server which numbers are already saved. */
+async function makePreview(table) {
+  const { buildPreview } = await importer();
+  const { rows, summary } = buildPreview(table);
+  const phones = rows.filter((r) => r.status === 'ok').map((r) => r.phone);
+  const existing = new Set();
+  for (let i = 0; i < phones.length; i += 5000) {
+    const r = await api('/api/customers/import/existing', { method: 'POST', body: { phones: phones.slice(i, i + 5000) } });
+    r.existing.forEach((p) => existing.add(p));
+  }
+  for (const r of rows) {
+    if (r.status === 'ok' && existing.has(r.phone)) {
+      r.status = 'exists';
+      r.reason = 'Already a customer';
+      summary.ok -= 1;
+      summary.exists += 1;
+    }
+  }
+  return { columns: table.columns, mapping: table.mapping, rows, summary, sampleRaw: table.rows.slice(0, 3), table };
+}
+
+
+/* ---------- Google Sheet link ---------- */
+function SheetStep({ onPreview }) {
+  const toast = useToast();
+  const [url, setUrl] = useState('');
+  const [busy, setBusy] = useState(false);
+  async function check(e) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      const csv = await apiText('/api/customers/import/sheet', { sheetUrl: url });
+      const { parseFile } = await importer();
+      const r = await makePreview(parseFile(new TextEncoder().encode(csv), 'sheet.csv'));
+      onPreview({ ...r, source: 'Google Sheet' });
+    } catch (err) {
+      toast(err.message, 'bad');
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <form className="card card-pad stack" onSubmit={check}>
+      <Field label="Google Sheets link" hint="In Google Sheets, click Share and choose “Anyone with the link can view”, then copy the link. The first row should have column names.">
+        <input className="input" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://docs.google.com/spreadsheets/d/…" inputMode="url" autoFocus />
+      </Field>
+      <div className="row" style={{ justifyContent: 'flex-end' }}>
+        <button className="btn primary" disabled={!url.trim() || busy}>{busy ? <Spinner /> : 'Read the sheet'}</button>
+      </div>
+    </form>
   );
 }
 
@@ -123,7 +181,8 @@ function PasteStep({ onPreview }) {
   async function check() {
     setBusy(true);
     try {
-      const r = await api('/api/customers/import/preview', { method: 'POST', body: { text } });
+      const { parsePasted } = await importer();
+      const r = await makePreview(parsePasted(text));
       onPreview({ ...r, source: 'Typed or pasted by staff' });
     } catch (e) {
       toast(e.message, 'bad');
@@ -165,12 +224,14 @@ function ImportReview({ preview, onBack, onDone, onRemap }) {
   const toast = useToast();
   const [show, setShow] = useState(preview.summary.invalid ? 'invalid' : 'all');
   const [optIn, setOptIn] = useState(true);
+  const [smsOptIn, setSmsOptIn] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [updateExisting, setUpdateExisting] = useState(false);
   const [source, setSource] = useState(preview.source);
   const [tags, setTags] = useState('');
   const [busy, setBusy] = useState(false);
   const [remapping, setRemapping] = useState(false);
+  const [progress, setProgress] = useState(0);
   const s = preview.summary;
   const willAdd = s.ok + (updateExisting ? s.exists : 0);
   const optInColumn = preview.mapping.opt_in !== undefined;
@@ -178,14 +239,13 @@ function ImportReview({ preview, onBack, onDone, onRemap }) {
   const rows = useMemo(() => (show === 'all' ? preview.rows : preview.rows.filter((r) => r.status === show)).slice(0, 300), [show, preview.rows]);
 
   async function remap(field, value) {
-    if (!preview.file) return;
+    if (!preview.table) return;
     setRemapping(true);
     try {
-      const mapping = { ...preview.mapping, [field]: value === '' ? null : Number(value) };
-      const form = new FormData();
-      form.append('file', preview.file);
-      form.append('mapping', JSON.stringify(mapping));
-      const r = await api('/api/customers/import/preview', { method: 'POST', form });
+      const mapping = { ...preview.mapping };
+      if (value === '') delete mapping[field];
+      else mapping[field] = Number(value);
+      const r = await makePreview({ ...preview.table, mapping });
       onRemap({ ...preview, ...r });
     } catch (e) {
       toast(e.message, 'bad');
@@ -197,11 +257,20 @@ function ImportReview({ preview, onBack, onDone, onRemap }) {
   async function save() {
     setBusy(true);
     try {
-      const r = await api('/api/customers/import/commit', {
-        method: 'POST',
-        body: { rows: preview.rows, optIn: { confirmed: optIn ? confirmed : true, value: optIn }, updateExisting, source, tags: tags.split(',') },
-      });
-      onDone(r);
+      // Saved 500 at a time, so a 30,000-row list fits the server's per-request limits.
+      const toSave = preview.rows.filter((r) => r.status === 'ok' || (updateExisting && r.status === 'exists'));
+      const total = { created: 0, updated: 0, skipped: preview.rows.length - toSave.length };
+      for (let i = 0; i < toSave.length; i += 500) {
+        setProgress(Math.round((i / toSave.length) * 100));
+        const r = await api('/api/customers/import/commit', {
+          method: 'POST',
+          body: { rows: toSave.slice(i, i + 500), optIn: { confirmed: optIn || smsOptIn ? confirmed : true, value: optIn, sms: smsOptIn }, updateExisting, source, tags: tags.split(',') },
+        });
+        total.created += r.created;
+        total.updated += r.updated;
+        total.skipped += r.skipped;
+      }
+      onDone(total);
     } catch (e) {
       toast(e.message, 'bad');
     } finally {
@@ -293,14 +362,21 @@ function ImportReview({ preview, onBack, onDone, onRemap }) {
             </span>
           </span>
         </label>
-        {optIn && (
+        <label className="check">
+          <input type="checkbox" checked={smsOptIn} onChange={(e) => setSmsOptIn(e.target.checked)} />
+          <span>
+            <b>They also agreed to get SMS</b>
+            <span className="hint" style={{ display: 'block' }}>Used only as a backup for customers who are not on WhatsApp.</span>
+          </span>
+        </label>
+        {(optIn || smsOptIn) && (
           <>
             <Field label="Where did they agree?" hint="Saved with each customer as proof of consent.">
               <input className="input" value={source} onChange={(e) => setSource(e.target.value)} placeholder="e.g. Billing counter form, Diwali 2026" />
             </Field>
             <label className="check alert warn" style={{ cursor: 'pointer' }}>
               <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
-              <span>I confirm these customers gave permission to receive WhatsApp offers.</span>
+              <span>I confirm these customers gave permission to receive {optIn && smsOptIn ? 'WhatsApp and SMS' : smsOptIn ? 'SMS' : 'WhatsApp'} offers.</span>
             </label>
           </>
         )}
@@ -322,8 +398,8 @@ function ImportReview({ preview, onBack, onDone, onRemap }) {
 
       <div className="action-bar">
         <button className="btn ghost" onClick={onBack}><ArrowLeft size={18} />Start over</button>
-        <button className="btn primary lg" onClick={save} disabled={busy || !willAdd || (optIn && !confirmed)}>
-          {busy ? <Spinner /> : willAdd ? `Add ${plural(willAdd, 'customer')}` : 'Nothing to add'}
+        <button className="btn primary lg" onClick={save} disabled={busy || !willAdd || ((optIn || smsOptIn) && !confirmed)}>
+          {busy ? <><Spinner />{willAdd > 500 ? ` Saving… ${progress}%` : ''}</> : willAdd ? `Add ${plural(willAdd, 'customer')}` : 'Nothing to add'}
         </button>
       </div>
       {s.invalid > 0 && <p className="subtle" style={{ textAlign: 'center' }}>{plural(s.invalid, 'row')} with number problems will be skipped. Fix them in your file and upload again any time; nobody is added twice.</p>}
@@ -353,7 +429,7 @@ function ImportDone({ result, onAgain }) {
 }
 
 /* ---------- One customer ---------- */
-const EMPTY = { name: '', phone: '', city: '', last_purchase: '', interests: '', birthday: '', anniversary: '', whatsapp_opt_in: true, opt_in_source: 'Agreed at the store' };
+const EMPTY = { name: '', phone: '', city: '', last_purchase: '', interests: '', birthday: '', anniversary: '', whatsapp_opt_in: true, sms_opt_in: false, opt_in_source: 'Agreed at the store' };
 
 function OneCustomer() {
   const toast = useToast();
@@ -409,7 +485,11 @@ function OneCustomer() {
         <span className="switch"><input type="checkbox" checked={f.whatsapp_opt_in} onChange={set('whatsapp_opt_in')} /><span /></span>
         <span><b>Customer agreed to receive WhatsApp offers</b><span className="hint" style={{ display: 'block' }}>Without this, they are saved but never sent campaigns.</span></span>
       </label>
-      {f.whatsapp_opt_in && (
+      <label className="check">
+        <span className="switch"><input type="checkbox" checked={f.sms_opt_in} onChange={set('sms_opt_in')} /><span /></span>
+        <span><b>Customer agreed to receive SMS</b><span className="hint" style={{ display: 'block' }}>Only used as a backup if they are not on WhatsApp.</span></span>
+      </label>
+      {(f.whatsapp_opt_in || f.sms_opt_in) && (
         <Field label="How did they agree?"><input className="input" value={f.opt_in_source} onChange={set('opt_in_source')} /></Field>
       )}
       {!f.name.trim() && touched && <Alert tone="warn" icon={AlertTriangle}>A name lets every message start with “Hi Priya”, not a generic greeting.</Alert>}

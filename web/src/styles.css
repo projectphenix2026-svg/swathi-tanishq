@@ -428,3 +428,31 @@ code, .code { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; f
 .summary-list > div:last-child { border-bottom: none; }
 .summary-list dt { color: var(--text-2); }
 .summary-list dd { margin: 0; font-weight: 600; text-align: right; }
+
+/* ---------- Phases 2-5 ---------- */
+.nav .count.hot, .count.hot, .bottom-nav .dot.hot { background: #d9480f; }
+.bottom-nav .more-btn {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; border: none; background: none;
+  color: var(--text-3); font-size: 0.7rem; font-weight: 500; position: relative; cursor: pointer; padding: 0;
+}
+.bottom-nav .more-btn.active { color: var(--brand); font-weight: 600; }
+.more-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 16px 16px 24px; }
+.more-item { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px 6px; border-radius: 14px; color: var(--text); text-decoration: none; font-weight: 600; font-size: 0.86rem; position: relative; text-align: center; }
+.more-item:hover, .more-item.active { background: var(--brand-50); text-decoration: none; }
+.more-item .count { position: absolute; top: 8px; right: 14px; color: #fff; font-size: 0.7rem; min-width: 20px; height: 20px; border-radius: 10px; display: grid; place-items: center; }
+.occasion-card { display: flex; flex-direction: column; gap: 14px; }
+.occasion-card .head { display: flex; align-items: flex-start; gap: 14px; }
+.occasion-card .glyph { width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center; flex-shrink: 0; }
+.stat-row { display: flex; gap: 18px; flex-wrap: wrap; font-size: 0.86rem; color: var(--text-2); }
+.stat-row b { color: var(--text); font-variant-numeric: tabular-nums; }
+.timeline-mini { display: flex; flex-direction: column; gap: 6px; }
+.timeline-mini .item { display: flex; gap: 10px; align-items: center; font-size: 0.86rem; }
+.timeline-mini .date { min-width: 78px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.code-input { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; font-size: 1.3rem; letter-spacing: 0.06em; text-transform: uppercase; text-align: center; min-height: 56px; }
+.lead-card { display: grid; grid-template-columns: auto 1fr; gap: 12px 14px; padding: 16px; border-bottom: 1px solid var(--border); }
+.lead-card:last-child { border-bottom: none; }
+@media (min-width: 760px) { .lead-card { grid-template-columns: auto 1fr auto; align-items: center; } }
+.lead-actions { display: flex; gap: 8px; flex-wrap: wrap; grid-column: 1 / -1; }
+@media (min-width: 760px) { .lead-actions { grid-column: auto; justify-content: flex-end; } }
+.sms-bubble { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 10px 12px; font-size: 0.9rem; white-space: pre-wrap; }
+.pill-list { display: flex; flex-wrap: wrap; gap: 6px; }

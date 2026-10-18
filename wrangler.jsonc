@@ -1,13 +1,39 @@
-// Cloudflare deploys only the web app (web/). The API (server/) is hosted separately.
-// Set VITE_API_URL in the Cloudflare build settings once the API has a public address.
+// The whole app on Cloudflare's free plan: web pages, the API (Express on Workers),
+// the D1 database and a once-a-minute Cron for sending and greetings.
+// Secrets (set with `npx wrangler secret put NAME`): JWT_SECRET, ADMIN_EMAIL, ADMIN_PASSWORD,
+// and when used META_ACCESS_TOKEN, META_APP_SECRET, META_WEBHOOK_VERIFY_TOKEN, TWILIO_AUTH_TOKEN, MSG91_AUTH_KEY.
 {
   "name": "swathi-tanishq",
-  "compatibility_date": "2025-09-01",
+  "main": "./cloudflare/worker.js",
+  "compatibility_date": "2025-09-15",
+  "compatibility_flags": ["nodejs_compat"],
   "build": { "command": "npm run build" },
   "assets": {
     "directory": "./web/dist",
-    "not_found_handling": "single-page-application"
+    "not_found_handling": "single-page-application",
+    // These paths run the API instead of returning the static files.
+    "run_worker_first": ["/api/*", "/webhooks/*", "/health"]
   },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "swathi-tanishq",
+      "database_id": "785862c3-52ab-4f85-b926-18fe75a23381"
+    }
+  ],
+  "triggers": { "crons": ["* * * * *"] },
+  "vars": {
+    "NODE_ENV": "production",
+    "BUSINESS_NAME": "Swathi Tanishq",
+    // mock = test mode (nothing is sent) | meta | twilio
+    "MESSAGING_PROVIDER": "mock",
+    "COST_PER_MESSAGE_INR": "0.8631",
+    "PUBLIC_BASE_URL": "https://swathi-tanishq.projectphenix2026.workers.dev",
+    "SMS_MODE": "preview",
+    "OCCASION_CHECK_MINUTES": "15",
+    "STATUS_POLL_SECONDS": "0"
+  },
+  "observability": { "enabled": true },
   // Pull-request branches deploy with `wrangler preview`, which requires this block.
   "previews": {}
 }

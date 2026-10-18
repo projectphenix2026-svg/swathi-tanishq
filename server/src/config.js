@@ -21,17 +21,13 @@ export const config = {
   adminName: env.ADMIN_NAME || 'Admin',
   businessName: env.BUSINESS_NAME || 'Swathi Tanishq',
 
-  // Empty DATABASE_URL = embedded Postgres (PGlite) stored in PGLITE_DIR.
-  databaseUrl: env.DATABASE_URL || '',
-  pgliteDir: env.PGLITE_DIR || './.data/pglite',
+  // Locally: a SQLite file. On Cloudflare the D1 database binding is used instead.
+  sqliteFile: env.SQLITE_FILE || './.data/swathi.db',
 
-  // Empty REDIS_URL = in-process queue (fine for one machine / development).
-  redisUrl: env.REDIS_URL || '',
 
   // mock | twilio | meta
   provider: (env.MESSAGING_PROVIDER || 'mock').toLowerCase(),
   costPerMessage: Number(env.COST_PER_MESSAGE_INR || 0.8631),
-  sendRatePerSecond: Number(env.SEND_RATE_PER_SECOND || 5),
   maxAttempts: Number(env.SEND_MAX_ATTEMPTS || 4),
   validateWebhooks: bool(env.VALIDATE_WEBHOOK_SIGNATURES, true),
   // How often to ask the provider for status of recent messages (0 = off).
@@ -49,7 +45,24 @@ export const config = {
     appSecret: env.META_APP_SECRET || '',
     verifyToken: env.META_WEBHOOK_VERIFY_TOKEN || '',
     graphVersion: env.META_GRAPH_VERSION || 'v25.0',
+    // WhatsApp Business account ID: needed to submit templates for approval.
+    wabaId: env.META_WABA_ID || '',
   },
+
+  // SMS backup. Until DLT registration is approved, SMS_MODE=preview records the
+  // exact SMS that would go out without sending it.
+  sms: {
+    mode: (env.SMS_MODE || 'preview').toLowerCase(), // preview | msg91
+    msg91AuthKey: env.MSG91_AUTH_KEY || '',
+    senderId: env.MSG91_SENDER_ID || '',
+    costPerSms: Number(env.SMS_COST_INR || 0.25),
+  },
+
+  // How often the occasion scheduler checks for birthdays, anniversaries and festivals.
+  occasionCheckMinutes: Number(env.OCCASION_CHECK_MINUTES ?? 15),
+  // Outbox: messages sent per run, and (Node only) seconds between runs. Cloudflare runs once a minute.
+  sendBatchSize: Number(env.SEND_BATCH_SIZE || 20),
+  dispatchSeconds: Number(env.DISPATCH_SECONDS ?? 5),
 };
 
 export function assertConfig() {

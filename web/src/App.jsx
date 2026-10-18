@@ -14,6 +14,10 @@ import Campaigns from './pages/Campaigns.jsx';
 import CampaignBuilder from './pages/CampaignBuilder.jsx';
 import CampaignReport from './pages/CampaignReport.jsx';
 import Inbox from './pages/Inbox.jsx';
+import Occasions from './pages/Occasions.jsx';
+import Leads from './pages/Leads.jsx';
+import Offers from './pages/Offers.jsx';
+import Settings from './pages/Settings.jsx';
 
 
 export default function App() {
@@ -44,6 +48,7 @@ export default function App() {
     () => ({
       user,
       settings,
+      reloadSettings: loadSettings,
       async login(email, password) {
         const r = await api('/api/auth/login', { method: 'POST', body: { email, password } });
         setUser(r.user);
@@ -77,6 +82,10 @@ export default function App() {
           <Route path="campaigns/:id" element={<CampaignReport />} />
           <Route path="inbox" element={<Inbox />} />
           <Route path="inbox/:contactId" element={<Inbox />} />
+          <Route path="occasions" element={<Occasions />} />
+          <Route path="leads" element={<Leads />} />
+          <Route path="offers" element={<Offers />} />
+          <Route path="settings" element={<Settings />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

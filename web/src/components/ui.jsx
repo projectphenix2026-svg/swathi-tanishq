@@ -104,6 +104,7 @@ export function Modal({ title, onClose, children, footer, width }) {
 
 /* ---------- Status pills ---------- */
 const CAMPAIGN = {
+  pending_approval: ['warn', 'Waiting for approval'],
   scheduled: ['info', 'Scheduled'],
   sending: ['warn', 'Sending'],
   completed: ['ok', 'Completed'],
@@ -122,7 +123,8 @@ const MESSAGE = {
   delivered: ['ok', 'Delivered'],
   read: ['ok', 'Read'],
   failed: ['bad', 'Failed'],
-  cancelled: ['neutral', 'Cancelled'],
+  cancelled: ['neutral', 'Skipped'],
+  preview: ['info', 'SMS preview'],
 };
 export function MessageStatus({ status }) {
   const [tone, label] = MESSAGE[status] || ['neutral', status];

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Download, MapPin, Search, ShoppingBag, UserPlus, Users } from 'lucide-react';
-import { api, fileUrl } from '../lib/api.js';
+import { api } from '../lib/api.js';
+import { downloadSample } from '../lib/sample.js';
 import { Avatar, Empty, Field, Modal, OptInBadge, Skeleton, Spinner, useToast } from '../components/ui.jsx';
 import { dateOnly, num, phone } from '../lib/format.js';
 
@@ -46,7 +47,7 @@ export default function Customers() {
             actions={
               <>
                 <Link to="/customers/add" className="btn primary"><UserPlus size={18} />Add customers</Link>
-                <a href={fileUrl('/api/customers/sample.xlsx')} className="btn"><Download size={18} />Sample Excel file</a>
+                <button className="btn" onClick={downloadSample}><Download size={18} />Sample Excel file</button>
               </>
             }
           >
@@ -150,6 +151,7 @@ function EditCustomer({ c, onClose, onSaved }) {
     name: c.name || '', city: c.city || '', last_purchase: c.last_purchase || '', interests: c.interests || '',
     birthday: c.birthday ? String(c.birthday).slice(0, 10) : '', anniversary: c.anniversary ? String(c.anniversary).slice(0, 10) : '',
     whatsapp_opt_in: c.whatsapp_opt_in && !c.opted_out_at,
+    sms_opt_in: Boolean(c.sms_opt_in),
   });
   const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }));
@@ -158,7 +160,7 @@ function EditCustomer({ c, onClose, onSaved }) {
   const save = async () => {
     setBusy(true);
     try {
-      const body = { name: f.name, city: f.city, last_purchase: f.last_purchase, interests: f.interests, birthday: f.birthday || null, anniversary: f.anniversary || null };
+      const body = { name: f.name, city: f.city, last_purchase: f.last_purchase, interests: f.interests, birthday: f.birthday || null, anniversary: f.anniversary || null, sms_opt_in: f.sms_opt_in };
       if (changedOpt) body.whatsapp_opt_in = f.whatsapp_opt_in;
       await api(`/api/customers/${c.id}`, { method: 'PATCH', body });
       toast('Customer saved');
@@ -205,6 +207,14 @@ function EditCustomer({ c, onClose, onSaved }) {
             <span className="hint" style={{ display: 'block' }}>Only switch on if the customer agreed. Customers who reply STOP are switched off automatically.</span>
           </span>
         </label>
+        <label className="check card card-pad" style={{ padding: 14 }}>
+          <span className="switch"><input type="checkbox" checked={f.sms_opt_in} onChange={set('sms_opt_in')} /><span /></span>
+          <span>
+            <b>Can receive SMS (backup)</b>
+            <span className="hint" style={{ display: 'block' }}>Used only when WhatsApp can’t reach them.</span>
+          </span>
+        </label>
+        {c.tags?.length > 0 && <div className="pill-list">{c.tags.map((t) => <span key={t} className="badge neutral">{t}</span>)}</div>}
       </div>
     </Modal>
   );

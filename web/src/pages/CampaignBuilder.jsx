@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { AlertTriangle, ArrowLeft, ArrowRight, CalendarClock, Check, Filter, Search, Send, UserCheck, Users, X, Zap } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ArrowRight, CalendarClock, Check, Filter, Search, Send, ShieldCheck, UserCheck, Users, X, Zap } from 'lucide-react';
 import { VARIABLES, extractVariables, render, valuesFor } from '@shared/template.js';
 import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.js';
@@ -25,7 +25,7 @@ export default function CampaignBuilder() {
   const [templates, setTemplates] = useState(null);
   const [templateId, setTemplateId] = useState(params.get('template') ? Number(params.get('template')) : null);
   const [variables, setVariables] = useState({ offer: '', offer_ends: '', store: settings?.businessName || '' });
-  const [when, setWhen] = useState({ mode: 'now', at: defaultLater() });
+  const [when, setWhen] = useState({ mode: 'now', at: defaultLater(), sms: false });
   const [name, setName] = useState('');
   const [preview, setPreview] = useState(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
@@ -68,7 +68,7 @@ export default function CampaignBuilder() {
 
   const sendCount = template ? preview?.sendable ?? 0 : preview?.eligible ?? 0;
   const cost = sendCount * (preview?.costPerMessage ?? settings?.costPerMessage ?? 0.8631);
-  const values = previewAs ? valuesFor(previewAs, variables) : null;
+  const values = previewAs ? { ...valuesFor(previewAs, variables), offer_code: exampleCode(previewAs.name, variables.code_prefix) } : null;
   const rendered = template && values ? render(template.body, values) : null;
 
   const stepError = [
@@ -87,9 +87,15 @@ export default function CampaignBuilder() {
           name, templateId, audience, variables,
           scheduledAt: when.mode === 'later' ? new Date(when.at).toISOString() : null,
           expectedCount: sendCount,
+          smsFallback: when.sms,
         },
       });
-      toast(when.mode === 'later' ? `Scheduled for ${dateTime(when.at)}` : `Sending to ${plural(r.queued, 'customer')}`);
+      toast(
+        r.pendingApproval
+          ? 'Sent to the owner for approval. It goes out once approved.'
+          : when.mode === 'later' ? `Scheduled for ${dateTime(when.at)}` : `Sending to ${plural(r.queued, 'customer')}`,
+        r.pendingApproval ? 'info' : 'ok',
+      );
       navigate(`/campaigns/${r.campaign.id}`);
     } catch (e) {
       toast(e.message, 'bad');
@@ -127,7 +133,7 @@ export default function CampaignBuilder() {
               neededVars={neededCampaignVars} variables={variables} setVariables={setVariables} preview={preview}
             />
           )}
-          {step === 2 && <WhenStep when={when} setWhen={setWhen} />}
+          {step === 2 && <WhenStep when={when} setWhen={setWhen} template={template} preview={preview} settings={settings} />}
           {step === 3 && (
             <ReviewStep
               name={name} setName={setName} template={template} audience={audience} picked={picked} when={when}
@@ -203,7 +209,10 @@ function CostCard({ preview, sendCount, cost, loading, hasTemplate }) {
           <div className="stack-sm subtle">
             {preview.no_opt_in > 0 && <span>{plural(preview.no_opt_in, 'customer')} left out: no WhatsApp opt-in</span>}
             {preview.opted_out > 0 && <span>{plural(preview.opted_out, 'customer')} left out: opted out</span>}
-            {hasTemplate && preview.eligible > preview.sendable && <span>{plural(preview.eligible - preview.sendable, 'customer')} left out: missing details for this message</span>}
+            {hasTemplate && preview.atCap > 0 && <span>{plural(preview.atCap, 'customer')} left out: already got this week’s offers</span>}
+            {hasTemplate && preview.eligible - preview.sendable - (preview.atCap || 0) > 0 && (
+              <span>{plural(preview.eligible - preview.sendable - (preview.atCap || 0), 'customer')} left out: missing details for this message</span>
+            )}
           </div>
         </>
       )}
@@ -317,6 +326,7 @@ function PickCustomers({ picked, onChange }) {
 
 /* ---------- Step 2: Message ---------- */
 function MessageStep({ templates, templateId, setTemplateId, neededVars, variables, setVariables, preview }) {
+  const usesCode = extractVariables(templates?.find((t) => t.id === templateId)?.body || '').includes('offer_code');
   if (!templates) return <div className="card card-pad"><Spinner /></div>;
   if (!templates.length) {
     return (
@@ -363,6 +373,18 @@ function MessageStep({ templates, templateId, setTemplateId, neededVars, variabl
         </div>
       )}
 
+      {usesCode && (
+        <div className="card card-pad stack">
+          <div>
+            <h2>Offer codes</h2>
+            <p className="subtle">Every customer gets their own code, like {exampleCode('Priya', variables.code_prefix)}. Staff enter it at billing under Offer codes, so you see real sales from this campaign.</p>
+          </div>
+          <Field label="Code word" hint="Letters and numbers, up to 10. E.g. DIWALI, BRIDAL, AT26.">
+            <input className="input" style={{ maxWidth: 240, textTransform: 'uppercase' }} value={variables.code_prefix || ''} maxLength={10} onChange={(e) => setVariables((x) => ({ ...x, code_prefix: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '') }))} placeholder="OFFER" />
+          </Field>
+        </div>
+      )}
+
       {missing.length > 0 && (
         <Alert tone="warn" icon={AlertTriangle}>
           {missing.map(([k, n]) => `${plural(n, 'customer')} ${n === 1 ? 'has' : 'have'} no ${VAR_LABEL[k]}`).join('; ')}. They will be skipped so nobody gets a message with a blank in it.
@@ -374,7 +396,9 @@ function MessageStep({ templates, templateId, setTemplateId, neededVars, variabl
 }
 
 /* ---------- Step 3: When ---------- */
-function WhenStep({ when, setWhen }) {
+function WhenStep({ when, setWhen, template, preview, settings }) {
+  const smsReady = Boolean(template?.sms_body);
+  const smsCustomers = preview?.sample?.filter((s) => s.sms_opt_in).length || 0;
   return (
     <div className="card card-pad stack">
       <h2>When should it go out?</h2>
@@ -393,8 +417,26 @@ function WhenStep({ when, setWhen }) {
           <input className="input" type="datetime-local" value={when.at} min={toLocalInput(new Date())} onChange={(e) => setWhen({ ...when, at: e.target.value })} style={{ maxWidth: 280 }} />
         </Field>
       )}
+      <div className="divider" />
+      <label className="check" style={{ opacity: smsReady ? 1 : 0.6 }}>
+        <span className="switch"><input type="checkbox" checked={when.sms && smsReady} disabled={!smsReady} onChange={(e) => setWhen({ ...when, sms: e.target.checked })} /><span /></span>
+        <span>
+          <b>SMS backup</b>
+          <span className="hint" style={{ display: 'block' }}>
+            {!smsReady
+              ? 'This message has no SMS version yet. Add one on the template page to use SMS backup.'
+              : `Customers who are not on WhatsApp and agreed to SMS get the SMS version instead${settings?.sms?.live ? ` (${rate(settings.sms.costPerSms)} each)` : ' (preview only until DLT registration is done)'}.`}
+            {smsReady && smsCustomers === 0 && ' None of the first customers here have SMS consent yet.'}
+          </span>
+        </span>
+      </label>
     </div>
   );
+}
+
+function exampleCode(name, prefix) {
+  const first = String(name || 'Priya').split(/\s+/)[0].toUpperCase().replace(/[^A-Z]/g, '').slice(0, 8) || 'GUEST';
+  return `${first}-${(prefix || 'OFFER').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10) || 'OFFER'}-4821`;
 }
 
 /* ---------- Step 4: Review ---------- */
@@ -422,6 +464,12 @@ function ReviewStep({ name, setName, template, audience, picked, when, sendCount
         </dl>
         {preview && preview.matched > sendCount && (
           <p className="subtle">{plural(preview.matched - sendCount, 'customer')} in this group will not get it (no opt-in, opted out, or missing details).</p>
+        )}
+        {when.sms && <p className="subtle">SMS backup is on for customers who are not on WhatsApp.</p>}
+        {preview && settings?.role !== 'admin' && sendCount >= preview.approvalThreshold && (
+          <Alert tone="info" icon={ShieldCheck}>
+            This goes to {num(sendCount)} customers, so the owner must approve it first. You’ll find it under Campaigns as “Waiting for approval”.
+          </Alert>
         )}
         {sendCount >= 500 && (
           <label className="check alert warn" style={{ cursor: 'pointer' }}>

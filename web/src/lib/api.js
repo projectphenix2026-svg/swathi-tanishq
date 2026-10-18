@@ -34,3 +34,19 @@ export async function api(path, { method = 'GET', body, form } = {}) {
 }
 
 export const fileUrl = (path) => `${BASE}${path}`;
+
+/** POST that returns plain text (e.g. a Google Sheet as CSV). Errors come back as JSON. */
+export async function apiText(path, body) {
+  let res;
+  try {
+    res = await fetch(`${BASE}${path}`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  } catch {
+    throw new ApiError('Cannot reach the server. Check your internet connection and try again.', 0);
+  }
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401) onUnauthorized();
+    throw new ApiError(data.error || `Something went wrong (${res.status}).`, res.status, data);
+  }
+  return res.text();
+}

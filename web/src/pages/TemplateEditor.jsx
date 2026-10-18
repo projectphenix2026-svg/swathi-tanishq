@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Check, ChevronDown, ExternalLink, Phone, Plus, Reply, Trash2 } from 'lucide-react';
-import { VARIABLES, extractVariables, validateTemplate } from '@shared/template.js';
+import { ArrowLeft, BadgeCheck, Check, ChevronDown, ExternalLink, MessageSquareText, Phone, Plus, RefreshCw, Reply, Trash2 } from 'lucide-react';
+import { VARIABLES, extractVariables, render, validateTemplate } from '@shared/template.js';
 import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.js';
 import { Alert, Field, Spinner, useToast } from '../components/ui.jsx';
@@ -34,7 +34,7 @@ export default function TemplateEditor() {
   const toast = useToast();
   const { settings } = useAuth();
   const textRef = useRef(null);
-  const [t, setT] = useState(id ? null : { name: '', body: '', buttons: [], image_url: '', status: 'approved', provider_ref: '' });
+  const [t, setT] = useState(id ? null : { name: '', body: '', buttons: [], image_url: '', status: 'approved', provider_ref: '', category: 'marketing', sms_body: '', sms_dlt_template_id: '' });
   const [busy, setBusy] = useState(false);
   const [tried, setTried] = useState(false);
   const [advanced, setAdvanced] = useState(false);
@@ -42,7 +42,7 @@ export default function TemplateEditor() {
   useEffect(() => {
     if (id) {
       api(`/api/templates/${id}`)
-        .then((r) => setT({ ...r.template, image_url: r.template.image_url || '', provider_ref: r.template.provider_ref || '' }))
+        .then((r) => setT({ ...r.template, image_url: r.template.image_url || '', provider_ref: r.template.provider_ref || '', sms_body: r.template.sms_body || '', sms_dlt_template_id: r.template.sms_dlt_template_id || '' }))
         .catch((e) => { toast(e.message, 'bad'); navigate('/templates'); });
     }
   }, [id, navigate, toast]);
@@ -199,6 +199,17 @@ export default function TemplateEditor() {
                 <Field label="Image link (optional)" hint="A public https:// link to a photo of the jewellery.">
                   <input className="input" value={t.image_url} onChange={(e) => set({ image_url: e.target.value })} placeholder="https://..." />
                 </Field>
+                <div className="form-grid two">
+                  <Field label="Category" hint="Marketing counts towards the weekly limit. Utility is for order and service updates.">
+                    <select className="select" value={t.category || 'marketing'} onChange={(e) => set({ category: e.target.value })}>
+                      <option value="marketing">Marketing (offers, new designs)</option>
+                      <option value="utility">Utility (order or service update)</option>
+                    </select>
+                  </Field>
+                  <Field label="Language code" hint="en for English; en_US for Meta’s sample templates.">
+                    <input className="input" value={t.language || 'en'} onChange={(e) => set({ language: e.target.value })} />
+                  </Field>
+                </div>
                 <Field label="Status">
                   <select className="select" value={t.status} onChange={(e) => set({ status: e.target.value })}>
                     <option value="approved">Ready to send</option>
@@ -211,6 +222,9 @@ export default function TemplateEditor() {
               </div>
             )}
           </div>
+
+          <SmsCard t={t} set={set} />
+          {id && <MetaCard t={t} onChange={(u) => setT((x) => ({ ...x, provider_ref: u.provider_ref || '', provider_status: u.provider_status, provider_reason: u.provider_reason }))} canSubmit={settings?.metaTemplatesReady} />}
 
           {tried && errors.length > 0 && (
             <Alert tone="bad"><b>Please fix:</b><ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>{errors.map((e) => <li key={e}>{e}</li>)}</ul></Alert>
@@ -236,6 +250,82 @@ export default function TemplateEditor() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** SMS parts: 160 characters, or 70 when the text has characters like ₹ or Telugu. */
+function smsParts(text) {
+  const unicode = /[^\x20-\x7E\n\r]/.test(text);
+  const single = unicode ? 70 : 160;
+  return text.length <= single ? 1 : Math.ceil(text.length / (unicode ? 67 : 153));
+}
+
+function SmsCard({ t, set }) {
+  const [open, setOpen] = useState(Boolean(t.sms_body));
+  const example = render(t.sms_body || '', EXAMPLES).text;
+  const parts = smsParts(example);
+  return (
+    <div className="card">
+      <button className="card-head" onClick={() => setOpen((o) => !o)} style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer', borderBottom: open ? undefined : 'none' }}>
+        <span className="row" style={{ gap: 10 }}><MessageSquareText size={18} /><h3>SMS version (backup)</h3>{t.sms_body && <span className="badge info">Added</span>}</span>
+        <ChevronDown size={18} style={{ transform: open ? 'rotate(180deg)' : undefined }} />
+      </button>
+      {open && (
+        <div className="stack" style={{ padding: 20 }}>
+          <p className="subtle">Sent by SMS only to customers who are not on WhatsApp and agreed to SMS. The wording must match the template registered on the DLT portal, with the same placeholders.</p>
+          <Field label="SMS text">
+            <textarea className="textarea" rows={4} value={t.sms_body || ''} onChange={(e) => set({ sms_body: e.target.value })} placeholder="Hi {{name}}, 20% off making charges at Swathi Tanishq till {{offer_ends}}. -SWATHI" />
+          </Field>
+          {t.sms_body && (
+            <div className="stack-sm">
+              <div className="sms-bubble">{example}</div>
+              <span className="subtle num">{example.length} characters · {parts} SMS {parts === 1 ? 'part' : 'parts'} per customer (example values)</span>
+            </div>
+          )}
+          <Field label="DLT template ID" hint="The long number the DLT portal gives this SMS template. Needed before SMS can really be sent.">
+            <input className="input" value={t.sms_dlt_template_id || ''} onChange={(e) => set({ sms_dlt_template_id: e.target.value.replace(/\D/g, '') })} inputMode="numeric" placeholder="1107170000000000000" />
+          </Field>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MetaCard({ t, onChange, canSubmit }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const status = t.provider_status;
+  const tone = status === 'APPROVED' ? 'ok' : status === 'REJECTED' ? 'bad' : status ? 'warn' : 'neutral';
+  const label = status === 'APPROVED' ? 'Approved by Meta' : status === 'REJECTED' ? 'Rejected by Meta' : status ? 'Waiting for Meta' : 'Not submitted';
+  async function go(path, done) {
+    setBusy(true);
+    try {
+      const r = await api(`/api/templates/${t.id}/${path}`, { method: 'POST' });
+      onChange(r.template);
+      toast(done(r.template));
+    } catch (e) {
+      toast(e.message, 'bad');
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="card card-pad stack">
+      <div className="row between wrap">
+        <span className="row" style={{ gap: 10 }}><BadgeCheck size={18} /><h3>WhatsApp approval (Meta)</h3></span>
+        <span className={`badge ${tone}`}>{label}</span>
+      </div>
+      <p className="subtle">
+        Meta must approve a template before it can go to customers through the WhatsApp Cloud API. Approval usually takes minutes to a day.
+        {t.provider_ref && <> Name at Meta: <code>{t.provider_ref}</code>.</>}
+      </p>
+      {status === 'REJECTED' && t.provider_reason && <Alert tone="bad">Reason: {t.provider_reason}. Edit the wording and submit again.</Alert>}
+      <div className="row wrap">
+        <button className="btn" disabled={busy || !canSubmit} onClick={() => go('submit-meta', () => 'Sent to Meta for approval')}>{busy ? <Spinner /> : status ? 'Submit again' : 'Submit to Meta'}</button>
+        {t.provider_ref && <button className="btn ghost" disabled={busy} onClick={() => go('sync-meta', (u) => `Meta says: ${u.provider_status?.toLowerCase()}`)}><RefreshCw size={16} />Check status</button>}
+      </div>
+      {!canSubmit && <span className="subtle">To submit from here, add META_WABA_ID and META_ACCESS_TOKEN to the server settings.</span>}
     </div>
   );
 }

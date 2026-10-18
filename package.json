@@ -3,12 +3,17 @@
   "private": true,
   "version": "0.1.0",
   "description": "Personalised WhatsApp campaigns for a franchise: import customers, build campaigns, send through a queue, track delivery, answer replies.",
-  "workspaces": ["server", "web"],
+  "workspaces": [
+    "server",
+    "web"
+  ],
   "scripts": {
     "dev": "concurrently -n api,web -c green,cyan \"npm run dev -w server\" \"npm run dev -w web\"",
     "build": "npm run build -w web",
     "start": "npm run start -w server",
-    "test": "npm test -w server"
+    "test": "npm test -w server",
+    "deploy": "npm run build && npx wrangler deploy",
+    "cf:dev": "npm run build && npx wrangler dev"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

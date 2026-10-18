@@ -7,7 +7,7 @@ import { extractVariables } from '../lib/template.js';
 import { ProviderError, isRetryableHttp, friendlyError } from './errors.js';
 
 export function createMetaProvider(cfg, { fetchImpl = fetch } = {}) {
-  const { accessToken, phoneNumberId, appSecret, graphVersion } = cfg;
+  const { accessToken, phoneNumberId, appSecret, graphVersion, wabaId } = cfg;
   const url = `https://graph.facebook.com/${graphVersion}/${phoneNumberId}/messages`;
 
   async function post(payload) {
@@ -77,6 +77,53 @@ export function createMetaProvider(cfg, { fetchImpl = fetch } = {}) {
     // Meta has no "get message status" endpoint: statuses only arrive by webhook.
     fetchStatus: null,
 
+    /**
+     * Submits a template to Meta for approval. Placeholders become {{1}}, {{2}}... in order,
+     * with example values Meta's reviewers see. Returns { name, status, id }.
+     */
+    async submitTemplate(template, examples) {
+      if (!wabaId) throw new ProviderError('Add META_WABA_ID (WhatsApp Business account ID) to the server settings first.');
+      const name = metaTemplateName(template.name);
+      const keys = extractVariables(template.body);
+      let n = 0;
+      const text = template.body.replace(/\{\{\s*([a-zA-Z_]+)\s*\}\}/g, () => `{{${++n}}}`);
+      const body = { type: 'BODY', text };
+      if (keys.length) body.example = { body_text: [keys.map((k) => String(examples?.[k] ?? k))] };
+      const components = [body];
+      const buttons = (template.buttons || []).map((b) =>
+        b.type === 'url' ? { type: 'URL', text: b.text, url: b.url }
+          : b.type === 'phone' ? { type: 'PHONE_NUMBER', text: b.text, phone_number: b.phone }
+            : { type: 'QUICK_REPLY', text: b.text },
+      );
+      if (buttons.length) components.push({ type: 'BUTTONS', buttons });
+      const res = await fetchImpl(`https://graph.facebook.com/${graphVersion}/${wabaId}/message_templates`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          language: template.language || 'en',
+          category: template.category === 'utility' ? 'UTILITY' : 'MARKETING',
+          components,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const e = data.error || {};
+        throw new ProviderError(e.error_user_msg || e.message || 'Meta rejected the template.', { code: e.code, status: res.status });
+      }
+      return { name, status: data.status || 'PENDING', id: data.id };
+    },
+
+    /** Latest approval status for a submitted template. */
+    async templateStatus(name) {
+      if (!wabaId) return null;
+      const url = `https://graph.facebook.com/${graphVersion}/${wabaId}/message_templates?name=${encodeURIComponent(name)}&fields=name,status,rejected_reason,language`;
+      const res = await fetchImpl(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+      const data = await res.json().catch(() => ({}));
+      const t = (data.data || []).find((x) => x.name === name);
+      return t ? { status: t.status, reason: t.rejected_reason && t.rejected_reason !== 'NONE' ? t.rejected_reason : null } : null;
+    },
+
     /** X-Hub-Signature-256 is an HMAC of the raw body with the app secret. */
     verifyWebhook(req) {
       const sig = req.get('X-Hub-Signature-256') || '';
@@ -124,4 +171,14 @@ export function createMetaProvider(cfg, { fetchImpl = fetch } = {}) {
       return { statuses, inbound };
     },
   };
+}
+
+/** Meta template names: lowercase letters, numbers and underscores. */
+export function metaTemplateName(name) {
+  return String(name || 'template')
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 60) || 'template';
 }

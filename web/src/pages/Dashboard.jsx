@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Check, ChevronRight, Eye, FileText, IndianRupee, MessageCircle, Plus, Send, Smartphone, TestTube2, Users } from 'lucide-react';
+import { CakeSlice, Check, ChevronRight, Eye, FileText, Flame, IndianRupee, MessageCircle, Plus, Send, ShieldCheck, Smartphone, TestTube2, Ticket, Users } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.js';
 import { Alert, CampaignStatus, Kpi, Skeleton } from '../components/ui.jsx';
@@ -43,18 +43,19 @@ export default function Dashboard() {
               <Kpi icon={IndianRupee} tone="gold" label="Spent this month" value={inr(d.month.spend)} sub="WhatsApp charges, before GST" />
             </div>
 
-            {d.inbox.unread > 0 && (
-              <Link to="/inbox" className="card card-pad row between" style={{ textDecoration: 'none', color: 'inherit' }}>
-                <div className="row">
-                  <span className="kpi-icon tone-wa" style={{ width: 40, height: 40, borderRadius: 12 }}><MessageCircle size={20} /></span>
-                  <div>
-                    <h3>{num(d.inbox.unread)} new {d.inbox.unread === 1 ? 'reply' : 'replies'} from customers</h3>
-                    <p className="muted">Answer them while they’re interested.</p>
-                  </div>
-                </div>
-                <ChevronRight size={20} className="muted" />
-              </Link>
-            )}
+            <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
+              {d.new_leads > 0 && (
+                <ActionCard to="/leads" icon={Flame} tone="tone-bad" title={`${num(d.new_leads)} hot ${d.new_leads === 1 ? 'lead' : 'leads'} to call`} text="They tapped “Interested”. Call today." />
+              )}
+              {d.inbox.unread > 0 && (
+                <ActionCard to="/inbox" icon={MessageCircle} tone="tone-wa" title={`${num(d.inbox.unread)} new ${d.inbox.unread === 1 ? 'reply' : 'replies'}`} text="Answer them while they’re interested." />
+              )}
+              {d.pending_approval > 0 && (
+                <ActionCard to="/campaigns" icon={ShieldCheck} tone="tone-gold" title={`${num(d.pending_approval)} ${d.pending_approval === 1 ? 'campaign needs' : 'campaigns need'} approval`} text="Big sends wait for the owner." />
+              )}
+              <ActionCard to="/offers" icon={Ticket} tone="tone-brand" title={`${inr(d.revenue)} from offer codes`} text={`${num(d.redeemed)} codes used this month`} />
+              <ActionCard to="/occasions" icon={CakeSlice} tone="tone-gold" title={d.occasions_on ? `${num(d.greetings_today)} greetings today` : 'Set up birthday greetings'} text={d.occasions_on ? `${num(d.occasions_on)} occasion${d.occasions_on === 1 ? '' : 's'} switched on` : 'They go out every morning on their own.'} />
+            </div>
 
             {!setupDone && <GettingStarted d={d} />}
 
@@ -148,4 +149,19 @@ export function ProviderBanner({ settings, compact }) {
     return <Alert tone="warn"><b>{p.label} is connected in test form.</b> Send a small test first.</Alert>;
   }
   return null;
+}
+
+function ActionCard({ to, icon: Icon, tone, title, text }) {
+  return (
+    <Link to={to} className="card card-pad row between" style={{ textDecoration: 'none', color: 'inherit' }}>
+      <div className="row" style={{ minWidth: 0 }}>
+        <span className={`kpi-icon ${tone}`} style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0 }}><Icon size={20} /></span>
+        <div style={{ minWidth: 0 }}>
+          <h3>{title}</h3>
+          <p className="muted" style={{ fontSize: '0.88rem' }}>{text}</p>
+        </div>
+      </div>
+      <ChevronRight size={20} className="muted" />
+    </Link>
+  );
 }
