@@ -50,3 +50,21 @@ export const OLD_READY_BODIES = new Set([
   'Hi {{name}}, good news: gold rates have come down this week, so it is a good time to buy the piece you had in mind. At {{store}}: {{offer}}, till {{offer_ends}}. Your code: {{offer_code}}.',
   'Hi {{name}}, planning a wedding in the family? Our bridal sets are here, in gold, diamond and polki. Book a relaxed viewing at {{store}} and get {{offer}} till {{offer_ends}}.',
 ]);
+
+/**
+ * The same wording without the sales code, for shops that have sales codes switched off:
+ * drops the line or sentence that carries {{offer_code}}.
+ */
+export function withoutCode(text) {
+  if (!text || !text.includes('{{offer_code}}')) return text;
+  return text
+    .replace(/Show this code at billing\. /g, '')
+    .split('\n')
+    .map((line) => (line.includes('{{offer_code}}') && !/[.!?।](\s|$)/.test(line.replace(/\{\{offer_code\}\}/g, '')) ? null : line))
+    .filter((line) => line !== null)
+    .join('\n')
+    .replace(/\s*[^.!?।\n]*\{\{offer_code\}\}[^.!?।\n-]*[.!?।]?/g, '')
+    .replace(/([.!?।])-/g, '$1 -')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}

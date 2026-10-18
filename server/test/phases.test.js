@@ -293,6 +293,15 @@ describe('Phase 5: offer codes, leads, weekly limit, roles', () => {
     const list = await agent.get('/api/customers?offers=1&sort=name');
     expect(list.body.customers.find((x) => x.name === 'Busy')).toMatchObject({ offers_this_week: 2 });
     expect(list.body.customers.find((x) => x.name === 'Fresh')).toMatchObject({ offers_this_week: 0 });
+    // "Pick customers": everyone matched, sendable first, with the reason others are left out.
+    const l = await agent.post('/api/campaigns/audience-list').send({ audience: { mode: 'all' }, templateId: t.id });
+    expect(l.body.customers.find((x) => x.name === 'Fresh').reason).toBe(null);
+    expect(l.body.customers.find((x) => x.name === 'Busy')).toMatchObject({ reason: 'cap', offers: 2 });
+    expect((await agent.post('/api/campaigns/audience-list').send({ audience: { mode: 'all' }, q: 'fre' })).body.customers.map((x) => x.name)).toEqual(['Fresh']);
+    // Unticking a customer leaves them out.
+    const fresh = l.body.customers.find((x) => x.name === 'Fresh');
+    const px = await agent.post('/api/campaigns/preview').send({ audience: { mode: 'filter', excludeIds: [fresh.id] }, templateId: t.id });
+    expect(px.body.sendable).toBe(0);
     await query('UPDATE clients SET weekly_cap = 0');
     const p2 = await agent.post('/api/campaigns/preview').send({ audience: { mode: 'all' }, templateId: t.id });
     expect(p2.body.sendable).toBe(2);

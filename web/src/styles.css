@@ -537,3 +537,54 @@ code, .code { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; f
   width: 46px; height: 46px; border-radius: 50%; background: var(--brand); color: #fff; display: grid; place-items: center;
   margin-top: -18px; box-shadow: 0 4px 12px rgba(109, 26, 54, 0.35); border: 3px solid var(--surface);
 }
+
+/* ---------- Send a message (redesign stage 2) ---------- */
+.page-head.compact { margin-bottom: 12px; }
+.page-head.compact .back { margin-bottom: 4px; }
+.send-page .stepper { margin-bottom: 14px; }
+.send-page .two-col { gap: 16px; }
+@media (min-width: 1000px) { .send-page .two-col { grid-template-columns: minmax(0, 1fr) 320px; } .send-page .sticky { top: 16px; } }
+.send-page .card-pad { padding: 16px; }
+.send-page .action-bar { margin-top: 14px; }
+.preview-nav { gap: 8px; min-height: 32px; }
+.icon-btn.sm { width: 32px; height: 32px; }
+.tpl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
+.tpl-card {
+  display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 12px; border: 1.5px solid var(--border);
+  background: var(--surface); cursor: pointer; text-align: left; font: inherit; color: inherit; min-width: 0; text-decoration: none;
+}
+.tpl-card:hover { border-color: var(--brand); text-decoration: none; }
+.tpl-card.on { border-color: var(--brand); background: var(--brand-50); }
+.tpl-text {
+  font-size: 0.8rem; line-height: 1.4; color: var(--text-2); white-space: pre-line; background: var(--surface-2);
+  border-radius: 8px; padding: 8px; display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden;
+}
+.tpl-new { align-items: center; justify-content: center; flex-direction: row; color: var(--brand); font-weight: 600; border-style: dashed; min-height: 120px; }
+.filter-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.filter-search { flex: 1 1 200px; min-width: 0; }
+.filter-search .input { height: 34px; }
+.send-sum { border-radius: 10px; padding: 10px 12px; font-size: 0.9rem; }
+.send-sum.ok { background: var(--ok-soft); }
+.send-sum.warn { background: var(--warn-soft); }
+.link-btn { background: none; border: none; padding: 0; color: var(--brand); font: inherit; font-weight: 600; cursor: pointer; text-decoration: underline; }
+.pick-list { border: 1px solid var(--border); border-radius: 12px; max-height: 460px; overflow-y: auto; }
+.pick-row { display: grid; grid-template-columns: 20px 30px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--border); cursor: pointer; min-height: 44px; }
+.pick-row:last-child { border-bottom: none; }
+.pick-row input { width: 18px; height: 18px; accent-color: var(--brand); }
+.pick-row > span:nth-child(3) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pick-row.off { cursor: default; opacity: 0.75; }
+.tag-warn { font-size: 0.75rem; font-weight: 600; color: var(--warn); background: var(--warn-soft); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+@media (max-width: 560px) { .pick-row { grid-template-columns: 20px 30px minmax(0, 1fr); } .pick-row .tag-warn { grid-column: 3; justify-self: start; } }
+.send-line { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 1rem; }
+.send-line .arrow { color: var(--text-3); }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 10px; padding: 3px; gap: 3px; background: var(--surface-2); align-self: flex-start; flex-wrap: wrap; }
+.seg button { border: none; background: transparent; padding: 7px 12px; border-radius: 8px; font: inherit; font-size: 0.88rem; color: var(--text-2); cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+.seg button.on { background: var(--surface); color: var(--brand); font-weight: 600; box-shadow: var(--shadow-sm); }
+@media (max-width: 560px) {
+  .tpl-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .tpl-card { padding: 10px; gap: 6px; }
+  .tpl-card b { font-size: 0.86rem; }
+  .tpl-text { -webkit-line-clamp: 3; font-size: 0.74rem; padding: 6px; }
+  .tpl-new { min-height: 90px; }
+  .send-preview.empty { display: none; }
+}

@@ -1,5 +1,7 @@
 // Telugu and Hindi versions of the ready-made messages (and their short SMS versions).
 // Please have a native speaker read these once before sending to customers.
+import { OLD_READY_BODIES, READY_MESSAGES, withoutCode } from './ready.js';
+
 export const LANGS = [
   { code: 'en', label: 'English' },
   { code: 'te', label: 'తెలుగు' },
@@ -81,4 +83,24 @@ export function readyIn(m, lang) {
   const tr = TRANSLATIONS[m.key][lang];
   const label = LANGS.find((l) => l.code === lang).label;
   return { name: `${m.name} · ${label}`, body: tr.body, sms: tr.sms, buttons: BUTTONS[lang], language: lang };
+}
+
+/** A ready-made message in a language; without the sales code when the shop has codes switched off. */
+export function readyFor(m, lang, salesCodes) {
+  const r = readyIn(m, lang);
+  return salesCodes ? r : { ...r, body: withoutCode(r.body), sms: withoutCode(r.sms) };
+}
+
+let known = null;
+/** True for any wording the app itself wrote (any language, with or without codes, old or new). */
+export function isReadyText(body) {
+  if (!known) {
+    known = new Set(OLD_READY_BODIES);
+    for (const m of READY_MESSAGES) {
+      for (const l of LANGS) {
+        for (const codes of [true, false]) known.add(readyFor(m, l.code, codes).body);
+      }
+    }
+  }
+  return known.has(body);
 }

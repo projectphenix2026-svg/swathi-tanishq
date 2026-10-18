@@ -2,7 +2,7 @@ import express from 'express';
 import { query, NOW } from '../db/index.js';
 import { config } from '../config.js';
 import { getProvider, getSmsProvider } from '../providers/index.js';
-import { previewAudience, launchCampaign, campaignReport, queueMessages, TEST_PHONE_TAG } from '../lib/campaigns.js';
+import { previewAudience, launchCampaign, campaignReport, queueMessages, audienceList, TEST_PHONE_TAG } from '../lib/campaigns.js';
 import { kick } from '../lib/dispatch.js';
 import { normalizePhone } from '../lib/phone.js';
 import { pace, finishEstimate } from '../lib/pacing.js';
@@ -43,6 +43,15 @@ router.post('/preview', async (req, res) => {
   const p = channel === 'sms' ? null : await pace();
   const count = template ? result.sendable : result.eligible;
   res.json({ ...result, pace: p && { ...p, finishBy: finishEstimate(count, p) } });
+});
+
+// "Pick customers": the people the filters match, with ticks and the reason anyone is left out.
+router.post('/audience-list', async (req, res) => {
+  const { audience = { mode: 'all' }, templateId, variables = {}, q = '', limit, offset } = req.body || {};
+  const channel = req.body?.channel === 'sms' ? 'sms' : 'whatsapp';
+  let template = null;
+  if (templateId) template = (await query('SELECT * FROM templates WHERE id = $1 AND client_id = $2', [templateId, req.clientId])).rows[0];
+  res.json(await audienceList(req.clientId, { audience, template, variables, channel, q: String(q).slice(0, 60), limit, offset }));
 });
 
 // The exact message one customer would receive.
