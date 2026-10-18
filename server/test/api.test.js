@@ -153,6 +153,29 @@ describe('API flow', () => {
     expect(provider.outbox.some((m) => m.body?.includes('5% off'))).toBe(false);
   });
 
+  it('deletes a customer: gone from lists, chats and call list, but offer totals stay', async () => {
+    const add = await agent.post('/api/customers').send({ name: 'Delete Me', phone: '90000 22222', whatsapp_opt_in: true, last_purchase: 'ring' });
+    const id = add.body.customer.id;
+    const offer = await agent.post('/api/campaigns').send({
+      name: 'Before delete', templateId, audience: { mode: 'selected', contactIds: [id] }, variables: { offer: '7% off' }, expectedCount: 1,
+    });
+    await drain();
+    await request(createApp()).post('/webhooks/twilio').type('form').send({ MessageSid: 'SMdel1', SmsStatus: 'received', From: 'whatsapp:+919000022222', Body: 'Interested' });
+    const before = (await agent.get('/api/customers/summary')).body.total;
+
+    const del = await agent.delete(`/api/customers/${id}`);
+    expect(del.status).toBe(200);
+    expect((await agent.get('/api/customers/summary')).body.total).toBe(before - 1);
+    expect((await agent.get('/api/customers?q=Delete')).body.customers).toEqual([]);
+    expect((await agent.get('/api/inbox')).body.conversations.some((c) => c.contact_id === id)).toBe(false);
+    expect((await agent.get('/api/leads')).body.leads.some((l) => l.contact_id === id)).toBe(false);
+    const report = (await agent.get(`/api/campaigns/${offer.body.campaign.id}`)).body.report;
+    expect(report).toMatchObject({ total: 1, sent: 1 });
+    // The same number can be added again as a new customer.
+    expect((await agent.post('/api/customers').send({ name: 'Back Again', phone: '90000 22222' })).status).toBe(201);
+    expect((await agent.delete(`/api/customers/${id}`)).status).toBe(404);
+  });
+
   it('puts customer replies in the inbox, and STOP opts them out', async () => {
     await request(createApp()).post('/webhooks/twilio').type('form').send({
       MessageSid: 'SMin1', SmsStatus: 'received', From: 'whatsapp:+919876543210', Body: 'Is the offer valid on Sunday?', ProfileName: 'Priya',

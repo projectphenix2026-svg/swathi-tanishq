@@ -11,7 +11,7 @@ router.get('/', async (req, res) => {
   const { rows: [customers] } = await query(
     `SELECT count(*) AS total,
             count(*) FILTER (WHERE whatsapp_opt_in = 1 AND opted_out_at IS NULL) AS reachable
-       FROM contacts WHERE client_id = $1`,
+       FROM contacts WHERE client_id = $1 AND phone NOT LIKE 'deleted:%'`,
     [req.clientId],
   );
   // This calendar month in India time.

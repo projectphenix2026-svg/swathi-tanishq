@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Download, MapPin, Search, ShoppingBag, UserPlus, Users } from 'lucide-react';
+import { Download, MapPin, Search, ShoppingBag, Trash2, UserPlus, Users } from 'lucide-react';
 import { api } from '../lib/api.js';
+import { useAuth } from '../lib/auth.js';
 import { downloadSample } from '../lib/sample.js';
 import { Avatar, Empty, Field, Modal, OptInBadge, Skeleton, Spinner, useToast } from '../components/ui.jsx';
 import { dateOnly, num, phone } from '../lib/format.js';
@@ -154,6 +155,9 @@ function EditCustomer({ c, onClose, onSaved }) {
     sms_opt_in: Boolean(c.sms_opt_in),
   });
   const [busy, setBusy] = useState(false);
+  const [askDelete, setAskDelete] = useState(false);
+  const { user } = useAuth();
+  const canDelete = user?.role !== 'viewer';
   const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }));
   const changedOpt = f.whatsapp_opt_in !== (c.whatsapp_opt_in && !c.opted_out_at);
 
@@ -172,6 +176,38 @@ function EditCustomer({ c, onClose, onSaved }) {
     }
   };
 
+  const remove = async () => {
+    setBusy(true);
+    try {
+      await api(`/api/customers/${c.id}`, { method: 'DELETE' });
+      toast(`${c.name || 'Customer'} deleted`);
+      onSaved();
+    } catch (e) {
+      toast(e.message, 'bad');
+      setBusy(false);
+    }
+  };
+
+  const footer = askDelete ? (
+    <div className="row wrap" style={{ gap: 10, width: '100%', justifyContent: 'space-between' }}>
+      <span style={{ flex: '1 1 220px', fontSize: '0.9rem' }}>
+        <b>Delete {c.name || 'this customer'}?</b> Their number, details and chats are removed for good. Past offer totals and sales stay in reports.
+      </span>
+      <span className="row" style={{ gap: 8 }}>
+        <button className="btn" onClick={() => setAskDelete(false)} disabled={busy}>Keep</button>
+        <button className="btn danger" onClick={remove} disabled={busy}>{busy ? <Spinner /> : <><Trash2 size={16} />Yes, delete</>}</button>
+      </span>
+    </div>
+  ) : (
+    <div className="row" style={{ gap: 8, width: '100%', justifyContent: 'space-between' }}>
+      {canDelete ? <button className="btn ghost danger" onClick={() => setAskDelete(true)}><Trash2 size={16} />Delete customer</button> : <span />}
+      <span className="row" style={{ gap: 8 }}>
+        <button className="btn" onClick={onClose}>Cancel</button>
+        <button className="btn primary" onClick={save} disabled={busy}>{busy ? <Spinner /> : 'Save'}</button>
+      </span>
+    </div>
+  );
+
   const consentLine = useMemo(() => {
     if (c.opted_out_at) return `Said STOP on ${dateOnly(c.opted_out_at)}`;
     if (c.whatsapp_opt_in) return `Agreed on ${dateOnly(c.opt_in_at)}${c.opt_in_source ? ` · ${c.opt_in_source}` : ''}`;
@@ -182,7 +218,7 @@ function EditCustomer({ c, onClose, onSaved }) {
     <Modal
       title={c.name || phone(c.phone)}
       onClose={onClose}
-      footer={<><button className="btn" onClick={onClose}>Cancel</button><button className="btn primary" onClick={save} disabled={busy}>{busy ? <Spinner /> : 'Save'}</button></>}
+      footer={footer}
     >
       <div className="stack">
         <div className="row" style={{ gap: 14 }}>
