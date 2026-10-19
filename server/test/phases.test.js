@@ -330,6 +330,13 @@ describe('Phase 5: offer codes, leads, weekly limit, roles', () => {
     expect((await v.get('/api/customers')).status).toBe(200);
     expect((await v.post('/api/templates').send({ name: 'x', body: 'Hello there {{name}} and welcome.' })).status).toBe(403);
     expect((await v.post('/api/customers').send({ city: 'Hyderabad', name: 'x', phone: '9876543210' })).status).toBe(403);
+    // View only cannot answer customers, update call backs, or record sales codes either.
+    expect((await v.post('/api/inbox/1/reply').send({ body: 'Hello' })).status).toBe(403);
+    expect((await v.patch('/api/leads/1').send({ status: 'called' })).status).toBe(403);
+    expect((await v.post('/api/offers/redeem').send({ code: 'X-1', amount: 100 })).status).toBe(403);
+    // ...but can read them.
+    expect((await v.get('/api/inbox')).status).toBe(200);
+    expect((await v.get('/api/leads')).status).toBe(200);
   });
 
   it('holds big sends by managers for an admin to approve', async () => {

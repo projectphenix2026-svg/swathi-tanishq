@@ -2,8 +2,10 @@
 import express from 'express';
 import { query, indiaStartOf } from '../db/index.js';
 import { normaliseCode } from '../lib/offers.js';
+import { requireRole } from './auth.js';
 
 const router = express.Router();
+const canEdit = requireRole('admin', 'manager');
 
 async function lookup(clientId, code) {
   const { rows: [m] } = await query(
@@ -29,7 +31,7 @@ router.get('/lookup', async (req, res) => {
   res.json({ offer: { ...m, offer: m.template_values?.offer || null, offer_ends: m.template_values?.offer_ends || null } });
 });
 
-router.post('/redeem', async (req, res) => {
+router.post('/redeem', canEdit, async (req, res) => {
   const code = normaliseCode(req.body?.code);
   const amount = Number(req.body?.amount);
   if (!Number.isFinite(amount) || amount < 0) return res.status(400).json({ error: 'Enter the bill amount in rupees.' });

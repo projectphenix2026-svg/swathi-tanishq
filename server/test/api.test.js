@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import { assertConfig, config } from '../src/config.js';
-import { initDb, closeDb, ensureClient } from '../src/db/index.js';
+import { initDb, closeDb, ensureClient, query } from '../src/db/index.js';
 import { createApp } from '../src/app.js';
 import { createUser } from '../src/routes/auth.js';
 import { setProvider } from '../src/providers/index.js';
@@ -254,25 +254,62 @@ describe('Spending', () => {
 });
 
 describe('Automatic birthday and anniversary wishes', () => {
-  it('are set up once, and list who gets them', async () => {
+  it('start switched off with no offer, need the offer before switching on, and list who gets them', async () => {
     const agent = request.agent(createApp());
     await agent.post('/api/auth/login').send({ email: 'staff@example.com', password: 'test-password-1' });
     const added = await agent.post('/api/customers').send({ name: 'Lakshmi Wish', phone: '+919811100077', city: 'Hyderabad', birthday: '1990-01-15', whatsapp_opt_in: true });
     expect(added.status).toBe(201);
     const list = (await agent.get('/api/occasions')).body.occasions;
     const birthday = list.find((o) => o.kind === 'birthday');
-    expect(birthday).toMatchObject({ enabled: true, send_hour: 10 });
+    // Set up once, but OFF and without an offer we invented: nothing goes to customers by itself.
+    expect(birthday).toMatchObject({ enabled: false, send_hour: 10 });
+    expect(birthday.variables.offer).toBeUndefined();
     expect(list.filter((o) => o.kind === 'anniversary')).toHaveLength(1);
+    expect(list.filter((o) => ['birthday', 'anniversary'].includes(o.kind)).every((o) => !o.enabled)).toBe(true);
 
+    const off = await agent.get('/api/occasions/people/birthday');
+    expect(off.body.people.find((p) => p.name === 'Lakshmi Wish')).toMatchObject({ status: 'off' });
+
+    // Switching on needs the offer first, in plain words, by every route.
+    const refused = await agent.patch(`/api/occasions/${birthday.id}/enabled`).send({ enabled: true });
+    expect(refused.status).toBe(400);
+    expect(refused.body.error).toMatch(/offer/);
+    expect(refused.body.missing).toEqual(['offer', 'offer ends']);
+    const body = { name: birthday.name, kind: 'birthday', days_before: [0], send_hour: 10, template_id: birthday.template_id, enabled: true, variables: { store: 'Test Store' } };
+    expect((await agent.put(`/api/occasions/${birthday.id}`).send(body)).status).toBe(400);
+    // Once the owner writes the offer, it switches on.
+    const filled = await agent.put(`/api/occasions/${birthday.id}`).send({ ...body, variables: { store: 'Test Store', offer: '10% off making charges', offer_ends: '31 Oct' } });
+    expect(filled.status).toBe(200);
+    expect(filled.body.occasion.enabled).toBe(true);
     const people = await agent.get('/api/occasions/people/birthday');
-    const lakshmi = people.body.people.find((p) => p.name === 'Lakshmi Wish');
-    expect(lakshmi).toMatchObject({ status: 'yes' });
+    expect(people.body.people.find((p) => p.name === 'Lakshmi Wish')).toMatchObject({ status: 'yes' });
     expect(people.body.counts.saved).toBeGreaterThanOrEqual(1);
+    // Switching off never needs anything.
+    expect((await agent.patch(`/api/occasions/${birthday.id}/enabled`).send({ enabled: false })).status).toBe(200);
 
     // Deleting the wish keeps it deleted: it is not set up again.
     await agent.delete(`/api/occasions/${birthday.id}`);
     const again = (await agent.get('/api/occasions')).body.occasions;
     expect(again.some((o) => o.id === birthday.id && o.enabled)).toBe(false);
     expect(again.filter((o) => o.kind === 'birthday' && o.enabled)).toHaveLength(0);
+  });
+
+  it('switches off wishes an earlier version turned on with its own offer wording, and leaves edited ones', async () => {
+    const agent = request.agent(createApp());
+    await agent.post('/api/auth/login').send({ email: 'staff@example.com', password: 'test-password-1' });
+    const list = (await agent.get('/api/occasions')).body.occasions;
+    const anniversary = list.find((o) => o.kind === 'anniversary');
+    // Pretend this one was created by the old version: on, with the old default offer, clean-up not yet done.
+    await query("UPDATE occasions SET enabled = 1, variables = '{\"store\":\"Test Store\",\"offer\":\"10% off making charges\",\"offer_ends\":\"a week after your anniversary\"}' WHERE id = $1", [anniversary.id]);
+    await query("UPDATE clients SET auto_wishes = replace(auto_wishes, 'wishes-off', '')");
+    const after = (await agent.get('/api/occasions')).body.occasions.find((o) => o.id === anniversary.id);
+    expect(after.enabled).toBe(false);
+    expect(after.variables.offer).toBeUndefined();
+    // An owner-edited offer is never touched.
+    await query("UPDATE occasions SET enabled = 1, variables = '{\"store\":\"Test Store\",\"offer\":\"Flat 5% off\",\"offer_ends\":\"31 Dec\"}' WHERE id = $1", [anniversary.id]);
+    await query("UPDATE clients SET auto_wishes = replace(auto_wishes, 'wishes-off', '')");
+    const kept = (await agent.get('/api/occasions')).body.occasions.find((o) => o.id === anniversary.id);
+    expect(kept).toMatchObject({ enabled: true });
+    expect(kept.variables.offer).toBe('Flat 5% off');
   });
 });

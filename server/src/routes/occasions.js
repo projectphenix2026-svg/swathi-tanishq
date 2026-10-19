@@ -1,7 +1,7 @@
 import express from 'express';
 import { query } from '../db/index.js';
 import { requireRole } from './auth.js';
-import { runOccasion, upcoming, indiaNow, calendar, addDays, ensureDefaultWishes, wishPeople } from '../lib/occasions.js';
+import { runOccasion, upcoming, indiaNow, calendar, addDays, ensureDefaultWishes, wishPeople, missingForSwitchOn } from '../lib/occasions.js';
 
 const router = express.Router();
 const canEdit = requireRole('admin', 'manager');
@@ -61,7 +61,7 @@ router.get('/:id/upcoming', async (req, res) => {
 
 router.post('/', canEdit, async (req, res) => {
   const input = await normalise(req.clientId, req.body);
-  if (input.error) return res.status(400).json({ error: input.error });
+  if (input.error) return res.status(400).json({ error: input.error, missing: input.missing });
   const { rows: [o] } = await query(
     `INSERT INTO occasions (client_id, name, kind, festival_date, days_before, send_hour, template_id, variables, audience, sms_fallback, enabled, repeat_yearly)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
@@ -73,7 +73,7 @@ router.post('/', canEdit, async (req, res) => {
 
 router.put('/:id', canEdit, async (req, res) => {
   const input = await normalise(req.clientId, req.body);
-  if (input.error) return res.status(400).json({ error: input.error });
+  if (input.error) return res.status(400).json({ error: input.error, missing: input.missing });
   const { rows: [o] } = await query(
     `UPDATE occasions SET name = $3, kind = $4, festival_date = $5, days_before = $6, send_hour = $7, template_id = $8,
             variables = $9, audience = $10, sms_fallback = $11, enabled = $12, repeat_yearly = $13, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
@@ -85,7 +85,14 @@ router.put('/:id', canEdit, async (req, res) => {
   res.json({ occasion: o });
 });
 
+const needsFirst = (missing) => `Add the ${missing.join(' and ')} first: press Change message, fill it in, then switch on.`;
+
 router.patch('/:id/enabled', canEdit, async (req, res) => {
+  if (req.body?.enabled) {
+    const current = await find(req.clientId, req.params.id);
+    const missing = current ? await missingForSwitchOn(current.template_id, current.variables) : [];
+    if (missing.length) return res.status(400).json({ error: needsFirst(missing), missing });
+  }
   const { rows: [o] } = await query(
     `UPDATE occasions SET enabled = $3, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = $1 AND client_id = $2 RETURNING *`,
     [req.params.id, req.clientId, Boolean(req.body?.enabled)],
@@ -127,6 +134,11 @@ async function normalise(clientId, b = {}) {
   }
   const { rows: [t] } = await query('SELECT id, status FROM templates WHERE id = $1 AND client_id = $2', [b.template_id, clientId]);
   if (!t) return { error: 'Choose the message to send.' };
+  const variables = typeof b.variables === 'object' && b.variables ? b.variables : {};
+  if (b.enabled !== false) {
+    const missing = await missingForSwitchOn(t.id, variables);
+    if (missing.length) return { error: needsFirst(missing), missing };
+  }
   return {
     name,
     kind,
@@ -134,7 +146,7 @@ async function normalise(clientId, b = {}) {
     days_before: days.sort((a, c) => c - a),
     send_hour: hour,
     template_id: t.id,
-    variables: typeof b.variables === 'object' && b.variables ? b.variables : {},
+    variables,
     audience: typeof b.audience === 'object' && b.audience ? b.audience : { mode: 'all' },
     sms_fallback: Boolean(b.sms_fallback),
     enabled: b.enabled !== false,

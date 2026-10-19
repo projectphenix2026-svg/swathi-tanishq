@@ -899,7 +899,10 @@
   "“No WhatsApp”: the customer has not agreed to WhatsApp messages, or replied STOP.": "“WhatsApp లేదు”: కస్టమర్ WhatsApp సందేశాలకు ఒప్పుకోలేదు, లేదా STOP అని జవాబిచ్చారు.",
   "→ open a customer) and the wish goes out by itself.": "→ ఒక కస్టమర్‌ను తెరవండి), శుభాకాంక్ష దానంతట అదే వెళ్తుంది.",
   "Spent each day: {x}": "ప్రతి రోజు ఖర్చు: {x}",
-  "Search {x}": "{x} వెతకండి"
+  "Search {x}": "{x} వెతకండి",
+  "Switch these on when you are ready. First write the birthday or anniversary gift in “Change message”. Then every customer with that date saved gets a wish on the day.": "సిద్ధంగా ఉన్నప్పుడు వీటిని ఆన్ చేయండి. ముందుగా “సందేశం మార్చండి”లో పుట్టినరోజు లేదా వార్షికోత్సవ బహుమతిని రాయండి. ఆ తర్వాత ఆ తేదీ సేవ్ చేసిన ప్రతి కస్టమర్‌కు ఆ రోజు శుభాకాంక్షలు వెళ్తాయి.",
+  "Switched off · add your offer in “Change message”, then switch on": "ఆఫ్‌లో ఉంది · “సందేశం మార్చండి”లో మీ ఆఫర్ జోడించి, ఆపై ఆన్ చేయండి",
+  "Save and switch on": "సేవ్ చేసి ఆన్ చేయండి"
  },
  "hi": {
   "% read": "% ने पढ़ा",
@@ -1800,6 +1803,9 @@
   "“No WhatsApp”: the customer has not agreed to WhatsApp messages, or replied STOP.": "“WhatsApp नहीं”: ग्राहक ने WhatsApp संदेशों की सहमति नहीं दी, या STOP लिखा।",
   "→ open a customer) and the wish goes out by itself.": "→ कोई ग्राहक खोलें), बधाई अपने आप जाएगी।",
   "Spent each day: {x}": "हर दिन का खर्च: {x}",
-  "Search {x}": "{x} खोजें"
+  "Search {x}": "{x} खोजें",
+  "Switch these on when you are ready. First write the birthday or anniversary gift in “Change message”. Then every customer with that date saved gets a wish on the day.": "तैयार होने पर इन्हें चालू करें। पहले “संदेश बदलें” में जन्मदिन या सालगिरह का उपहार लिखें। फिर वह तारीख़ सेव किए हर ग्राहक को उसी दिन शुभकामना जाएगी।",
+  "Switched off · add your offer in “Change message”, then switch on": "बंद है · “संदेश बदलें” में अपना ऑफ़र जोड़ें, फिर चालू करें",
+  "Save and switch on": "सेव करें और चालू करें"
  }
 }
