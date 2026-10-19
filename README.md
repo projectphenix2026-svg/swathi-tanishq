@@ -1,4 +1,4 @@
-# Swathi Tanishq: WhatsApp messaging
+# WhatsApp messaging for a shop (delivered as Tanishq Warangal)
 
 A web app for a jewellery franchise to send **personal, relevant WhatsApp offers** to its customers (up to 30,000 a month), track who received and read them, and answer replies in one shared inbox. SMS backup (MSG91) and automatic birthday/anniversary greetings come in later phases.
 
@@ -11,9 +11,9 @@ A web app for a jewellery franchise to send **personal, relevant WhatsApp offers
 | **2 · Go live on Meta** | Submit a template to Meta for approval from the template page and check its status; Meta sends are blocked until approved. Needs `META_WABA_ID`. | Templates → WhatsApp approval |
 | **3 · Occasions** | Birthday, anniversary and festival greetings sent every morning (India time) with no one touching the app; choose a week before, 3 days, the day before and/or on the day. Each greeting is keyed by occasion + customer + date, so it goes out once. `{{days_left}}` works in these messages. | Occasions |
 | **4 · SMS backup** | If WhatsApp says a number is not on WhatsApp, customers with SMS consent get the SMS version of the template (DLT wording + DLT template ID). `SMS_MODE=preview` (default) records the exact SMS without sending until DLT registration is approved; `SMS_MODE=msg91` sends through MSG91. | Templates → SMS version; campaign step 3; Occasions |
-| **5 · Sales-linked extras** | `{{offer_code}}` gives each customer a unique code (PRIYA-DIWALI-4821); staff enter it at billing with the bill amount, and reports show sales and return per campaign. Replies like “Interested” or a quick-reply tap open a **hot lead** to call. Weekly limit on marketing messages per customer. Import phone contacts (.vcf) and Google Sheets links. Roles: admin, manager, viewer; big sends by managers wait for an admin’s approval. | Offer codes · Hot leads · Settings · Add customers |
+| **5 · Sales-linked extras** | `{{offer_code}}` gives each customer a unique code (PRIYA-DIWALI-4821); staff enter it at billing with the bill amount, and reports show sales and return per campaign. Replies like “Interested” or a quick-reply tap open a **hot lead** to call. Weekly limit on marketing messages per customer. Import phone contacts (.vcf) and Google Sheets links. Four roles (App owner, Store owner, Store manager, Staff); big sends by a manager wait for the Store owner’s approval. | Offer codes · Hot leads · Settings · Add customers |
 
-Settings for these phases (all in `server/.env`, see `.env.example`): `META_WABA_ID`, `SMS_MODE`, `MSG91_AUTH_KEY`, `MSG91_SENDER_ID`, `SMS_COST_INR`, `OCCASION_CHECK_MINUTES`. The weekly limit (default 2) and approval size (default 500) are set by an admin under **Settings**.
+Settings for these phases (all in `server/.env`, see `.env.example`): `META_WABA_ID`, `SMS_MODE`, `MSG91_AUTH_KEY`, `MSG91_SENDER_ID`, `SMS_COST_INR`, `OCCASION_CHECK_MINUTES`. The weekly limit (default 2) and approval size (default 500) are set by the Store owner under **Settings**.
 
 ## How it fits together
 
@@ -53,7 +53,7 @@ Put the printed `database_id` into `wrangler.jsonc`, then set the secrets (each 
 npx wrangler secret put JWT_SECRET
 ```
 
-Deploy the Worker with `npm run deploy`, then the website with `npm run deploy:pages`. The trial runs at **https://swathi-tanishq.pages.dev**: a Cloudflare Pages project (`pages/`) serves the website and passes `/api`, `/webhooks` and `/health` to the Worker through a service binding; the Worker keeps D1 and the Cron (it also still answers at https://swathi-tanishq.projectphenix2026.workers.dev). Provider webhooks use `PUBLIC_BASE_URL` (the pages.dev address). The tables are created on the first request, and the first admin login comes from `ADMIN_EMAIL` / `ADMIN_PASSWORD`. Non-secret settings (provider, business name, SMS mode, site address) are the `vars` in `wrangler.jsonc`; Meta, Twilio and MSG91 keys are added as secrets the same way when needed (`META_ACCESS_TOKEN`, `META_APP_SECRET`, `META_WEBHOOK_VERIFY_TOKEN`, …).
+Deploy the Worker with `npm run deploy`, then the website with `npm run deploy:pages`. The trial runs behind a Cloudflare Pages project (`pages/`) that serves the website and passes `/api`, `/webhooks` and `/health` to the Worker through a service binding; the Worker keeps D1 and the Cron (it also still answers at https://swathi-tanishq.projectphenix2026.workers.dev). Provider webhooks use `PUBLIC_BASE_URL` (the pages.dev address). The tables are created on the first request, and the first login (the App owner) comes from `ADMIN_EMAIL` / `ADMIN_PASSWORD`. Non-secret settings (provider, business name, SMS mode, site address) are the `vars` in `wrangler.jsonc`; Meta, Twilio and MSG91 keys are added as secrets the same way when needed (`META_ACCESS_TOKEN`, `META_APP_SECRET`, `META_WEBHOOK_VERIFY_TOKEN`, …).
 
 To try the Cloudflare version locally (Cloudflare's own runtime with a local D1), put `JWT_SECRET`, `ADMIN_EMAIL` and `ADMIN_PASSWORD` in `.dev.vars` and run `npm run cf:dev`.
 
@@ -134,7 +134,7 @@ npm test
 | `outbox.test.js` | one personalised message per customer, skips, no double send under overlapping runs and re-launches, retry back-off, permanent failures, last attempt, scheduled and cancelled sends, status order, a 5,000-customer launch in one statement |
 | `providers.test.js` | Twilio request, Content templates, error mapping, signature check, webhook parsing; Meta template payload, signature check, webhook parsing |
 | `api.test.js` | sign-in, import (existing-number check, 500-row chunks, consent), form, template validation, campaign preview and send, audience-changed guard, inbox, STOP opt-out, double-click reply |
-| `phases.test.js` | Meta template submission format; birthday on the day (once only), anniversary N days before, send time, 29 Feb; SMS fallback and SMS consent; unique offer codes and one-time redemption with revenue; hot leads and tags; weekly limit; viewer permissions; admin approval of big sends; staff management; .vcf and Google Sheets import |
+| `phases.test.js` | Meta template submission format; birthday on the day (once only), anniversary N days before, send time, 29 Feb; SMS fallback and SMS consent; unique offer codes and one-time redemption with revenue; hot leads and tags; weekly limit; role permissions; owner approval of big sends; staff management; .vcf and Google Sheets import |
 
 ## Project layout
 
@@ -155,3 +155,16 @@ index.html             the original starter page
 ```
 
 Keep secrets in Cloudflare secrets (or `server/.env` / `.dev.vars` locally, both git-ignored), never in the repo.
+
+## Roles and shop details
+
+Four logins, each limited to what its job needs (the App owner builds and supports the app; nobody can create an App owner from inside the app):
+
+| Role | Who | Can |
+|---|---|---|
+| App owner | whoever builds and supports the app | everything, and creates the Store owner login |
+| Store owner | the shop's owner | WhatsApp connection, shop details, limits, approve big sends, manage logins, download data |
+| Store manager | runs the day | send messages, templates, special days and wishes, import and delete customers |
+| Staff | the counter | add and edit customers, answer replies, record sales codes, see reports |
+
+The shop's name, address, phone and Google review link are edited in the app (Settings > Shop details) and are filled into messages when they are sent; none of them is fixed in the code. See `docs/HANDOVER.md` for go-live steps.

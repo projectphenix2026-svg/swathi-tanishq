@@ -11,15 +11,15 @@ import { refreshProvider, refreshDailyLimit } from './lib/whatsapp-connection.js
 
 let setupDone = false;
 
-/** First run: create the admin login from ADMIN_EMAIL / ADMIN_PASSWORD; log the channels. */
+/** First run: create the app owner login from ADMIN_EMAIL / ADMIN_PASSWORD; log the channels. */
 export async function setup(clientId) {
   if (setupDone) return;
   setupDone = true;
   const { rows: [{ n: users }] } = await query('SELECT count(*) AS n FROM users');
   if (!users) {
     if (config.adminEmail && config.adminPassword) {
-      await createUser({ clientId, email: config.adminEmail, password: config.adminPassword, name: config.adminName });
-      console.log(`[setup] created staff login for ${config.adminEmail}`);
+      await createUser({ clientId, email: config.adminEmail, password: config.adminPassword, name: config.adminName, role: 'app_owner' });
+      console.log(`[setup] created app owner login for ${config.adminEmail}`);
     } else {
       console.warn('[setup] no staff logins yet: set ADMIN_EMAIL and ADMIN_PASSWORD, or run npm run create-user');
     }
