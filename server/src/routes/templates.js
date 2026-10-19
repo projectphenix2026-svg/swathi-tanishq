@@ -2,12 +2,12 @@ import express from 'express';
 import { query } from '../db/index.js';
 import { validateTemplate, cleanButtons, extractVariables, VARIABLES } from '../lib/template.js';
 import { buildProvider, getProvider } from '../providers/index.js';
-import { requireRole } from './auth.js';
+import { requireLevel } from './auth.js';
 import { savedMetaProvider } from '../lib/whatsapp-connection.js';
 import { mediaBytes } from './media.js';
 
 const router = express.Router();
-const canEdit = requireRole('admin', 'manager');
+const canEdit = requireLevel('manager');
 const EXAMPLES = Object.fromEntries(VARIABLES.map((v) => [v.key, v.example]));
 
 router.get('/variables', (req, res) => res.json({ variables: VARIABLES }));

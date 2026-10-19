@@ -1,10 +1,10 @@
 // Hot leads: customers who tapped "Interested" or "Book a visit", for staff to call the same day.
 import express from 'express';
 import { query, ago } from '../db/index.js';
-import { requireRole } from './auth.js';
+import { requireLevel } from './auth.js';
 
 const router = express.Router();
-const canEdit = requireRole('admin', 'manager');
+const canEdit = requireLevel('staff');
 const STATUSES = ['new', 'called', 'won', 'lost'];
 
 router.get('/', async (req, res) => {

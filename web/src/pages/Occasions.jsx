@@ -10,6 +10,7 @@ import { dateOnly, num, plural } from '../lib/format.js';
 import { READY_WISHES } from '../lib/ready.js';
 import { useT } from '../lib/i18n.jsx';
 import { shopVars } from '../lib/shop.js';
+import { atLeast } from '@shared/roles.js';
 import { TemplateChooser } from '../components/TemplatePicker.jsx';
 import { CustomersStep } from '../components/CustomerPicker.jsx';
 import { WishPeople } from '../components/WishPeople.jsx';
@@ -74,7 +75,7 @@ const shiftMonth = (month, n) => {
 
 export default function Occasions() {
   const { settings } = useAuth();
-  const canEdit = settings?.role !== 'viewer';
+  const canEdit = atLeast(settings?.role, 'manager');
   const toast = useToast();
   const [data, setData] = useState(null);
   const [templates, setTemplates] = useState([]);

@@ -2,13 +2,15 @@ import express from 'express';
 import { query, batch, NOW } from '../db/index.js';
 import { normalizePhone } from '../lib/phone.js';
 import { parseDate, sheetsCsvUrl, ImportError } from '../lib/import-basics.js';
-import { requireRole } from './auth.js';
+import { requireLevel } from './auth.js';
 import { offersThisWeekSql, lastOfferSql } from '../lib/campaigns.js';
 import { addSamples, countSamples, removeSamples } from '../lib/samples.js';
 import { getProvider } from '../providers/index.js';
 
 const router = express.Router();
-const canEdit = requireRole('admin', 'manager');
+// Everyone adds and edits customers; deleting and bulk imports are for managers and up.
+const canEdit = requireLevel('staff');
+const canManage = requireLevel('manager');
 
 const SORTS = { recent: 'created_at DESC', name: 'name IS NULL, name ASC' };
 const DATE_KINDS = ['spouse_birthday', 'child_birthday', 'other'];
@@ -76,11 +78,11 @@ router.get('/summary', async (req, res) => {
 router.get('/samples', async (req, res) => {
   res.json({ samples: await countSamples(req.clientId) });
 });
-router.post('/samples', canEdit, async (req, res) => {
+router.post('/samples', canManage, async (req, res) => {
   if (getProvider().name !== 'mock') return res.status(400).json({ error: 'Sample customers are only for Test mode.' });
   res.status(201).json({ samples: await addSamples(req.clientId) });
 });
-router.delete('/samples', canEdit, async (req, res) => {
+router.delete('/samples', canManage, async (req, res) => {
   res.json({ removed: await removeSamples(req.clientId) });
 });
 
@@ -161,7 +163,7 @@ router.patch('/:id', canEdit, async (req, res) => {
 
 // Delete a customer: their name, number, details, chats and call-back entry are removed; queued
 // messages to them are cancelled. Past offer counts, costs and bill-code sales stay in reports.
-router.delete('/:id', canEdit, async (req, res) => {
+router.delete('/:id', canManage, async (req, res) => {
   const { rows: [c] } = await query(`SELECT id FROM contacts WHERE id = $1 AND client_id = $2 AND ${NOT_DELETED}`, [req.params.id, req.clientId]);
   if (!c) return res.status(404).json({ error: 'Customer not found.' });
   await batch([
@@ -193,7 +195,7 @@ router.delete('/:id', canEdit, async (req, res) => {
 // ---- Import. The browser reads Excel/CSV/contacts files and builds the preview; the server
 // ---- says which numbers already exist and saves the accepted rows in chunks.
 
-router.post('/import/existing', canEdit, async (req, res) => {
+router.post('/import/existing', canManage, async (req, res) => {
   const phones = (Array.isArray(req.body?.phones) ? req.body.phones : []).slice(0, 5000).map(String);
   if (!phones.length) return res.json({ existing: [] });
   const { rows } = await query(
@@ -204,7 +206,7 @@ router.post('/import/existing', canEdit, async (req, res) => {
 });
 
 // Google Sheets can't be read from the browser directly, so the server fetches the CSV.
-router.post('/import/sheet', canEdit, async (req, res) => {
+router.post('/import/sheet', canManage, async (req, res) => {
   const url = sheetsCsvUrl(req.body?.sheetUrl);
   let r;
   try {
@@ -221,7 +223,7 @@ router.post('/import/sheet', canEdit, async (req, res) => {
 });
 
 // Saves up to 500 accepted rows per request (the browser sends a large import in chunks).
-router.post('/import/commit', canEdit, async (req, res) => {
+router.post('/import/commit', canManage, async (req, res) => {
   const { rows = [], optIn = {}, updateExisting = false, source = 'import', tags = [], defaultCity = '' } = req.body || {};
   if (!Array.isArray(rows) || rows.length > 500) return res.status(400).json({ error: 'Send at most 500 rows at a time.' });
   // Every customer needs a city: rows without one take the city chosen for the whole import.

@@ -144,6 +144,9 @@ async function ensureSchema() {
     await impl.exec(SCHEMA);
   }
   await ensureColumns();
+  // Earlier versions had admin, manager and viewer. An admin is a store owner; a viewer becomes staff.
+  await impl.query("UPDATE users SET role = 'owner' WHERE role = 'admin'");
+  await impl.query("UPDATE users SET role = 'staff' WHERE role = 'viewer'");
 }
 
 /** Adds columns introduced after the first deploy to older databases (SQLite has no ADD COLUMN IF NOT EXISTS). */

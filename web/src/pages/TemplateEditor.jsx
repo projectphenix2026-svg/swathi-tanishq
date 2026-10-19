@@ -9,6 +9,7 @@ import { PhonePreview } from '../components/PhonePreview.jsx';
 import { READY_MESSAGES } from '../lib/ready.js';
 import { PhotoPicker } from '../components/PhotoPicker.jsx';
 import { shopVars } from '../lib/shop.js';
+import { atLeast } from '@shared/roles.js';
 import { detailLabel, fromFriendly, toFriendly } from '../lib/friendly.js';
 import { readyFor } from '../lib/ready-lang.js';
 import { useT } from '../lib/i18n.jsx';
@@ -34,7 +35,7 @@ export default function TemplateEditor() {
   const navigate = useNavigate();
   const toast = useToast();
   const { settings, user } = useAuth();
-  const isOwner = user?.role === 'admin';
+  const isOwner = atLeast(user?.role, 'owner');
   const { lang } = useT();
   const textRef = useRef(null);
   const [t, setT] = useState(id ? null : { name: '', body: '', buttons: [], image_url: '', status: 'approved', provider_ref: '', category: 'marketing', sms_body: '', sms_dlt_template_id: '' });
@@ -86,6 +87,7 @@ export default function TemplateEditor() {
   const setButton = (i, patch) => set({ buttons: t.buttons.map((b, j) => (j === i ? { ...b, ...patch } : b)) });
 
   async function save() {
+    if (!atLeast(user?.role, 'manager')) return toast('Templates are changed by a store manager or the store owner.', 'bad');
     setTried(true);
     if (errors.length) return;
     setBusy(true);

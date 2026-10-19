@@ -8,6 +8,7 @@ import { SCREEN_LANGS, useT } from '../lib/i18n.jsx';
 import { ConnectWhatsApp } from './ConnectWhatsApp.jsx';
 import { YourData } from './YourData.jsx';
 import { GoLive } from './GoLive.jsx';
+import { ROLES, ROLE_INFO, atLeast, roleLabel } from '@shared/roles.js';
 
 // Settings in sections: a menu on the left (chips on phones) and one section at a time.
 // The owner sees every section; staff see their own account and the shop's sending rules.
@@ -15,21 +16,15 @@ const SECTIONS = [
   { id: 'shop', label: 'Shop details', pic: 'home', owner: true },
   { id: 'go-live', label: 'WhatsApp and going live', pic: 'speech', owner: true },
   { id: 'messages', label: 'Message rules', pic: 'megaphone' },
-  { id: 'staff', label: 'Staff', pic: 'people', owner: true },
+  { id: 'staff', label: 'Logins and roles', pic: 'people', owner: true },
   { id: 'your-data', label: 'Your data', pic: 'chart', owner: true },
   { id: 'account', label: 'My account', pic: 'gear' },
 ];
-// Two everyday roles: the owner (everything) and staff (send, customers, replies). "View only"
-// stays for logins that already have it.
-const ROLES = [
-  { value: 'admin', label: 'Owner', text: 'Everything: going live, settings, staff, approving big sends.' },
-  { value: 'manager', label: 'Staff', text: 'Sends messages, adds customers, answers replies, records sales codes.' },
-  { value: 'viewer', label: 'View only', text: 'Sees reports and replies; cannot send.' },
-];
+
 
 export default function Settings() {
   const { settings, user, reloadSettings } = useAuth();
-  const isOwner = settings?.role === 'admin';
+  const isOwner = atLeast(settings?.role, 'owner');
   const sections = SECTIONS.filter((s) => isOwner || !s.owner);
   const fromHash = () => {
     const h = window.location.hash.slice(1);
@@ -230,26 +225,28 @@ function SmsStatus({ settings }) {
 
 function Staff({ me }) {
   const toast = useToast();
-  const [users, setUsers] = useState(null);
+  const [data, setData] = useState(null);
   const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState(null);
   const [resetting, setResetting] = useState(null);
   const [removing, setRemoving] = useState(null);
-  const load = () => api('/api/auth/users').then((r) => setUsers(r.users)).catch(() => setUsers([]));
+  const load = () => api('/api/auth/users').then(setData).catch(() => setData({ users: [], assignable: [] }));
   useEffect(() => {
     load();
   }, []);
   async function changeRole(u, role) {
     try {
       await api(`/api/auth/users/${u.id}`, { method: 'PATCH', body: { role } });
-      toast(`${u.name} is now ${ROLES.find((r) => r.value === role).label}`);
+      toast(`${u.name} is now ${roleLabel(role)}`);
       load();
     } catch (e) {
       toast(e.message, 'bad');
     }
   }
+  const users = data?.users;
   return (
     <>
-      <Block title="Who can sign in" hint="Each person has their own login. Share a first password in person.">
+      <Block title="Who can sign in" hint="Each person has their own login. Give the first password in person; they can change it under My account.">
         {!users ? <Spinner /> : (
           <div className="staff-list">
             {users.map((u) => (
@@ -259,32 +256,44 @@ function Staff({ me }) {
                   <b>{u.name}{u.id === me.id ? ' (you)' : ''}</b>
                   <span className="subtle" style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis' }}>{u.email} · added {dateOnly(u.created_at)}</span>
                 </span>
-                <select className="select sm" value={u.role} onChange={(e) => changeRole(u, e.target.value)} disabled={u.id === me.id} aria-label={`Role for ${u.name}`}>
-                  {ROLES.filter((r) => r.value !== 'viewer' || u.role === 'viewer').map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
-                </select>
-                {u.id !== me.id && <button className="btn ghost sm" onClick={() => setResetting(u)}><KeyRound size={15} />New password</button>}
-                {u.id !== me.id && <button className="btn ghost sm danger" onClick={() => setRemoving(u)}><UserMinus size={15} />Remove</button>}
+                {u.canManage ? (
+                  <select className="select sm" value={u.role} onChange={(e) => changeRole(u, e.target.value)} aria-label={`Role for ${u.name}`}>
+                    {[...new Set([u.role, ...data.assignable])].map((r) => <option key={r} value={r}>{roleLabel(r)}</option>)}
+                  </select>
+                ) : (
+                  <span className={`badge ${u.role === 'app_owner' ? 'brand' : 'neutral'}`}>{roleLabel(u.role)}</span>
+                )}
+                {u.canManage && <button className="btn ghost sm" onClick={() => setEditing(u)}>Edit</button>}
+                {u.canManage && <button className="btn ghost sm" onClick={() => setResetting(u)}><KeyRound size={15} />New password</button>}
+                {u.canManage && <button className="btn ghost sm danger" onClick={() => setRemoving(u)}><UserMinus size={15} />Remove</button>}
               </div>
             ))}
           </div>
         )}
-        <button className="btn primary" style={{ alignSelf: 'flex-start' }} onClick={() => setAdding(true)}><UserPlus size={16} />Add staff</button>
+        <button className="btn primary" style={{ alignSelf: 'flex-start' }} onClick={() => setAdding(true)}><UserPlus size={16} />Add a login</button>
       </Block>
-      <Block title="What each role can do">
-        <div className="stack-sm">
-          {ROLES.slice(0, 2).map((r) => <span key={r.value}><b>{r.label}:</b> <span className="subtle">{r.text}</span></span>)}
+      <Block title="What each role can do" hint="Each role can do everything the roles below it can.">
+        <div className="role-list">
+          {ROLES.map((r) => (
+            <div key={r} className="role-item">
+              <b>{ROLE_INFO[r].label}</b>
+              <span className="subtle">{ROLE_INFO[r].who}</span>
+              <span>{ROLE_INFO[r].can}</span>
+            </div>
+          ))}
         </div>
       </Block>
-      {adding && <AddStaff onClose={() => setAdding(false)} onSaved={() => { setAdding(false); load(); }} />}
+      {adding && <AddStaff roles={data?.assignable || []} onClose={() => setAdding(false)} onSaved={() => { setAdding(false); load(); }} />}
+      {editing && <EditLogin u={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load(); }} />}
       {resetting && <ResetPassword u={resetting} onClose={() => setResetting(null)} />}
       {removing && <RemoveStaff u={removing} onClose={() => setRemoving(null)} onDone={() => { setRemoving(null); load(); }} />}
     </>
   );
 }
 
-function AddStaff({ onClose, onSaved }) {
+function AddStaff({ roles, onClose, onSaved }) {
   const toast = useToast();
-  const [f, setF] = useState({ name: '', email: '', password: '', role: 'manager' });
+  const [f, setF] = useState({ name: '', email: '', password: '', role: roles.includes('staff') ? 'staff' : roles[0] });
   const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.value }));
   async function save() {
@@ -300,22 +309,52 @@ function AddStaff({ onClose, onSaved }) {
     }
   }
   return (
-    <Modal title="Add staff" onClose={onClose} footer={<><button className="btn" onClick={onClose}>Cancel</button><button className="btn primary" onClick={save} disabled={busy}>{busy ? <Spinner /> : 'Add'}</button></>}>
+    <Modal title="Add a login" onClose={onClose} footer={<><button className="btn" onClick={onClose}>Cancel</button><button className="btn primary" onClick={save} disabled={busy}>{busy ? <Spinner /> : 'Add'}</button></>}>
       <div className="stack">
         <Field label="Name"><input id="staff-name" className="input" value={f.name} onChange={set('name')} autoComplete="off" /></Field>
         <Field label="Email"><input id="staff-email" className="input" type="email" value={f.email} onChange={set('email')} autoComplete="off" /></Field>
-        <Field label="First password" hint="At least 8 characters. Share it with them in person; they can sign in straight away.">
+        <Field label="First password" hint="At least 8 characters. Give it to them in person; they can sign in straight away and change it under My account.">
           <input id="staff-password" className="input" type="text" value={f.password} onChange={set('password')} autoComplete="new-password" />
         </Field>
         <Field label="Role">
           <div className="options">
-            {ROLES.slice(0, 2).map((r) => (
-              <button key={r.value} type="button" className={`option ${f.role === r.value ? 'on' : ''}`} onClick={() => setF((x) => ({ ...x, role: r.value }))}>
+            {roles.map((r) => (
+              <button key={r} type="button" className={`option ${f.role === r ? 'on' : ''}`} onClick={() => setF((x) => ({ ...x, role: r }))}>
                 <span className="radio" />
-                <span><span className="option-title">{r.label}</span><span className="subtle" style={{ display: 'block' }}>{r.text}</span></span>
+                <span><span className="option-title">{ROLE_INFO[r].label}</span><span className="subtle" style={{ display: 'block' }}>{ROLE_INFO[r].can}</span></span>
               </button>
             ))}
           </div>
+        </Field>
+      </div>
+    </Modal>
+  );
+}
+
+/** Change the name or the email a login signs in with. */
+function EditLogin({ u, onClose, onSaved }) {
+  const toast = useToast();
+  const [f, setF] = useState({ name: u.name, email: u.email });
+  const [busy, setBusy] = useState(false);
+  const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.value }));
+  async function save() {
+    setBusy(true);
+    try {
+      await api(`/api/auth/users/${u.id}`, { method: 'PATCH', body: f });
+      toast(f.email.trim().toLowerCase() !== u.email ? 'Saved. They sign in with the new email from now on.' : 'Saved');
+      onSaved();
+    } catch (e) {
+      toast(e.message, 'bad');
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Modal title={`Edit ${u.name}`} onClose={onClose} footer={<><button className="btn" onClick={onClose}>Cancel</button><button className="btn primary" onClick={save} disabled={busy}>{busy ? <Spinner /> : 'Save'}</button></>}>
+      <div className="stack">
+        <Field label="Name"><input id="edit-name" className="input" value={f.name} onChange={set('name')} autoComplete="off" /></Field>
+        <Field label="Email they sign in with" hint="If you change it, they are signed out and use the new email next time.">
+          <input id="edit-email" className="input" type="email" value={f.email} onChange={set('email')} autoComplete="off" />
         </Field>
       </div>
     </Modal>

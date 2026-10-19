@@ -4,7 +4,7 @@
 import express from 'express';
 import { config } from '../config.js';
 import { query } from '../db/index.js';
-import { requireAuth, requireRole } from './auth.js';
+import { requireAuth, requireLevel } from './auth.js';
 
 const TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const MAX_BYTES = 600 * 1024;
@@ -23,7 +23,7 @@ export async function mediaBytes(id) {
 
 /** Upload: { dataUrl: "data:image/jpeg;base64,..." } -> { url } */
 export const upload = express.Router();
-upload.post('/', requireAuth, requireRole('admin', 'manager'), async (req, res) => {
+upload.post('/', requireAuth, requireLevel('manager'), async (req, res) => {
   const match = /^data:(image\/[a-z]+);base64,([A-Za-z0-9+/=]+)$/.exec(String(req.body?.dataUrl || ''));
   if (!match || !TYPES.has(match[1])) return res.status(400).json({ error: 'Choose a JPG, PNG or WebP photo.' });
   const size = Math.floor((match[2].length * 3) / 4);

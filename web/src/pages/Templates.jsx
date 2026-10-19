@@ -10,6 +10,7 @@ import { toFriendly } from '../lib/friendly.js';
 import { READY_MESSAGES, iconFor } from '../lib/ready.js';
 import { LANGS, isReadyText, readyFor, readyIn } from '../lib/ready-lang.js';
 import { useAuth } from '../lib/auth.js';
+import { atLeast } from '@shared/roles.js';
 import { useT } from '../lib/i18n.jsx';
 
 const STATUS = { approved: ['ok', 'Ready'], draft: ['neutral', 'Not finished'], rejected: ['bad', 'Needs a change'] };
@@ -24,6 +25,7 @@ export default function Templates() {
   const navigate = useNavigate();
   const toast = useToast();
   const { settings } = useAuth();
+  const canWrite = atLeast(settings?.role, 'manager');
   // Ready-made templates are shown in this person's app language.
   const { lang } = useT();
   useEffect(() => {
@@ -57,7 +59,7 @@ export default function Templates() {
           <h1>Templates</h1>
           <p>The wording you send again and again. Each customer gets their own name and details.</p>
         </div>
-        <Link to="/templates/new" className="btn primary"><Plus size={18} />New template</Link>
+        {canWrite && <Link to="/templates/new" className="btn primary"><Plus size={18} />New template</Link>}
       </div>
 
       <div className="list-tools card" style={{ marginBottom: 16 }}>
@@ -69,7 +71,7 @@ export default function Templates() {
         </div>
       </div>
 
-      {!q && show === 'all' && <div className="card card-pad stack" style={{ gap: 12 }}>
+      {canWrite && !q && show === 'all' && <div className="card card-pad stack" style={{ gap: 12 }}>
         <h2>Ready-made</h2>
         <div className="ready-grid">
           {READY_MESSAGES.map((m) => (

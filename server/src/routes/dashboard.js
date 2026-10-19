@@ -7,7 +7,7 @@ import { clientSettings } from '../lib/campaigns.js';
 import { calendar, indiaNow, ensureDefaultWishes } from '../lib/occasions.js';
 import { getShop, forgetShop } from '../lib/shop.js';
 import { normalizePhone } from '../lib/phone.js';
-import { requireRole } from './auth.js';
+import { requireLevel } from './auth.js';
 
 const router = express.Router();
 
@@ -93,7 +93,7 @@ router.get('/settings', async (req, res) => {
 });
 
 // Admins set the weekly limit and when big sends need approval.
-router.put('/settings', requireRole('admin'), async (req, res) => {
+router.put('/settings', requireLevel('owner'), async (req, res) => {
   const cap = Number(req.body?.weeklyCap);
   const threshold = Number(req.body?.approvalThreshold);
   if (!Number.isInteger(cap) || cap < 0 || cap > 14) return res.status(400).json({ error: 'Weekly limit: a whole number from 0 (no limit) to 14.' });
@@ -103,7 +103,7 @@ router.put('/settings', requireRole('admin'), async (req, res) => {
 });
 
 // The owner edits the shop's name, address, phone and Google review link.
-router.put('/shop', requireRole('admin'), async (req, res) => {
+router.put('/shop', requireLevel('owner'), async (req, res) => {
   const b = req.body || {};
   const clean = (v, max) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
   const name = clean(b.name, 80);
@@ -127,7 +127,7 @@ router.put('/shop', requireRole('admin'), async (req, res) => {
 });
 
 // The owner switches sales codes on or off.
-router.put('/settings/sales-codes', requireRole('admin'), async (req, res) => {
+router.put('/settings/sales-codes', requireLevel('owner'), async (req, res) => {
   const on = Boolean(req.body?.on);
   await query('UPDATE clients SET sales_codes = $2 WHERE id = $1', [req.clientId, on ? 1 : 0]);
   res.json({ salesCodes: on });

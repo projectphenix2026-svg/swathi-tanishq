@@ -1,10 +1,10 @@
 import express from 'express';
 import { query } from '../db/index.js';
-import { requireRole } from './auth.js';
+import { requireLevel } from './auth.js';
 import { runOccasion, upcoming, indiaNow, calendar, addDays, ensureDefaultWishes, wishPeople, missingForSwitchOn } from '../lib/occasions.js';
 
 const router = express.Router();
-const canEdit = requireRole('admin', 'manager');
+const canEdit = requireLevel('manager');
 // thank_you = "After a purchase": a thank-you (with a Google review button) N days after a sales code is used.
 // personal = "Family days": a spouse's or child's birthday, or any other day saved on the customer.
 const KINDS = ['birthday', 'anniversary', 'festival', 'thank_you', 'personal'];

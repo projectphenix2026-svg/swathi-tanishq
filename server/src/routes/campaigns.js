@@ -9,9 +9,10 @@ import { pace, finishEstimate } from '../lib/pacing.js';
 import { render, valuesFor } from '../lib/template.js';
 import { shopValues } from '../lib/shop.js';
 import { withButtons } from '../providers/twilio.js';
-import { requireRole } from './auth.js';
+import { requireLevel } from './auth.js';
+import { atLeast } from '../lib/roles.js';
 
-const canEdit = requireRole('admin', 'manager');
+const canEdit = requireLevel('manager');
 
 const router = express.Router();
 
@@ -169,7 +170,7 @@ router.post('/', canEdit, async (req, res) => {
     });
   }
   // Big sends by non-admins wait for an admin's approval.
-  const needsApproval = req.user.role !== 'admin' && preview.sendable >= preview.approvalThreshold;
+  const needsApproval = !atLeast(req.user.role, 'owner') && preview.sendable >= preview.approvalThreshold;
   const { rows: [campaign] } = await query(
     `INSERT INTO campaigns (client_id, name, template_id, audience, variables, status, scheduled_at, cost_per_message, provider,
                             created_by, sms_fallback, expected_count, approved_by, approved_at, channel)
@@ -184,7 +185,7 @@ router.post('/', canEdit, async (req, res) => {
 });
 
 // An admin approves a big send; it then goes out (or waits for its scheduled time).
-router.post('/:id/approve', requireRole('admin'), async (req, res) => {
+router.post('/:id/approve', requireLevel('owner'), async (req, res) => {
   const { rows: [c] } = await query(
     `UPDATE campaigns SET status = 'scheduled', approved_by = $3, approved_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
       WHERE id = $1 AND client_id = $2 AND status = 'pending_approval' RETURNING *`,

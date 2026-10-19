@@ -11,6 +11,7 @@ import { api, apiText } from '../lib/api.js';
 import { Alert, Field, Spinner, useToast } from '../components/ui.jsx';
 import { CustomerFields, customerBody, customerForm } from '../components/CustomerFields.jsx';
 import { useAuth } from '../lib/auth.js';
+import { atLeast } from '@shared/roles.js';
 import { num, plural } from '../lib/format.js';
 
 const TABS = [
@@ -21,7 +22,10 @@ const TABS = [
 ];
 
 export default function AddCustomers() {
-  const [tab, setTab] = useState('file');
+  const { settings } = useAuth();
+  // Importing a whole list is for managers and up; staff add one customer at a time.
+  const tabs = atLeast(settings?.role, 'manager') ? TABS : TABS.filter((x) => x.key === 'one');
+  const [tab, setTab] = useState(atLeast(settings?.role, 'manager') ? 'file' : 'one');
   const [preview, setPreview] = useState(null);
   const [done, setDone] = useState(null);
 
@@ -47,7 +51,7 @@ export default function AddCustomers() {
       ) : (
         <div className="stack">
           <div className="tabs" role="tablist">
-            {TABS.map(({ key, label, icon: Icon }) => (
+            {tabs.map(({ key, label, icon: Icon }) => (
               <button key={key} className={`tab ${tab === key ? 'on' : ''}`} onClick={() => setTab(key)} role="tab" aria-selected={tab === key}>
                 <Icon size={18} />{label}
               </button>

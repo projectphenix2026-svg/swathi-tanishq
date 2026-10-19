@@ -2,11 +2,11 @@
 // (small enough for Cloudflare's free plan) and builds one Excel file with a sheet for each.
 import express from 'express';
 import { query, NOW } from '../db/index.js';
-import { requireRole } from './auth.js';
+import { requireLevel } from './auth.js';
 import { NOT_DELETED } from './customers.js';
 
 const router = express.Router();
-router.use(requireRole('admin'));
+router.use(requireLevel('owner'));
 
 const page = (req) => ({
   after: Math.max(0, Number(req.query.after) || 0),
