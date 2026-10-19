@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
-import { Gem, LogOut, Menu, Plus, X } from 'lucide-react';
+import { LogOut, Menu, Plus, X } from 'lucide-react';
+import { BrandMark } from './BrandMark.jsx';
 import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.js';
 import { Avatar, Pic } from './ui.jsx';
@@ -70,7 +71,7 @@ export function Layout() {
     <div className="shell">
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-mark"><Gem size={19} /></div>
+          <BrandMark />
           <div>
             <div className="brand-name">{settings?.businessName || ''}</div>
             <div className="brand-sub">{t('WhatsApp messages')}</div>
@@ -89,7 +90,7 @@ export function Layout() {
       <div className="main">
         <header className="topbar">
           <div className="row" style={{ gap: 10, minWidth: 0 }}>
-            <div className="brand-mark" style={{ width: 32, height: 32 }}><Gem size={17} /></div>
+            <BrandMark size={32} />
             <b style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{settings?.businessName || ''}</b>
           </div>
           <span className="row" style={{ gap: 6 }}>

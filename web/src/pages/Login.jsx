@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { BarChart3, Eye, EyeOff, Gem, MessageCircle, Sparkles } from 'lucide-react';
+import { BarChart3, Eye, EyeOff, MessageCircle, Sparkles } from 'lucide-react';
+import { BrandMark } from '../components/BrandMark.jsx';
 import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.js';
 import { Alert, Field, Spinner } from '../components/ui.jsx';
@@ -37,7 +38,7 @@ export default function Login() {
     <div className="login">
       <section className="login-art">
         <div className="row" style={{ gap: 12 }}>
-          <div className="brand-mark" style={{ background: 'rgba(255,255,255,.12)' }}><Gem size={19} /></div>
+          <BrandMark />
           <b style={{ fontSize: '1.05rem' }}>{shopName}</b>
         </div>
         <div>
@@ -54,7 +55,7 @@ export default function Login() {
       <section className="login-form">
         <form className="login-card stack" onSubmit={submit} noValidate>
           <div className="row" style={{ gap: 12, marginBottom: 8 }}>
-            <div className="brand-mark"><Gem size={19} /></div>
+            <BrandMark />
             <div>
               <h1 style={{ fontSize: '1.35rem' }}>Welcome back</h1>
               <p className="muted">Sign in with your staff login.</p>

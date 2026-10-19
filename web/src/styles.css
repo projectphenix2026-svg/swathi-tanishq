@@ -105,7 +105,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 }
 .brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 20px; }
 .brand-mark {
-  width: 36px; height: 36px; border-radius: 10px; background: linear-gradient(135deg, #6d1a36, #9b2c52);
+  width: 36px; height: 36px; border-radius: 10px; overflow: hidden; background: #4a0713;
   display: grid; place-items: center; color: #e7c46a; flex-shrink: 0; box-shadow: var(--shadow-sm);
 }
 .brand-name { font-weight: 700; font-size: 0.98rem; line-height: 1.15; }
@@ -821,3 +821,5 @@ a.chart-card:hover { border-color: var(--brand); }
 .role-list { display: grid; gap: 10px; }
 .role-item { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); font-size: 0.9rem; }
 .role-item b { font-size: 0.95rem; }
+.brand-mark img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.phone-bar img.avatar { object-fit: cover; background: #4a0713; }
