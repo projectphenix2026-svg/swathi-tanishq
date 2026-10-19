@@ -13,12 +13,12 @@ const EXAMPLES = Object.fromEntries(VARIABLES.map((v) => [v.key, v.example]));
 router.get('/variables', (req, res) => res.json({ variables: VARIABLES }));
 
 // Order and repair updates were removed; their old templates stay (past reports use them) but are hidden.
-const RETIRED = ['📦 Order ready', '🔧 Repair ready'];
+const RETIRED = ['%Order ready', '%Repair ready'];
 
 router.get('/', async (req, res) => {
   const { rows } = await query(
     `SELECT t.*, (SELECT count(*) FROM campaigns c WHERE c.template_id = t.id) AS used_in
-       FROM templates t WHERE client_id = $1 AND t.name NOT IN ($2, $3) ORDER BY updated_at DESC`,
+       FROM templates t WHERE client_id = $1 AND t.name NOT LIKE $2 AND t.name NOT LIKE $3 ORDER BY updated_at DESC`,
     [req.clientId, ...RETIRED],
   );
   res.json({ templates: rows.map(withVars) });

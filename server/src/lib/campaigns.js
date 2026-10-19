@@ -6,6 +6,7 @@ import { query, ago, NOW } from '../db/index.js';
 import { config } from '../config.js';
 import { extractVariables } from './template.js';
 import { kick } from './dispatch.js';
+import { shopValues, SHOP_KEYS } from './shop.js';
 
 /**
  * Builds the WHERE clause for an audience. Placeholders continue from `params`
@@ -89,13 +90,16 @@ export async function sendConditions(clientId, template, variables, { ignoreCap 
     .map((k) => CUSTOMER_KEYS[k])
     .filter(Boolean)
     .map((col) => `c.${col} IS NOT NULL AND trim(c.${col}) <> ''`);
-  const campaignBlank = keys.some((k) => !CUSTOMER_KEYS[k] && !GENERATED.has(k) && !String(variables?.[k] || '').trim());
+  // The shop's name, address and phone come from Settings, so only those details can be missing here.
+  const shop = await shopValues(clientId);
+  const blankOf = (k) => (SHOP_KEYS.has(k) ? !String(shop[k] || '').trim() : !String(variables?.[k] || '').trim());
+  const campaignBlank = keys.some((k) => !CUSTOMER_KEYS[k] && !GENERATED.has(k) && blankOf(k));
   const { weekly_cap: cap } = await clientSettings(clientId);
   // The weekly limit protects the WhatsApp number; bulk SMS is not counted. Before a message is
   // picked (step 1 of Send an offer) it is counted as an offer, so the first number shown is already right.
   const marketing = template ? template.category === 'marketing' : true;
   const capped = !ignoreCap && channel !== 'sms' && marketing && cap > 0 ? atCapSql(cap) : null;
-  return { keys, conds, campaignBlank, capped };
+  return { keys, conds, campaignBlank, capped, blankOf };
 }
 
 /** Numbers for the builder: how many match, how many can be sent to, and why the rest cannot. */
@@ -111,7 +115,7 @@ export async function previewAudience(clientId, { audience, template, variables,
        FROM contacts c WHERE ${where}`,
     params,
   );
-  const { keys, conds, campaignBlank, capped } = await sendConditions(clientId, template, variables, { channel, ignoreCap });
+  const { keys, conds, campaignBlank, capped, blankOf } = await sendConditions(clientId, template, variables, { channel, ignoreCap });
   // Which placeholders some customers have no value for (they are left out).
   const missing = {};
   const missingCols = [...new Set(keys.map((k) => CUSTOMER_KEYS[k]).filter(Boolean))];
@@ -123,7 +127,7 @@ export async function previewAudience(clientId, { audience, template, variables,
     );
     for (const k of keys) if (CUSTOMER_KEYS[k] && m[CUSTOMER_KEYS[k]]) missing[k] = m[CUSTOMER_KEYS[k]];
   }
-  for (const k of keys) if (!CUSTOMER_KEYS[k] && !GENERATED.has(k) && !String(variables?.[k] || '').trim()) missing[k] = counts.eligible;
+  for (const k of keys) if (!CUSTOMER_KEYS[k] && !GENERATED.has(k) && blankOf(k)) missing[k] = counts.eligible;
 
   let atCap = 0;
   let atCapPeople = [];

@@ -68,7 +68,7 @@ export function Layout() {
         <div className="brand">
           <div className="brand-mark"><Gem size={19} /></div>
           <div>
-            <div className="brand-name">{settings?.businessName || 'Swathi Tanishq'}</div>
+            <div className="brand-name">{settings?.businessName || ''}</div>
             <div className="brand-sub">{t('WhatsApp messages')}</div>
           </div>
         </div>
@@ -86,7 +86,7 @@ export function Layout() {
         <header className="topbar">
           <div className="row" style={{ gap: 10, minWidth: 0 }}>
             <div className="brand-mark" style={{ width: 32, height: 32 }}><Gem size={17} /></div>
-            <b style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{settings?.businessName || 'Swathi Tanishq'}</b>
+            <b style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{settings?.businessName || ''}</b>
           </div>
           <span className="row" style={{ gap: 6 }}>
             <button className="icon-btn" onClick={() => setSheet(true)} aria-label={t('Menu')} aria-haspopup="dialog"><Menu size={21} /></button>

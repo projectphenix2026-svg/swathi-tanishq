@@ -54,6 +54,11 @@ router.post('/logout', (req, res) => {
   res.json({ ok: true });
 });
 
+router.get('/shop-name', async (req, res) => {
+  const { rows: [c] } = await query('SELECT name FROM clients ORDER BY id LIMIT 1');
+  res.json({ name: c?.name || '' });
+});
+
 router.get('/me', requireAuth, (req, res) => res.json({ user: publicUser(req.user) }));
 
 // Each person chooses their own app language; it is saved with their login.

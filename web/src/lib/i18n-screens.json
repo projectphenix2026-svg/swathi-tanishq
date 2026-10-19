@@ -902,7 +902,15 @@
   "Search {x}": "{x} వెతకండి",
   "Switch these on when you are ready. First write the birthday or anniversary gift in “Change message”. Then every customer with that date saved gets a wish on the day.": "సిద్ధంగా ఉన్నప్పుడు వీటిని ఆన్ చేయండి. ముందుగా “సందేశం మార్చండి”లో పుట్టినరోజు లేదా వార్షికోత్సవ బహుమతిని రాయండి. ఆ తర్వాత ఆ తేదీ సేవ్ చేసిన ప్రతి కస్టమర్‌కు ఆ రోజు శుభాకాంక్షలు వెళ్తాయి.",
   "Switched off · add your offer in “Change message”, then switch on": "ఆఫ్‌లో ఉంది · “సందేశం మార్చండి”లో మీ ఆఫర్ జోడించి, ఆపై ఆన్ చేయండి",
-  "Save and switch on": "సేవ్ చేసి ఆన్ చేయండి"
+  "Save and switch on": "సేవ్ చేసి ఆన్ చేయండి",
+  "Shop details": "షాప్ వివరాలు",
+  "Shop name": "షాప్ పేరు",
+  "Address": "చిరునామా",
+  "Shop phone": "షాప్ ఫోన్",
+  "Google review link": "గూగుల్ రివ్యూ లింక్",
+  "Save shop details": "షాప్ వివరాలు సేవ్ చేయండి",
+  "Shop details saved": "షాప్ వివరాలు సేవ్ అయ్యాయి",
+  "Enter the shop name.": "షాప్ పేరు రాయండి."
  },
  "hi": {
   "% read": "% ने पढ़ा",
@@ -1806,6 +1814,14 @@
   "Search {x}": "{x} खोजें",
   "Switch these on when you are ready. First write the birthday or anniversary gift in “Change message”. Then every customer with that date saved gets a wish on the day.": "तैयार होने पर इन्हें चालू करें। पहले “संदेश बदलें” में जन्मदिन या सालगिरह का उपहार लिखें। फिर वह तारीख़ सेव किए हर ग्राहक को उसी दिन शुभकामना जाएगी।",
   "Switched off · add your offer in “Change message”, then switch on": "बंद है · “संदेश बदलें” में अपना ऑफ़र जोड़ें, फिर चालू करें",
-  "Save and switch on": "सेव करें और चालू करें"
+  "Save and switch on": "सेव करें और चालू करें",
+  "Shop details": "दुकान का विवरण",
+  "Shop name": "दुकान का नाम",
+  "Address": "पता",
+  "Shop phone": "दुकान का फ़ोन",
+  "Google review link": "गूगल रिव्यू लिंक",
+  "Save shop details": "दुकान का विवरण सेव करें",
+  "Shop details saved": "दुकान का विवरण सेव हो गया",
+  "Enter the shop name.": "दुकान का नाम लिखें।"
  }
 }

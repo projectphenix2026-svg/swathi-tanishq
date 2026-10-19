@@ -4,7 +4,8 @@ import { AlertCircle, ArrowLeft, Check, CheckCheck, Clock, Flame, IndianRupee, M
 import { useAuth } from '../lib/auth.js';
 import { SearchBox, matches } from '../components/SearchBox.jsx';
 import { api } from '../lib/api.js';
-import { Alert, CampaignStatus, Kpi, MessageStatus, Skeleton, Spinner, useToast } from '../components/ui.jsx';
+import { Alert, CampaignStatus, Kpi, MessageStatus, Pic, Skeleton, Spinner, useToast } from '../components/ui.jsx';
+import { iconFor } from '../lib/ready.js';
 import { Funnel, PROVIDER_NAMES } from './Campaigns.jsx';
 import { dateTime, inr, num, pct, phone, plural } from '../lib/format.js';
 
@@ -88,7 +89,7 @@ export default function CampaignReport() {
       <div className="page-head">
         <div>
           <div className="row wrap" style={{ gap: 10 }}>
-            <h1>{c.name}</h1>
+            <h1 className="row" style={{ gap: 10 }}><Pic name={iconFor(c.template_name || c.name)} size={34} />{c.name}</h1>
             <CampaignStatus status={c.status} />
             {live && <span className="badge neutral"><RefreshCw size={12} className="spin" />Updating</span>}
           </div>

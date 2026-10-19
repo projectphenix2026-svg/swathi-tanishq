@@ -3,7 +3,8 @@ import { Link, NavLink } from 'react-router-dom';
 import { Plus, Send } from 'lucide-react';
 import { SearchBox, matches } from '../components/SearchBox.jsx';
 import { api } from '../lib/api.js';
-import { CampaignStatus, Empty, Skeleton } from '../components/ui.jsx';
+import { CampaignStatus, Empty, Pic, Skeleton } from '../components/ui.jsx';
+import { iconFor } from '../lib/ready.js';
 import { dateTime, num, pct } from '../lib/format.js';
 
 export function Funnel({ total, sent, delivered, read, failed }) {
@@ -93,7 +94,7 @@ export default function Campaigns() {
             <Link key={c.id} to={`/campaigns/${c.id}`} className="list-item" style={{ textDecoration: 'none', color: 'inherit', flexWrap: 'wrap' }}>
               <div style={{ flex: '1 1 260px', minWidth: 0 }}>
                 <div className="row" style={{ gap: 8 }}>
-                  <b style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</b>
+                  <Pic name={iconFor(c.template_name || c.name)} size={26} /><b style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</b>
                   <CampaignStatus status={c.status} />
                   {c.name.startsWith('Test · ') && <span className="badge neutral">Test to my phone</span>}
                   {c.provider === 'mock' && <span className="badge warn">Test mode: not really sent</span>}

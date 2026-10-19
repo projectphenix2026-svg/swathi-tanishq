@@ -24,7 +24,7 @@
   "triggers": { "crons": ["* * * * *"] },
   "vars": {
     "NODE_ENV": "production",
-    "BUSINESS_NAME": "Swathi Tanishq",
+    "BUSINESS_NAME": "Tanishq Warangal",
     // mock = test mode (nothing is sent) | meta | twilio
     "MESSAGING_PROVIDER": "mock",
     "COST_PER_MESSAGE_INR": "0.8631",

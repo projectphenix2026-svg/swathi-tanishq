@@ -9,6 +9,7 @@ import { Highlighted, PhonePreview } from '../components/PhonePreview.jsx';
 import { dateOnly, num, plural } from '../lib/format.js';
 import { READY_WISHES } from '../lib/ready.js';
 import { useT } from '../lib/i18n.jsx';
+import { shopVars } from '../lib/shop.js';
 import { TemplateChooser } from '../components/TemplatePicker.jsx';
 import { CustomersStep } from '../components/CustomerPicker.jsx';
 import { WishPeople } from '../components/WishPeople.jsx';
@@ -25,14 +26,14 @@ const KINDS = {
 const AFTER = [{ d: 1, label: 'The next day' }, { d: 2, label: '2 days after' }, { d: 3, label: '3 days after' }];
 const WHEN = [{ d: 7, label: 'A week before' }, { d: 3, label: '3 days before' }, { d: 1, label: 'The day before' }, { d: 0, label: 'On the day' }];
 const HOURS = [8, 9, 10, 11, 12, 16, 17, 18, 19];
-const THANK_YOU_NAME = '⭐ Thank you + Google review';
+const THANK_YOU_NAME = 'Thank you + Google review';
 const thankYouMessage = (link) => ({
   name: THANK_YOU_NAME,
   category: 'marketing',
   status: 'approved',
   body: 'Thank you for shopping at {{store}}, {{name}}! We hope you love your new jewellery. Could you spare a minute to rate us on Google? It helps other families find us.',
   buttons: [{ type: 'url', text: 'Rate us on Google', url: link }],
-  sms_body: `Thank you for shopping at {{store}}, {{name}}! Please rate us on Google: ${link} -SWATHI`,
+  sms_body: `Thank you for shopping at {{store}}, {{name}}! Please rate us on Google: ${link}`,
 });
 // Quick ideas for a new festival or event. Festivals that move each year carry this year's date
 // (check it before switching on); fixed-date days repeat every year.
@@ -171,6 +172,7 @@ export default function Occasions() {
           templates={templates}
           setTemplates={setTemplates}
           businessName={settings?.businessName}
+          shop={settings?.shop}
           smsOn={settings?.sms?.live}
           today={data?.today?.date}
           onClose={() => setEditing(null)}
@@ -327,7 +329,7 @@ function audienceToPick(a = {}) {
   return { filters: { cities: a.cities || [], tags: a.tags || [], search: a.search || '' }, pick: { only: false, ids: a.excludeIds || [] } };
 }
 
-function OccasionEditor({ initial, templates, setTemplates, businessName, smsOn, today, onClose, onSaved }) {
+function OccasionEditor({ initial, templates, setTemplates, businessName, shop, smsOn, today, onClose, onSaved }) {
   const toast = useToast();
   const { t } = useT();
   const isNew = !initial.id;
@@ -342,7 +344,7 @@ function OccasionEditor({ initial, templates, setTemplates, businessName, smsOn,
     days_before: initial.days_before || (kind === 'festival' ? [3, 0] : kind === 'thank_you' ? [1] : [0]),
     send_hour: initial.send_hour ?? 10,
     template_id: initial.template_id || '',
-    variables: { store: businessName || '', ...(initial.variables || {}) },
+    variables: { ...(initial.variables || {}) },
     sms_fallback: Boolean(initial.sms_fallback),
     enabled: initial.enabled ?? true,
   });
@@ -352,11 +354,11 @@ function OccasionEditor({ initial, templates, setTemplates, businessName, smsOn,
   const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState(false);
   const [busyKey, setBusyKey] = useState(null);
-  const [reviewLink, setReviewLink] = useState('');
+  const [reviewLink, setReviewLink] = useState(shop?.googleReviewLink || '');
   const set = (patch) => setO((x) => ({ ...x, ...patch }));
   const template = templates.find((x) => x.id === Number(o.template_id));
   const needed = useMemo(() => (template ? CAMPAIGN_VARS.filter((v) => v.key !== 'store' && extractVariables(template.body).includes(v.key)) : []), [template]);
-  const values = { ...valuesFor(EXAMPLE_CUSTOMER, o.variables), days_left: String(Math.max(...o.days_before)) };
+  const values = { ...valuesFor(EXAMPLE_CUSTOMER, { ...o.variables, ...shopVars({ shop }) }), days_left: String(Math.max(...o.days_before)) };
   const stepName = steps[step];
   const audience = useMemo(() => (pick.only ? { mode: 'selected', contactIds: pick.ids } : { mode: 'filter', ...filters, excludeIds: pick.ids }), [pick, filters]);
 
@@ -387,7 +389,7 @@ function OccasionEditor({ initial, templates, setTemplates, businessName, smsOn,
         ({ template: saved } = await api('/api/templates', { method: 'POST', body: { name: i.wish.name, body: i.wish.body, sms_body: i.wish.sms, buttons: [], category: 'marketing', status: 'approved' } }));
         setTemplates((list) => [saved, ...list]);
       }
-      set({ template_id: saved.id, variables: { ...o.variables, offer: o.variables.offer || i.wish.offer || '' } });
+      set({ template_id: saved.id, variables: { ...o.variables, offer: o.variables.offer || '' } });
     } catch (e) {
       toast(e.message, 'bad');
     } finally {
