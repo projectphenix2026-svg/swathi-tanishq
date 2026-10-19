@@ -18,7 +18,7 @@ const RETIRED = ['%Order ready', '%Repair ready'];
 router.get('/', async (req, res) => {
   const { rows } = await query(
     `SELECT t.*, (SELECT count(*) FROM campaigns c WHERE c.template_id = t.id) AS used_in
-       FROM templates t WHERE client_id = $1 AND t.name NOT LIKE $2 AND t.name NOT LIKE $3 ORDER BY updated_at DESC`,
+       FROM templates t WHERE client_id = $1 AND t.archived_at IS NULL AND t.name NOT LIKE $2 AND t.name NOT LIKE $3 ORDER BY updated_at DESC`,
     [req.clientId, ...RETIRED],
   );
   res.json({ templates: rows.map(withVars) });
@@ -64,14 +64,27 @@ router.put('/:id', canEdit, async (req, res) => {
   res.json({ template: withVars(t), approvalReset: textChanged && Boolean(existing.provider_status) });
 });
 
+// Delete a template. One a switched-on wish still uses cannot go (change the wish first). One that
+// past messages used is hidden from every list but kept, so old reports still show it; an unused
+// one is removed for good.
 router.delete('/:id', canEdit, async (req, res) => {
+  const t = await find(req.clientId, req.params.id);
+  if (!t || t.archived_at) return res.status(404).json({ error: 'Template not found.' });
+  const { rows: wishes } = await query('SELECT name FROM occasions WHERE template_id = $1 AND enabled = 1', [t.id]);
+  if (wishes.length) {
+    return res.status(409).json({ error: `${wishes.map((w) => w.name).join(', ')} still uses this template. Change or switch off that wish first, then delete it.` });
+  }
   const { rows: [used] } = await query(
-    `SELECT (SELECT count(*) FROM campaigns WHERE template_id = $1) + (SELECT count(*) FROM occasions WHERE template_id = $1) AS n`,
-    [req.params.id],
+    `SELECT (SELECT count(*) FROM campaigns WHERE template_id = $1) + (SELECT count(*) FROM occasions WHERE template_id = $1)
+            + (SELECT count(*) FROM messages WHERE template_id = $1) AS n`,
+    [t.id],
   );
-  if (Number(used.n)) return res.status(409).json({ error: 'This template is used by a campaign or occasion, so it is kept.' });
-  await query('DELETE FROM templates WHERE id = $1 AND client_id = $2', [req.params.id, req.clientId]);
-  res.json({ ok: true });
+  if (Number(used.n)) {
+    await query(`UPDATE templates SET archived_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = $1`, [t.id]);
+    return res.json({ ok: true, kept: true });
+  }
+  await query('DELETE FROM templates WHERE id = $1 AND client_id = $2', [t.id, req.clientId]);
+  res.json({ ok: true, kept: false });
 });
 
 // Phase 2: send the template to Meta for approval, then check back for the result.

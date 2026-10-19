@@ -337,7 +337,7 @@ export async function ensureDefaultWishes(clientId) {
     const { rows: [existing] } = await query('SELECT id FROM occasions WHERE client_id = $1 AND kind = $2 LIMIT 1', [clientId, kind]);
     if (!existing) {
       const w = DEFAULT_WISHES[kind];
-      let { rows: [t] } = await query('SELECT id FROM templates WHERE client_id = $1 AND name = $2 LIMIT 1', [clientId, w.template]);
+      let { rows: [t] } = await query('SELECT id FROM templates WHERE client_id = $1 AND name = $2 AND archived_at IS NULL LIMIT 1', [clientId, w.template]);
       if (!t) {
         ({ rows: [t] } = await query(
           `INSERT INTO templates (client_id, name, category, body, sms_body, buttons, status) VALUES ($1, $2, 'marketing', $3, $4, '[]', 'approved') RETURNING id`,
