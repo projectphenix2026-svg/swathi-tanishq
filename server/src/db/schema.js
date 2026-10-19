@@ -51,6 +51,15 @@ CREATE TABLE IF NOT EXISTS contact_dates (
 );`;
 export const DATES_INDEX = 'CREATE INDEX IF NOT EXISTS contact_dates_day_idx ON contact_dates (client_id, substr(date, 6, 5))';
 
+// Failed sign-ins, shared by every server copy, so guessing passwords is slowed down everywhere.
+export const LOGIN_ATTEMPTS_TABLE = `
+CREATE TABLE IF NOT EXISTS login_attempts (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  ip         TEXT NOT NULL,
+  email      TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT ${NOW}
+);`;
+
 export const SCHEMA = `
 CREATE TABLE IF NOT EXISTS clients (
   id                 INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -223,6 +232,7 @@ ${CONNECTION_TABLE}
 ${MEDIA_TABLE}
 ${DATES_TABLE}
 ${DATES_INDEX};
+${LOGIN_ATTEMPTS_TABLE}
 `;
 
 // Columns added after the first deploy; db/index.js adds any that an older database lacks.
@@ -237,4 +247,8 @@ export const EXTRA_COLUMNS = {
   campaigns: [['channel', "TEXT NOT NULL DEFAULT 'whatsapp'"]],
   // A shop event (festival, sale, store anniversary) that comes back on the same date every year.
   occasions: [['repeat_yearly', 'INTEGER NOT NULL DEFAULT 0']],
+  // Each person's app language (en | te | hi): the whole app opens in it, on any device.
+  // session_version goes up when a password or role changes, which signs that person out everywhere;
+  // disabled_at marks a removed staff login (kept so past reports still show who did what).
+  users: [['language', "TEXT NOT NULL DEFAULT 'en'"], ['session_version', 'INTEGER NOT NULL DEFAULT 0'], ['disabled_at', 'TEXT']],
 };

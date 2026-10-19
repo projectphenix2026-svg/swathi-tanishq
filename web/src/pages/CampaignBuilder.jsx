@@ -236,21 +236,10 @@ export default function CampaignBuilder() {
 /* ---------- Step 1: Template ---------- */
 function TemplateStep({ t, templates, setTemplates, templateId, setTemplateId, neededVars, variables, setVariables, salesCodes, template, toast }) {
   const [busyKey, setBusyKey] = useState(null);
-  const [lang, setLang] = useState(() => {
-    try {
-      return localStorage.getItem('st_msg_lang') || 'en';
-    } catch {
-      return 'en';
-    }
-  });
-  const chooseLang = (code) => {
-    setLang(code);
-    try {
-      localStorage.setItem('st_msg_lang', code);
-    } catch {
-      // private window: not remembered
-    }
-  };
+  // Messages are offered in this person's app language; another language can be picked for one send.
+  const { lang: appLang } = useT();
+  const [lang, setLang] = useState(appLang);
+  useEffect(() => setLang(appLang), [appLang]);
   if (!templates) return <div className="card card-pad"><Spinner /></div>;
 
   // A ready-made template is saved the first time it is used, then reused. A saved copy still in
@@ -296,11 +285,12 @@ function TemplateStep({ t, templates, setTemplates, templateId, setTemplateId, n
       <div className="card card-pad stack" style={{ gap: 12 }}>
         <div className="row between wrap" style={{ gap: 8 }}>
           <h2>{t('Pick a template')}</h2>
-          <div className="lang-switch" role="group" aria-label="Template language">
-            {LANGS.map((l) => (
-              <button key={l.code} type="button" className={lang === l.code ? 'on' : ''} onClick={() => chooseLang(l.code)} aria-pressed={lang === l.code}>{l.label}</button>
-            ))}
-          </div>
+          <label className="row" style={{ gap: 6, fontSize: '0.85rem' }}>
+            <span className="subtle">{t('Message language')}</span>
+            <select id="msg-lang" className="select sm" value={lang} onChange={(e) => setLang(e.target.value)}>
+              {LANGS.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
+            </select>
+          </label>
         </div>
         <div className="tpl-grid">
           {READY_MESSAGES.map((m) => {

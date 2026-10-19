@@ -24,8 +24,10 @@ const SETTINGS = { to: '/settings', label: 'Settings', pic: 'gear' };
 const PHONE = ['/', '/customers', 'send', '/occasions', '/inbox'];
 
 export function Layout() {
-  const { user, logout, settings } = useAuth();
-  const { t, lang, setLang } = useT();
+  const { user, logout, settings, setLanguage } = useAuth();
+  const { t, lang } = useT();
+  // The language is saved with the login, so the whole app opens in it on any device.
+  const setLang = (code) => setLanguage(code).catch(() => {});
   const [counts, setCounts] = useState({ unread: 0, leads: 0, replies: 0 });
   const [sheet, setSheet] = useState(false);
   const [welcome, setWelcome] = useState(() => shouldWelcome(user));

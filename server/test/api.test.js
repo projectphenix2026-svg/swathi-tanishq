@@ -41,6 +41,14 @@ describe('API flow', () => {
     const res = await agent.post('/api/auth/login').send({ email: 'STAFF@example.com', password: 'test-password-1' });
     expect(res.status).toBe(200);
     expect(res.headers['set-cookie'][0]).toMatch(/HttpOnly/);
+    expect(res.body.user.language).toBe('en');
+  });
+
+  it('saves each person’s app language with their login', async () => {
+    expect((await agent.patch('/api/auth/me').send({ language: 'xx' })).status).toBe(400);
+    expect((await agent.patch('/api/auth/me').send({ language: 'te' })).body.user.language).toBe('te');
+    expect((await agent.get('/api/auth/me')).body.user.language).toBe('te');
+    await agent.patch('/api/auth/me').send({ language: 'en' });
   });
 
   it('imports a CSV: the browser builds the preview, the server checks and saves', async () => {

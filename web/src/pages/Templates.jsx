@@ -9,6 +9,7 @@ import { toFriendly } from '../lib/friendly.js';
 import { READY_MESSAGES } from '../lib/ready.js';
 import { LANGS, isReadyText, readyFor, readyIn } from '../lib/ready-lang.js';
 import { useAuth } from '../lib/auth.js';
+import { useT } from '../lib/i18n.jsx';
 
 const STATUS = { approved: ['ok', 'Ready'], draft: ['neutral', 'Not finished'], rejected: ['bad', 'Needs a change'] };
 const READY_NAMES = new Set(READY_MESSAGES.flatMap((m) => LANGS.map((l) => readyIn(m, l.code).name)));
@@ -16,11 +17,12 @@ const READY_NAMES = new Set(READY_MESSAGES.flatMap((m) => LANGS.map((l) => ready
 /** Templates: the wording you reuse. Ready-made ones and the shop's own, in one place. */
 export default function Templates() {
   const [list, setList] = useState(null);
-  const [lang, setLang] = useState('en');
   const [busy, setBusy] = useState(null);
   const navigate = useNavigate();
   const toast = useToast();
   const { settings } = useAuth();
+  // Ready-made templates are shown in this person's app language.
+  const { lang } = useT();
   useEffect(() => {
     api('/api/templates').then((r) => setList(r.templates)).catch(() => setList([]));
   }, []);
@@ -56,14 +58,7 @@ export default function Templates() {
       </div>
 
       <div className="card card-pad stack" style={{ gap: 12 }}>
-        <div className="row between wrap" style={{ gap: 8 }}>
-          <h2>Ready-made</h2>
-          <div className="lang-switch" role="group" aria-label="Template language">
-            {LANGS.map((l) => (
-              <button key={l.code} type="button" className={lang === l.code ? 'on' : ''} onClick={() => setLang(l.code)} aria-pressed={lang === l.code}>{l.label}</button>
-            ))}
-          </div>
-        </div>
+        <h2>Ready-made</h2>
         <div className="ready-grid">
           {READY_MESSAGES.map((m) => (
             <button key={m.key} type="button" className="ready-card" onClick={() => openReady(m)} disabled={!list || busy}>

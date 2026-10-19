@@ -693,3 +693,33 @@ a.chart-card:hover { border-color: var(--brand); }
 .gl-steps .tick { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-2); color: var(--text-2); font-weight: 700; font-size: 0.8rem; flex-shrink: 0; }
 .gl-steps li.done .tick { background: var(--ok); color: #fff; }
 .gl-steps li.done b { color: var(--text-2); }
+.select.sm { height: 34px; width: auto; padding-right: 30px; font-size: 0.85rem; }
+
+/* ---------- Settings (redesign stage 7) ---------- */
+.settings-page { max-width: 1100px; }
+.settings-layout { display: grid; gap: 20px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 900px) { .settings-layout { grid-template-columns: 230px minmax(0, 1fr); align-items: start; } .settings-nav { position: sticky; top: 16px; } }
+.settings-nav { display: flex; gap: 6px; flex-wrap: wrap; }
+@media (min-width: 900px) { .settings-nav { flex-direction: column; flex-wrap: nowrap; } }
+.settings-nav button { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 10px; border: 1px solid transparent; background: transparent; font: inherit; color: var(--text-2); cursor: pointer; text-align: left; }
+@media (max-width: 899px) { .settings-nav button { border-color: var(--border); background: var(--surface); padding: 7px 12px; font-size: 0.88rem; } }
+.settings-nav button:hover { background: var(--surface-2); color: var(--text); }
+.settings-nav button.on { background: var(--brand-50); color: var(--brand); font-weight: 600; border-color: var(--brand-50); }
+.settings-body { min-width: 0; gap: 14px; }
+.settings-title { font-size: 1.15rem; }
+.settings-body .go-live, .settings-body > .card { margin: 0; }
+.settings-rows { display: flex; flex-direction: column; }
+.settings-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 12px 0; border-top: 1px solid var(--border); }
+.settings-row:first-child { border-top: none; padding-top: 0; }
+.settings-row > span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.num-input { width: 90px; text-align: right; }
+.staff-list { display: flex; flex-direction: column; }
+.staff-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--border); }
+.staff-row:first-child { border-top: none; }
+@media (max-width: 600px) {
+  /* Phones: the mode bar stays one line; the import choices wrap into two columns. */
+  .mode-bar { padding: 6px 16px; flex-wrap: nowrap; }
+  .mode-bar > span { display: none; }
+  .tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; }
+  .tab { white-space: normal; text-align: center; font-size: 0.85rem; padding: 6px 8px; }
+}
