@@ -7,6 +7,7 @@ import { Avatar, Pic } from './ui.jsx';
 import { SCREEN_LANGS, useT } from '../lib/i18n.jsx';
 import { ModeBar } from './ModeBar.jsx';
 import { Welcome, shouldWelcome } from './Welcome.jsx';
+import { atLeast, roleLabel } from '@shared/roles.js';
 
 // The six places in the app. Settings sits at the bottom of the menu; Sales codes appears
 // only when the owner switches sales codes on.
@@ -58,7 +59,10 @@ export function Layout() {
   useEffect(() => setSheet(false), [location.pathname]);
 
   const signOut = () => logout().then(() => navigate('/login'));
-  const links = [...LINKS, ...(settings?.salesCodes ? [SALES_CODES] : [])];
+  // Staff do not send messages: for them Send is the list of what was sent, with no Send button.
+  const canSend = atLeast(user.role, 'manager');
+  const shown = canSend ? LINKS : LINKS.map((l) => (l.to === '/campaigns' ? { ...l, label: 'Sent messages', subs: undefined } : l));
+  const links = [...shown, ...(settings?.salesCodes ? [SALES_CODES] : [])];
   const extra = [LINKS[5], ...(settings?.salesCodes ? [SALES_CODES] : []), SETTINGS];
   const sending = location.pathname === '/campaigns/new';
 
@@ -72,7 +76,7 @@ export function Layout() {
             <div className="brand-sub">{t('WhatsApp messages')}</div>
           </div>
         </div>
-        <NavLink to="/campaigns/new" className="btn primary nav-send"><Plus size={18} />{t('Send a message')}</NavLink>
+        {canSend && <NavLink to="/campaigns/new" className="btn primary nav-send"><Plus size={18} />{t('Send a message')}</NavLink>}
         <nav className="nav" aria-label="Main">
           {links.map((l) => <SideLink key={l.to} link={l} counts={counts} pathname={location.pathname} hash={location.hash} t={t} exclude={l.to === '/campaigns' && sending} />)}
         </nav>
@@ -99,6 +103,14 @@ export function Layout() {
 
       <nav className="bottom-nav" aria-label="Main">
         {PHONE.map((to) => {
+          if (to === 'send' && !canSend) {
+            return (
+              <NavLink key="sent" to="/campaigns" className={({ isActive }) => (isActive ? 'active' : '')}>
+                <Pic name="megaphone" size={24} plain />
+                {t('Sent')}
+              </NavLink>
+            );
+          }
           if (to === 'send') {
             return (
               <NavLink key="send" to="/campaigns/new" className="send-tab">
@@ -185,7 +197,7 @@ function UserMenu({ user, lang, setLang, t, onSignOut }) {
     document.addEventListener('mousedown', close);
     return () => document.removeEventListener('mousedown', close);
   }, [open]);
-  const role = user.role === 'admin' ? t('Owner') : t('Staff');
+  const role = t(roleLabel(user.role));
   return (
     <div className="user-menu" ref={ref}>
       {open && (

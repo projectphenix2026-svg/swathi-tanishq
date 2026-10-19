@@ -5,6 +5,7 @@ import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.js';
 import { Alert, CampaignStatus, Pic, Skeleton } from '../components/ui.jsx';
 import { iconFor } from '../lib/ready.js';
+import { atLeast } from '@shared/roles.js';
 import { dateOnly, dateTime, greeting, inr, num, pct, plural } from '../lib/format.js';
 import { useT } from '../lib/i18n.jsx';
 
@@ -26,7 +27,7 @@ export default function Dashboard() {
         <div>
           <h1>{t(`${greeting()}, {name}`, { name: first })}</h1>
         </div>
-        <Link to="/campaigns/new" className="btn primary"><Plus size={18} />{t('Send a message')}</Link>
+        {atLeast(settings?.role, 'manager') && <Link to="/campaigns/new" className="btn primary"><Plus size={18} />{t('Send a message')}</Link>}
       </div>
 
       <div className="stack">
@@ -36,7 +37,7 @@ export default function Dashboard() {
           <Alert tone="bad">Could not load Home. Refresh the page to try again.</Alert>
         ) : (
           <>
-            <GettingStarted d={d} live={settings && settings.provider.name !== 'mock'} />
+            {atLeast(settings?.role, 'owner') && <GettingStarted d={d} live={settings && settings.provider.name !== 'mock'} />}
             <Today d={d} t={t} lang={lang} />
 
             <div className="kpi-row">
@@ -266,7 +267,7 @@ export function ProviderBanner({ settings, compact }) {
     return (
       <Alert tone="warn" icon={null}>
         <b>{t('Test mode.')}</b> {compact ? 'Messages are pretend: nothing reaches real phones.' : t('Nothing is sent to real phones. Messages pretend to be delivered and then read within about a minute, so you can try everything safely.')}{' '}
-        {settings.role === 'admin' ? <Link to="/settings">Go live in Settings</Link> : null}
+        {atLeast(settings.role, 'owner') ? <Link to="/settings">Go live in Settings</Link> : null}
       </Alert>
     );
   }

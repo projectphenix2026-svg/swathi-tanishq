@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Download, Search, Trash2, UserPlus, Users } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.js';
+import { atLeast } from '@shared/roles.js';
 import { downloadSample } from '../lib/sample.js';
 import { Avatar, Empty, Modal, OptInBadge, Skeleton, Spinner, useToast } from '../components/ui.jsx';
 import { CustomerFields, customerBody, customerForm, dayText } from '../components/CustomerFields.jsx';
@@ -189,7 +190,7 @@ function EditCustomer({ c, onClose, onSaved }) {
   const [busy, setBusy] = useState(false);
   const [askDelete, setAskDelete] = useState(false);
   const { user, settings } = useAuth();
-  const canDelete = user?.role !== 'viewer';
+  const canDelete = atLeast(user?.role, 'manager');
   const changedOpt = f.whatsapp_opt_in !== (c.whatsapp_opt_in && !c.opted_out_at);
 
   const save = async () => {

@@ -910,7 +910,13 @@
   "Google review link": "గూగుల్ రివ్యూ లింక్",
   "Save shop details": "షాప్ వివరాలు సేవ్ చేయండి",
   "Shop details saved": "షాప్ వివరాలు సేవ్ అయ్యాయి",
-  "Enter the shop name.": "షాప్ పేరు రాయండి."
+  "Enter the shop name.": "షాప్ పేరు రాయండి.",
+  "App owner": "యాప్ యజమాని",
+  "Store owner": "షాప్ యజమాని",
+  "Store manager": "షాప్ మేనేజర్",
+  "Logins and roles": "లాగిన్‌లు, పాత్రలు",
+  "Add a login": "లాగిన్ జోడించండి",
+  "Email they sign in with": "వారు సైన్ ఇన్ చేసే ఇమెయిల్"
  },
  "hi": {
   "% read": "% ने पढ़ा",
@@ -1822,6 +1828,12 @@
   "Google review link": "गूगल रिव्यू लिंक",
   "Save shop details": "दुकान का विवरण सेव करें",
   "Shop details saved": "दुकान का विवरण सेव हो गया",
-  "Enter the shop name.": "दुकान का नाम लिखें।"
+  "Enter the shop name.": "दुकान का नाम लिखें।",
+  "App owner": "ऐप मालिक",
+  "Store owner": "दुकान मालिक",
+  "Store manager": "दुकान प्रबंधक",
+  "Logins and roles": "लॉगिन और भूमिकाएँ",
+  "Add a login": "लॉगिन जोड़ें",
+  "Email they sign in with": "जिस ईमेल से वे साइन इन करते हैं"
  }
 }

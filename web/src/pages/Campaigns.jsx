@@ -5,6 +5,8 @@ import { SearchBox, matches } from '../components/SearchBox.jsx';
 import { api } from '../lib/api.js';
 import { CampaignStatus, Empty, Pic, Skeleton } from '../components/ui.jsx';
 import { iconFor } from '../lib/ready.js';
+import { useAuth } from '../lib/auth.js';
+import { atLeast } from '@shared/roles.js';
 import { dateTime, num, pct } from '../lib/format.js';
 
 export function Funnel({ total, sent, delivered, read, failed }) {
@@ -45,6 +47,8 @@ function keep(c, q, show, period) {
 export const PROVIDER_NAMES = { mock: 'test mode', twilio: 'Twilio WhatsApp', meta: 'Meta WhatsApp Cloud API' };
 
 export default function Campaigns() {
+  const { settings } = useAuth();
+  const canSend = atLeast(settings?.role, 'manager');
   const [list, setList] = useState(null);
   const [q, setQ] = useState('');
   const [show, setShow] = useState('all');
@@ -60,7 +64,7 @@ export default function Campaigns() {
           <h1>Sent messages</h1>
           <p>Everything you sent, and how many customers got it and read it.</p>
         </div>
-        <Link to="/campaigns/new" className="btn primary"><Plus size={18} />Send a message</Link>
+        {canSend && <Link to="/campaigns/new" className="btn primary"><Plus size={18} />Send a message</Link>}
       </div>
       <SentTabs />
 
@@ -68,7 +72,7 @@ export default function Campaigns() {
         <div className="card stack" style={{ padding: 20 }}>{[0, 1, 2].map((i) => <Skeleton key={i} h={48} />)}</div>
       ) : list.length === 0 ? (
         <div className="card">
-          <Empty icon={Send} title="Nothing sent yet" actions={<Link to="/campaigns/new" className="btn primary"><Plus size={18} />Send your first message</Link>}>
+          <Empty icon={Send} title="Nothing sent yet" actions={canSend ? <Link to="/campaigns/new" className="btn primary"><Plus size={18} />Send your first message</Link> : null}>
             Everything you send shows here, with how many read it and replied.
           </Empty>
         </div>

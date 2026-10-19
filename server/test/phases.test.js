@@ -21,7 +21,7 @@ let clientId;
 let provider;
 let admin;
 let manager;
-let viewer;
+let staff;
 const app = () => createApp();
 
 function fakeWhatsApp() {
@@ -69,9 +69,10 @@ beforeAll(async () => {
   config.validateWebhooks = false;
   await initDb({ memory: true });
   clientId = await ensureClient('Test Store');
-  admin = await createUser({ clientId, email: 'admin@example.com', password: 'test-password-1', name: 'Owner', role: 'admin' });
+  admin = await createUser({ clientId, email: 'admin@example.com', password: 'test-password-1', name: 'Owner', role: 'owner' });
   manager = await createUser({ clientId, email: 'manager@example.com', password: 'test-password-1', name: 'Manager', role: 'manager' });
-  viewer = await createUser({ clientId, email: 'viewer@example.com', password: 'test-password-1', name: 'Viewer', role: 'viewer' });
+  staff = await createUser({ clientId, email: 'staff@example.com', password: 'test-password-1', name: 'Staff', role: 'staff' });
+  await createUser({ clientId, email: 'appowner@example.com', password: 'test-password-1', name: 'App owner', role: 'app_owner' });
 });
 afterAll(() => closeDb());
 
@@ -325,18 +326,37 @@ describe('Phase 5: offer codes, leads, weekly limit, roles', () => {
     expect(p2.body.sendable).toBe(2);
   });
 
-  it('lets viewers read but not change things', async () => {
-    const v = await login('viewer@example.com');
-    expect((await v.get('/api/customers')).status).toBe(200);
-    expect((await v.post('/api/templates').send({ name: 'x', body: 'Hello there {{name}} and welcome.' })).status).toBe(403);
-    expect((await v.post('/api/customers').send({ city: 'Hyderabad', name: 'x', phone: '9876543210' })).status).toBe(403);
-    // View only cannot answer customers, update call backs, or record sales codes either.
-    expect((await v.post('/api/inbox/1/reply').send({ body: 'Hello' })).status).toBe(403);
-    expect((await v.patch('/api/leads/1').send({ status: 'called' })).status).toBe(403);
-    expect((await v.post('/api/offers/redeem').send({ code: 'X-1', amount: 100 })).status).toBe(403);
-    // ...but can read them.
-    expect((await v.get('/api/inbox')).status).toBe(200);
-    expect((await v.get('/api/leads')).status).toBe(200);
+  it('gives each of the four roles its own access', async () => {
+    const staffLogin = await login('staff@example.com');
+    const mgr = await login('manager@example.com');
+    const owner = await login('admin@example.com');
+    // Staff: the counter. Reads everything, adds customers, answers replies and call backs, records sales codes.
+    expect((await staffLogin.get('/api/customers')).status).toBe(200);
+    expect((await staffLogin.post('/api/customers').send({ city: 'Warangal', name: 'Counter Add', phone: '9876500001' })).status).toBe(201);
+    expect((await staffLogin.post('/api/inbox/1/reply').send({ body: 'Hello' })).status).not.toBe(403);
+    expect((await staffLogin.patch('/api/leads/1').send({ status: 'called' })).status).not.toBe(403);
+    expect((await staffLogin.post('/api/offers/redeem').send({ code: 'X-1', amount: 100 })).status).not.toBe(403);
+    // ...but does not send messages, write templates, run wishes, import or delete customers, or change settings.
+    expect((await staffLogin.post('/api/campaigns').send({ name: 'x' })).status).toBe(403);
+    expect((await staffLogin.post('/api/templates').send({ name: 'x', body: 'Hello there {{name}} and welcome.' })).status).toBe(403);
+    expect((await staffLogin.post('/api/occasions').send({ name: 'x', kind: 'festival' })).status).toBe(403);
+    expect((await staffLogin.post('/api/customers/import/commit').send({ rows: [] })).status).toBe(403);
+    expect((await staffLogin.delete('/api/customers/1')).status).toBe(403);
+    expect((await staffLogin.put('/api/dashboard/shop').send({ name: 'X' })).status).toBe(403);
+    expect((await staffLogin.get('/api/auth/users')).status).toBe(403);
+
+    // Store manager: runs the day. Sends messages, writes templates, imports and deletes customers.
+    expect((await mgr.post('/api/templates').send({ name: 'Mgr template', body: 'Hello there {{name}} and welcome.' })).status).toBe(201);
+    expect((await mgr.post('/api/customers/import/commit').send({ rows: [], optIn: {} })).status).not.toBe(403);
+    // ...but not the shop's settings, WhatsApp connection, data download, or logins.
+    expect((await mgr.put('/api/dashboard/shop').send({ name: 'X' })).status).toBe(403);
+    expect((await mgr.get('/api/whatsapp')).status).toBe(403);
+    expect((await mgr.get('/api/export/customers')).status).toBe(403);
+    expect((await mgr.get('/api/auth/users')).status).toBe(403);
+
+    // Store owner: the shop's settings, WhatsApp, data and logins.
+    expect((await owner.get('/api/whatsapp')).status).toBe(200);
+    expect((await owner.get('/api/auth/users')).status).toBe(200);
   });
 
   it('lets only the owner edit the shop details, and messages use the current ones', async () => {
@@ -369,7 +389,7 @@ describe('Phase 5: offer codes, leads, weekly limit, roles', () => {
     expect(p.body.missing.address).toBeGreaterThan(0);
   });
 
-  it('holds big sends by managers for an admin to approve', async () => {
+  it('holds big sends by managers for the store owner to approve', async () => {
     await query('UPDATE clients SET approval_threshold = 2');
     await contact('A', '+919876543210');
     await contact('B', '+919876543211');
@@ -386,11 +406,30 @@ describe('Phase 5: offer codes, leads, weekly limit, roles', () => {
     expect(provider.sent).toHaveLength(2);
   });
 
-  it('lets admins add staff with a role', async () => {
-    const a = await login('admin@example.com');
-    const r = await a.post('/api/auth/users').send({ email: 'counter@example.com', name: 'Counter', password: 'counter-pass-1', role: 'viewer' });
-    expect(r.status).toBe(201);
-    expect((await a.get('/api/auth/users')).body.users.map((u) => u.role)).toContain('viewer');
+  it('lets each role manage only the logins below it', async () => {
+    const owner = await login('admin@example.com');
+    const appOwner = await login('appowner@example.com');
+    // The store owner makes managers and staff, never another owner or an app owner.
+    const mgr = await owner.post('/api/auth/users').send({ email: 'newmgr@example.com', name: 'New Manager', password: 'manager-pass-1', role: 'manager' });
+    expect(mgr.status).toBe(201);
+    expect((await owner.post('/api/auth/users').send({ email: 'x1@example.com', name: 'X', password: 'password-123', role: 'owner' })).status).toBe(400);
+    expect((await owner.post('/api/auth/users').send({ email: 'x2@example.com', name: 'X', password: 'password-123', role: 'app_owner' })).status).toBe(400);
+    const list = (await owner.get('/api/auth/users')).body;
+    expect(list.assignable).toEqual(['manager', 'staff']);
+    expect(list.users.find((u) => u.email === 'appowner@example.com').canManage).toBe(false);
+    expect(list.users.find((u) => u.email === 'newmgr@example.com').canManage).toBe(true);
+    // ...and cannot touch the app owner's login or its own.
+    const appId = list.users.find((u) => u.email === 'appowner@example.com').id;
+    expect((await owner.patch('/api/auth/users/' + appId).send({ password: 'new-password-9' })).status).toBe(403);
+    expect((await owner.delete('/api/auth/users/' + appId)).status).toBe(403);
+    // Changing a login's email and role works below your own role.
+    expect((await owner.patch('/api/auth/users/' + mgr.body.user.id).send({ email: 'renamed.mgr@example.com', role: 'staff' })).status).toBe(200);
+    expect((await owner.get('/api/auth/users')).body.users.find((u) => u.id === mgr.body.user.id)).toMatchObject({ email: 'renamed.mgr@example.com', role: 'staff' });
+    // The app owner can also make store owners.
+    const created = await appOwner.post('/api/auth/users').send({ email: 'second.owner@example.com', name: 'Second owner', password: 'owner-pass-12', role: 'owner' });
+    expect(created.status).toBe(201);
+    expect((await appOwner.get('/api/auth/users')).body.assignable).toEqual(['owner', 'manager', 'staff']);
+    // Managers cannot manage logins at all.
     const m = await login('manager@example.com');
     expect((await m.get('/api/auth/users')).status).toBe(403);
   });

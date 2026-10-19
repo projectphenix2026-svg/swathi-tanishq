@@ -6,6 +6,7 @@ import { SearchBox, matches } from '../components/SearchBox.jsx';
 import { api } from '../lib/api.js';
 import { Alert, CampaignStatus, Kpi, MessageStatus, Pic, Skeleton, Spinner, useToast } from '../components/ui.jsx';
 import { iconFor } from '../lib/ready.js';
+import { atLeast } from '@shared/roles.js';
 import { Funnel, PROVIDER_NAMES } from './Campaigns.jsx';
 import { dateTime, inr, num, pct, phone, plural } from '../lib/format.js';
 
@@ -99,7 +100,7 @@ export default function CampaignReport() {
           </p>
         </div>
         <div className="row wrap">
-          {c.status === 'pending_approval' && settings?.role === 'admin' && (
+          {c.status === 'pending_approval' && atLeast(settings?.role, 'owner') && (
             <button className="btn wa" onClick={approve} disabled={approving}>{approving ? <Spinner /> : <><ShieldCheck size={18} />Approve and send</>}</button>
           )}
           {['scheduled', 'sending', 'pending_approval'].includes(c.status) && (

@@ -816,3 +816,8 @@ a.chart-card:hover { border-color: var(--brand); }
 .page > .tabs { margin-bottom: 16px; }
 .spending-page { display: flex; flex-direction: column; gap: 16px; }
 .spending-page > .tabs, .spending-page > .page-head { margin-bottom: 0; }
+
+/* ---------- Roles ---------- */
+.role-list { display: grid; gap: 10px; }
+.role-item { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); font-size: 0.9rem; }
+.role-item b { font-size: 0.95rem; }

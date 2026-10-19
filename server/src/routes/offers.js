@@ -2,10 +2,10 @@
 import express from 'express';
 import { query, indiaStartOf } from '../db/index.js';
 import { normaliseCode } from '../lib/offers.js';
-import { requireRole } from './auth.js';
+import { requireLevel } from './auth.js';
 
 const router = express.Router();
-const canEdit = requireRole('admin', 'manager');
+const canEdit = requireLevel('staff');
 
 async function lookup(clientId, code) {
   const { rows: [m] } = await query(

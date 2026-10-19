@@ -2,6 +2,7 @@ import express from 'express';
 import { config } from '../config.js';
 import { query, ago } from '../db/index.js';
 import { hashPassword, verifyPassword, signToken, verifyToken } from '../lib/security.js';
+import { ROLES, atLeast, canManageRole, assignableRoles, roleLabel } from '../lib/roles.js';
 
 const COOKIE = 'st_session';
 const router = express.Router();
@@ -106,31 +107,47 @@ export async function requireAuth(req, res, next) {
   }
 }
 
-// Roles: admin (everything, approves big sends, manages staff), manager (customers,
-// templates, campaigns), viewer (reads reports and the inbox, answers replies).
-export const ROLES = ['admin', 'manager', 'viewer'];
+// Four roles (see lib/roles.js): app owner, store owner, store manager, staff. Each role can do
+// everything the roles below it can; guards say the lowest role that may do something.
+export { ROLES };
 
-export function requireRole(...roles) {
+export function requireLevel(min) {
   return (req, res, next) => {
-    if (roles.includes(req.user?.role)) return next();
-    res.status(403).json({ error: 'Your login cannot do this. Ask the owner (an admin) to change your role.' });
+    if (atLeast(req.user?.role, min)) return next();
+    res.status(403).json({ error: `This needs a ${roleLabel(min)} login or higher. Ask the store owner to change your role.` });
   };
 }
 
-// Staff management (admins only).
-router.get('/users', requireAuth, requireRole('admin'), async (req, res) => {
+const EMAIL = /^\S+@\S+\.\S+$/;
+const roleError = (actor) => `Choose a role: ${assignableRoles(actor).map(roleLabel).join(', ')}.`;
+
+// How many logins can still run the shop (store owner or app owner), not counting `exceptId`.
+async function ownersLeft(clientId, exceptId) {
+  const { rows: [{ n }] } = await query(
+    `SELECT count(*) AS n FROM users WHERE client_id = $1 AND role IN ('owner', 'app_owner') AND disabled_at IS NULL AND id <> $2`,
+    [clientId, exceptId],
+  );
+  return n;
+}
+
+// Logins (store owner and above). You can only manage logins below your own role; nobody creates
+// an app owner login from inside the app.
+router.get('/users', requireAuth, requireLevel('owner'), async (req, res) => {
   const { rows } = await query(
     'SELECT id, email, name, role, created_at FROM users WHERE client_id = $1 AND disabled_at IS NULL ORDER BY created_at',
     [req.clientId],
   );
-  res.json({ users: rows });
+  res.json({
+    users: rows.map((u) => ({ ...u, canManage: u.id !== req.user.id && canManageRole(req.user.role, u.role) })),
+    assignable: assignableRoles(req.user.role),
+  });
 });
 
-router.post('/users', requireAuth, requireRole('admin'), async (req, res) => {
-  const { email, name, password, role = 'manager' } = req.body || {};
-  if (!ROLES.includes(role)) return res.status(400).json({ error: 'Choose a role: Owner, Staff or View only.' });
-  if (!/^\S+@\S+\.\S+$/.test(String(email || ''))) return res.status(400).json({ error: 'Enter a valid email address.' });
-  const { rows: [taken] } = await query('SELECT client_id FROM users WHERE email = $1', [email]);
+router.post('/users', requireAuth, requireLevel('owner'), async (req, res) => {
+  const { email, name, password, role = 'staff' } = req.body || {};
+  if (!assignableRoles(req.user.role).includes(role)) return res.status(400).json({ error: roleError(req.user.role) });
+  if (!EMAIL.test(String(email || ''))) return res.status(400).json({ error: 'Enter a valid email address.' });
+  const { rows: [taken] } = await query('SELECT client_id FROM users WHERE email = lower($1)', [String(email).trim()]);
   if (taken) return res.status(409).json({ error: 'That email already has a login.' });
   try {
     const user = await createUser({ clientId: req.clientId, email, name, password, role });
@@ -140,18 +157,25 @@ router.post('/users', requireAuth, requireRole('admin'), async (req, res) => {
   }
 });
 
-router.patch('/users/:id', requireAuth, requireRole('admin'), async (req, res) => {
-  const { role, password } = req.body || {};
-  const { rows: [u] } = await query('SELECT * FROM users WHERE id = $1 AND client_id = $2', [req.params.id, req.clientId]);
-  if (!u) return res.status(404).json({ error: 'Staff member not found.' });
-  if (role) {
-    if (!ROLES.includes(role)) return res.status(400).json({ error: 'Choose a role: Owner, Staff or View only.' });
-    if (u.role === 'admin' && role !== 'admin') {
-      const { rows: [{ n }] } = await query(`SELECT count(*) AS n FROM users WHERE client_id = $1 AND role = 'admin'`, [req.clientId]);
-      if (n <= 1) return res.status(409).json({ error: 'Keep at least one owner.' });
-    }
-    await query('UPDATE users SET role = $2, session_version = session_version + 1 WHERE id = $1 AND role <> $2', [u.id, role]);
+router.patch('/users/:id', requireAuth, requireLevel('owner'), async (req, res) => {
+  const { role, password, email, name } = req.body || {};
+  const { rows: [u] } = await query('SELECT * FROM users WHERE id = $1 AND client_id = $2 AND disabled_at IS NULL', [req.params.id, req.clientId]);
+  if (!u) return res.status(404).json({ error: 'Login not found.' });
+  if (u.id === req.user.id || !canManageRole(req.user.role, u.role)) {
+    return res.status(403).json({ error: 'You cannot change this login. Use My account for your own, or ask a higher role.' });
   }
+  if (role && role !== u.role) {
+    if (!assignableRoles(req.user.role).includes(role)) return res.status(400).json({ error: roleError(req.user.role) });
+    if (['owner', 'app_owner'].includes(u.role) && !(await ownersLeft(req.clientId, u.id))) return res.status(409).json({ error: 'Keep at least one store owner.' });
+    await query('UPDATE users SET role = $2, session_version = session_version + 1 WHERE id = $1', [u.id, role]);
+  }
+  if (email !== undefined && String(email).trim().toLowerCase() !== u.email) {
+    if (!EMAIL.test(String(email || ''))) return res.status(400).json({ error: 'Enter a valid email address.' });
+    const { rows: [taken] } = await query('SELECT id FROM users WHERE email = lower($1) AND id <> $2', [String(email).trim(), u.id]);
+    if (taken) return res.status(409).json({ error: 'That email already has a login.' });
+    await query('UPDATE users SET email = lower($2), session_version = session_version + 1 WHERE id = $1', [u.id, String(email).trim()]);
+  }
+  if (name !== undefined && String(name).trim()) await query('UPDATE users SET name = $2 WHERE id = $1', [u.id, String(name).trim().slice(0, 80)]);
   if (password) {
     if (String(password).length < 8) return res.status(400).json({ error: 'Use a password of at least 8 characters.' });
     await query('UPDATE users SET password_hash = $2, session_version = session_version + 1 WHERE id = $1', [u.id, await hashPassword(String(password))]);
@@ -159,12 +183,13 @@ router.patch('/users/:id', requireAuth, requireRole('admin'), async (req, res) =
   res.json({ ok: true });
 });
 
-// Remove a staff login (for example someone who left): they are signed out at once and cannot
+// Remove a login (for example someone who left): they are signed out at once and cannot
 // sign in again. The row stays so past reports still show who sent what.
-router.delete('/users/:id', requireAuth, requireRole('admin'), async (req, res) => {
+router.delete('/users/:id', requireAuth, requireLevel('owner'), async (req, res) => {
   const { rows: [u] } = await query('SELECT * FROM users WHERE id = $1 AND client_id = $2 AND disabled_at IS NULL', [req.params.id, req.clientId]);
-  if (!u) return res.status(404).json({ error: 'Staff member not found.' });
+  if (!u) return res.status(404).json({ error: 'Login not found.' });
   if (u.id === req.user.id) return res.status(400).json({ error: 'You cannot remove your own login.' });
+  if (!canManageRole(req.user.role, u.role)) return res.status(403).json({ error: 'You cannot remove this login. Ask a higher role.' });
   await query(
     `UPDATE users SET disabled_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), session_version = session_version + 1,
             email = 'removed-' || id || '-' || email WHERE id = $1`,
@@ -173,13 +198,13 @@ router.delete('/users/:id', requireAuth, requireRole('admin'), async (req, res) 
   res.json({ ok: true });
 });
 
-export async function createUser({ clientId, email, name, password, role = 'admin' }) {
+export async function createUser({ clientId, email, name, password, role = 'owner' }) {
   if (!email || !password) throw new Error('Email and password are required.');
   if (password.length < 8) throw new Error('Use a password of at least 8 characters.');
   const hash = await hashPassword(password);
   const { rows: [user] } = await query(
     `INSERT INTO users (client_id, email, name, password_hash, role) VALUES ($1, lower($2), $3, $4, $5)
-     ON CONFLICT (email) DO UPDATE SET password_hash = excluded.password_hash, name = excluded.name
+     ON CONFLICT (email) DO UPDATE SET password_hash = excluded.password_hash, name = excluded.name, role = excluded.role
      RETURNING *`,
     [clientId, email.trim(), name || email, hash, role],
   );

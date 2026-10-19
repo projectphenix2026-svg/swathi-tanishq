@@ -4,11 +4,11 @@ import { query } from '../db/index.js';
 import { kick } from '../lib/dispatch.js';
 import { recordInbound } from '../lib/messages.js';
 import { getProvider } from '../providers/index.js';
-import { requireRole } from './auth.js';
+import { requireLevel } from './auth.js';
 
 const router = express.Router();
 // Owner and Staff can answer customers; View only can read.
-const canEdit = requireRole('admin', 'manager');
+const canEdit = requireLevel('staff');
 
 // One row per customer who has written to us, newest first.
 router.get('/', async (req, res) => {

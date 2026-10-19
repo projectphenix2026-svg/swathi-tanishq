@@ -5,11 +5,11 @@ import { config } from '../config.js';
 import { query, NOW } from '../db/index.js';
 import { seal } from '../lib/secretbox.js';
 import { checkMeta, loadConnection, refreshProvider } from '../lib/whatsapp-connection.js';
-import { requireRole } from './auth.js';
+import { requireLevel } from './auth.js';
 import { removeSamples } from '../lib/samples.js';
 
 const router = express.Router();
-router.use(requireRole('admin'));
+router.use(requireLevel('owner'));
 
 const digits = (v) => String(v || '').replace(/\D/g, '');
 

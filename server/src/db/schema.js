@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS users (
   email         TEXT NOT NULL UNIQUE COLLATE NOCASE,
   name          TEXT NOT NULL,
   password_hash TEXT NOT NULL,
-  role          TEXT NOT NULL DEFAULT 'admin',          -- admin | manager | viewer
+  role          TEXT NOT NULL DEFAULT 'staff',          -- app_owner | owner | manager | staff
   created_at    TEXT NOT NULL DEFAULT ${NOW}
 );
 

@@ -12,6 +12,7 @@ import { READY_MESSAGES } from '../lib/ready.js';
 import { LANGS, isReadyText, readyFor, readyIn } from '../lib/ready-lang.js';
 import { toFriendly } from '../lib/friendly.js';
 import { useT } from '../lib/i18n.jsx';
+import { atLeast } from '@shared/roles.js';
 import { SHOP_KEYS, shopVars } from '../lib/shop.js';
 import { CustomersStep, LeftOut } from '../components/CustomerPicker.jsx';
 import { TemplateChooser } from '../components/TemplatePicker.jsx';
@@ -388,7 +389,7 @@ function ReviewStep({ t, name, setName, template, when, setWhen, channel, setCha
             WhatsApp lets this number reach <b>{num(preview.pace.limit)} new customers a day</b> ({num(preview.pace.remaining)} left today), so this goes out over a few days and should finish by <b>{dateTime(preview.pace.finishBy)}</b>.
           </Alert>
         )}
-        {preview && settings?.role !== 'admin' && sendCount >= preview.approvalThreshold && (
+        {preview && !atLeast(settings?.role, 'owner') && sendCount >= preview.approvalThreshold && (
           <Alert tone="info" icon={ShieldCheck}>This goes to {num(sendCount)} customers, so the owner approves it first. It waits under Sent messages as “Waiting for owner’s OK”.</Alert>
         )}
         {sendCount >= 500 && (
