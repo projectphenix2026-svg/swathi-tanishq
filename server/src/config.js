@@ -25,7 +25,8 @@ export const config = {
   adminEmail: env.ADMIN_EMAIL || '',
   adminPassword: env.ADMIN_PASSWORD || '',
   adminName: env.ADMIN_NAME || 'Admin',
-  businessName: env.BUSINESS_NAME || 'Swathi Tanishq',
+  // Only the name a brand-new shop starts with; after that the owner edits it in Settings.
+  businessName: env.BUSINESS_NAME || 'My Shop',
 
   // Locally: a SQLite file. On Cloudflare the D1 database binding is used instead.
   sqliteFile: env.SQLITE_FILE || './.data/swathi.db',

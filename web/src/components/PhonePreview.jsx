@@ -7,13 +7,16 @@ const PLACEHOLDER = /\{\{\s*([a-zA-Z_]+)\s*\}\}/g;
  * A WhatsApp-style phone showing exactly what the customer sees.
  * Filled-in personal values are highlighted in gold; missing ones in red.
  */
-export function PhonePreview({ body, values, buttons = [], imageUrl, businessName = 'Swathi Tanishq', caption }) {
+/** Up to two capital letters from the shop name, for the round picture. */
+const initialsOf = (name) => String(name || '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('') || '•';
+
+export function PhonePreview({ body, values, buttons = [], imageUrl, businessName = '', caption }) {
   return (
     <figure style={{ margin: 0 }}>
       <div className="phone" aria-label="Message preview">
         <div className="phone-screen">
           <div className="phone-bar">
-            <div className="avatar">ST</div>
+            <div className="avatar">{initialsOf(businessName)}</div>
             <div>
               <b>{businessName}</b>
               <small>Business account</small>

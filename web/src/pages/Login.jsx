@@ -1,10 +1,15 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { BarChart3, Eye, EyeOff, Gem, MessageCircle, Sparkles } from 'lucide-react';
+import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.js';
 import { Alert, Field, Spinner } from '../components/ui.jsx';
 
 export default function Login() {
+  const [shopName, setShopName] = useState('');
+  useEffect(() => {
+    api('/api/auth/shop-name').then((r) => setShopName(r.name || '')).catch(() => {});
+  }, []);
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -33,7 +38,7 @@ export default function Login() {
       <section className="login-art">
         <div className="row" style={{ gap: 12 }}>
           <div className="brand-mark" style={{ background: 'rgba(255,255,255,.12)' }}><Gem size={19} /></div>
-          <b style={{ fontSize: '1.05rem' }}>Swathi Tanishq</b>
+          <b style={{ fontSize: '1.05rem' }}>{shopName}</b>
         </div>
         <div>
           <h1>Messages your customers are glad to receive.</h1>

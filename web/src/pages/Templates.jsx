@@ -7,7 +7,7 @@ import { Pic, Skeleton, Spinner, useToast } from '../components/ui.jsx';
 import { Highlighted } from '../components/PhonePreview.jsx';
 import { dateOnly } from '../lib/format.js';
 import { toFriendly } from '../lib/friendly.js';
-import { READY_MESSAGES } from '../lib/ready.js';
+import { READY_MESSAGES, iconFor } from '../lib/ready.js';
 import { LANGS, isReadyText, readyFor, readyIn } from '../lib/ready-lang.js';
 import { useAuth } from '../lib/auth.js';
 import { useT } from '../lib/i18n.jsx';
@@ -101,7 +101,7 @@ export default function Templates() {
             return (
               <Link key={t.id} to={`/templates/${t.id}`} className="card card-pad stack" style={{ textDecoration: 'none', color: 'inherit', gap: 10 }}>
                 <div className="row between" style={{ gap: 8 }}>
-                  <h3 style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{t.name}</h3>
+                  <span className="row" style={{ gap: 8, minWidth: 0 }}><Pic name={iconFor(t.name)} size={28} /><h3 style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{t.name}</h3></span>
                   <span className={`badge ${tone}`}>{label}</span>
                 </div>
                 <div style={{ background: 'var(--wa-chat)', borderRadius: 12, padding: 10 }}>

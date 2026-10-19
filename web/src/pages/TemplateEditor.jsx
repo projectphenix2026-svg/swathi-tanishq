@@ -8,6 +8,7 @@ import { Alert, Field, Spinner, useToast } from '../components/ui.jsx';
 import { PhonePreview } from '../components/PhonePreview.jsx';
 import { READY_MESSAGES } from '../lib/ready.js';
 import { PhotoPicker } from '../components/PhotoPicker.jsx';
+import { shopVars } from '../lib/shop.js';
 import { detailLabel, fromFriendly, toFriendly } from '../lib/friendly.js';
 import { readyFor } from '../lib/ready-lang.js';
 import { useT } from '../lib/i18n.jsx';
@@ -232,7 +233,7 @@ export default function TemplateEditor() {
         </div>
 
         <aside className="stack sticky" style={{ gap: 10 }}>
-          <PhonePreview body={t.body} values={EXAMPLES} buttons={t.buttons} imageUrl={t.image_url} businessName={settings?.businessName} caption="Example customer: Priya" />
+          <PhonePreview body={t.body} values={{ ...EXAMPLES, ...Object.fromEntries(Object.entries(shopVars(settings)).filter(([, v]) => v)) }} buttons={t.buttons} imageUrl={t.image_url} businessName={settings?.businessName} caption="Example customer: Priya" />
           <div className="te-rules">
             {rules.map((r) => (
               <span key={r.text} className={`rule ${r.ok ? 'yes' : 'no'}`}><span className="dot">{r.ok ? <Check size={12} strokeWidth={3} /> : null}</span>{r.text}</span>
@@ -310,13 +311,13 @@ function smsParts(text) {
 }
 
 function SmsFields({ t, set }) {
-  const example = render(t.sms_body || '', EXAMPLES).text;
+  const example = render(t.sms_body || '', { ...EXAMPLES, ...Object.fromEntries(Object.entries(shopVars(settings)).filter(([, v]) => v)) }).text;
   const parts = smsParts(example);
   return (
     <>
       <p className="subtle" style={{ margin: 0 }}>Sent by SMS only to customers who are not on WhatsApp and agreed to SMS. The wording must match the template registered on the DLT portal.</p>
       <Field label="SMS text">
-        <textarea className="textarea" rows={3} value={t.sms_body || ''} onChange={(e) => set({ sms_body: e.target.value })} placeholder="Hi {{name}}, 20% off making charges at Swathi Tanishq till {{offer_ends}}. -SWATHI" />
+        <textarea className="textarea" rows={3} value={t.sms_body || ''} onChange={(e) => set({ sms_body: e.target.value })} placeholder="Hi {{name}}, 20% off making charges at {{store}} till {{offer_ends}}." />
       </Field>
       {t.sms_body && <span className="subtle num">{example.length} characters · {parts} SMS {parts === 1 ? 'part' : 'parts'} per customer</span>}
       <Field label="DLT template ID" hint="The long number the DLT portal gives this SMS template.">

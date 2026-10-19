@@ -339,6 +339,36 @@ describe('Phase 5: offer codes, leads, weekly limit, roles', () => {
     expect((await v.get('/api/leads')).status).toBe(200);
   });
 
+  it('lets only the owner edit the shop details, and messages use the current ones', async () => {
+    const admin = await login('admin@example.com');
+    const m = await login('manager@example.com');
+    const details = { name: 'Tanishq Warangal', address: 'Hanamkonda Main Road, Warangal', phone: '98765 43210', googleReviewLink: 'https://g.page/r/abc/review' };
+    expect((await m.put('/api/dashboard/shop').send(details)).status).toBe(403);
+    expect((await admin.put('/api/dashboard/shop').send({ ...details, name: '  ' })).body.fields.name).toMatch(/shop name/);
+    expect((await admin.put('/api/dashboard/shop').send({ ...details, phone: '123' })).body.fields.phone).toBeTruthy();
+    expect((await admin.put('/api/dashboard/shop').send({ ...details, googleReviewLink: 'g.page/x' })).body.fields.googleReviewLink).toMatch(/https/);
+    const saved = await admin.put('/api/dashboard/shop').send(details);
+    expect(saved.status).toBe(200);
+    const settings = (await m.get('/api/dashboard/settings')).body;
+    expect(settings.businessName).toBe('Tanishq Warangal');
+    expect(settings.shop).toMatchObject({ name: 'Tanishq Warangal', address: 'Hanamkonda Main Road, Warangal', googleReviewLink: 'https://g.page/r/abc/review' });
+    expect((await request(createApp()).get('/api/auth/shop-name')).body.name).toBe('Tanishq Warangal');
+
+    // A saved copy of an old shop name in the campaign is ignored: the current details are used.
+    await contact('Shop Test', '+919000044444');
+    const t = await template('Hi {{name}}, visit {{store}} at {{address}}. Call {{shop_phone}}.');
+    const sent = await admin.post('/api/campaigns').send({ name: 'Rename check', templateId: t.id, audience: { mode: 'all' }, variables: { store: 'Old Shop Name' }, expectedCount: 1 });
+    expect(sent.status).toBe(201);
+    await drain();
+    expect(provider.sent.at(-1).body).toBe('Hi Shop, visit Tanishq Warangal at Hanamkonda Main Road, Warangal. Call +91 98765 43210.');
+
+    // An address left blank holds the message back instead of sending a gap.
+    await admin.put('/api/dashboard/shop').send({ ...details, address: '' });
+    const p = await admin.post('/api/campaigns/preview').send({ audience: { mode: 'all' }, templateId: t.id });
+    expect(p.body.sendable).toBe(0);
+    expect(p.body.missing.address).toBeGreaterThan(0);
+  });
+
   it('holds big sends by managers for an admin to approve', async () => {
     await query('UPDATE clients SET approval_threshold = 2');
     await contact('A', '+919876543210');

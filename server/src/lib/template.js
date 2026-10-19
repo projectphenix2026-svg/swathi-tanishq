@@ -9,7 +9,10 @@ export const VARIABLES = [
   { key: 'interests', label: 'Interests', source: 'customer', example: 'bridal jewellery' },
   { key: 'offer', label: 'Offer', source: 'campaign', example: '20% off making charges' },
   { key: 'offer_ends', label: 'Offer ends', source: 'campaign', example: '31 Oct' },
-  { key: 'store', label: 'Store', source: 'campaign', example: 'Swathi Tanishq, Kukatpally' },
+  // The shop's own details come from Settings → Shop details, filled in when a message is sent.
+  { key: 'store', label: 'Shop name', source: 'shop', example: 'Your Shop' },
+  { key: 'address', label: 'Shop address', source: 'shop', example: 'Main Road, Your Town' },
+  { key: 'shop_phone', label: 'Shop phone', source: 'shop', example: '+91 98765 43210' },
   { key: 'days_left', label: 'Days to go', source: 'occasion', example: '7' },
   // Made for each customer when the message is created; staff enter it at billing.
   { key: 'offer_code', label: 'Sales code', source: 'generated', example: 'PRIYA-DIWALI-4821' },
@@ -44,6 +47,8 @@ export function valuesFor(contact, campaignVars = {}) {
     offer: campaignVars.offer || '',
     offer_ends: campaignVars.offer_ends || '',
     store: campaignVars.store || '',
+    address: campaignVars.address || '',
+    shop_phone: campaignVars.shop_phone || '',
     offer_code: campaignVars.offer_code || '',
     days_left: campaignVars.days_left ?? '',
   };

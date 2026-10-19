@@ -294,16 +294,16 @@ export async function missingForSwitchOn(templateId, variables) {
 export const DEFAULT_WISHES = {
   birthday: {
     name: 'Birthday wishes',
-    template: '🎂 Birthday wish',
-    body: 'Happy birthday, {{name}}! 🎂\n\nEveryone at {{store}} wishes you a wonderful year ahead.\n\n*A birthday gift for you:* {{offer}}\n*Valid till:* {{offer_ends}}\n\nWe would love to see you at the store.',
-    sms: 'Happy birthday {{name}}! Birthday gift at {{store}}: {{offer}} till {{offer_ends}}. -SWATHI',
+    template: 'Birthday wish',
+    body: 'Happy birthday, {{name}}!\n\nEveryone at {{store}} wishes you a wonderful year ahead.\n\n*A birthday gift for you:* {{offer}}\n*Valid till:* {{offer_ends}}\n\nWe would love to see you at the store.',
+    sms: 'Happy birthday {{name}}! Birthday gift at {{store}}: {{offer}} till {{offer_ends}}.',
     variables: {},
   },
   anniversary: {
     name: 'Anniversary wishes',
-    template: '💐 Anniversary wish',
-    body: 'Happy anniversary, {{name}}! 💐\n\nWishing you both many more happy years together, from all of us at {{store}}.\n\n*Your anniversary gift:* {{offer}}\n*Valid till:* {{offer_ends}}\n\nWe look forward to seeing you both.',
-    sms: 'Happy anniversary {{name}}! Gift at {{store}}: {{offer}} till {{offer_ends}}. -SWATHI',
+    template: 'Anniversary wish',
+    body: 'Happy anniversary, {{name}}!\n\nWishing you both many more happy years together, from all of us at {{store}}.\n\n*Your anniversary gift:* {{offer}}\n*Valid till:* {{offer_ends}}\n\nWe look forward to seeing you both.',
+    sms: 'Happy anniversary {{name}}! Gift at {{store}}: {{offer}} till {{offer_ends}}.',
     variables: {},
   },
 };
@@ -347,7 +347,7 @@ export async function ensureDefaultWishes(clientId) {
       await query(
         `INSERT INTO occasions (client_id, name, kind, days_before, send_hour, template_id, variables, audience, enabled)
          VALUES ($1, $2, $3, '[0]', 10, $4, $5, '{"mode":"all"}', 0)`,
-        [clientId, w.name, kind, t.id, JSON.stringify({ store: client.name, ...w.variables })],
+        [clientId, w.name, kind, t.id, JSON.stringify({ ...w.variables })],
       );
     }
     done.add(kind);

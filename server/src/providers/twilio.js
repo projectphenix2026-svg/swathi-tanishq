@@ -128,9 +128,9 @@ export function createTwilioProvider(cfg, { publicBaseUrl, fetchImpl = fetch } =
 export function withButtons(body, buttons = []) {
   if (!buttons.length) return body;
   const lines = buttons.map((b) => {
-    if (b.type === 'url') return `👉 ${b.text}: ${b.url}`;
-    if (b.type === 'phone') return `📞 ${b.text}: ${b.phone}`;
-    return `💬 Reply "${b.text}"`;
+    if (b.type === 'url') return `${b.text}: ${b.url}`;
+    if (b.type === 'phone') return `${b.text}: ${b.phone}`;
+    return `Reply "${b.text}"`;
   });
   return `${body}\n\n${lines.join('\n')}`;
 }

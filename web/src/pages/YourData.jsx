@@ -49,7 +49,7 @@ export function YourData({ lastExportAt, onDone }) {
         Code: r.code, Customer: r.customer || '', Phone: r.phone, Offer: r.offer || '', 'Bill amount (₹)': r.amount, Date: day(r.redeemed_at), 'Entered by': r.entered_by || '', Note: r.note || '',
       })) : [{ Code: 'No sales codes used yet' }]), 'Sales codes');
       const stamp = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '-');
-      XLSX.writeFile(wb, `Swathi Tanishq data ${stamp}.xlsx`);
+      XLSX.writeFile(wb, `${(settings?.businessName || 'Shop').replace(/[^\w ]+/g, '').trim()} data ${stamp}.xlsx`);
       await api('/api/export/done', { method: 'POST' }).catch(() => {});
       onDone?.();
       toast(`Downloaded ${customers.length} customers, ${offers.length} offers and ${codes.length} sales codes`);

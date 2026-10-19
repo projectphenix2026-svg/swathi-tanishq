@@ -29,7 +29,7 @@ describe('Twilio adapter', () => {
     const form = new URLSearchParams(fetchImpl.calls[0].init.body);
     expect(form.get('To')).toBe('whatsapp:+919876543210');
     expect(form.get('From')).toBe('whatsapp:+17372508034');
-    expect(form.get('Body')).toBe('Hi Priya\n\n👉 See designs: https://x.com');
+    expect(form.get('Body')).toBe('Hi Priya\n\nSee designs: https://x.com');
     expect(form.get('StatusCallback')).toBe('https://api.example.com/webhooks/twilio');
   });
 
@@ -76,7 +76,7 @@ describe('Twilio adapter', () => {
 
   it('writes each button type as a readable line', () => {
     expect(withButtons('Hi', [{ type: 'phone', text: 'Call us', phone: '+919999900000' }, { type: 'quick_reply', text: 'Interested' }])).toBe(
-      'Hi\n\n📞 Call us: +919999900000\n💬 Reply "Interested"',
+      'Hi\n\nCall us: +919999900000\nReply "Interested"',
     );
   });
 });

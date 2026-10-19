@@ -6,6 +6,7 @@ import { query, NOW } from '../db/index.js';
 import { config } from '../config.js';
 import { getProvider, getSmsProvider } from '../providers/index.js';
 import { extractVariables, render, valuesFor, VARIABLES } from './template.js';
+import { shopValues } from './shop.js';
 import { cleanPrefix, makeOfferCode } from './offers.js';
 import { setRunner, kick } from './dispatch.js';
 import { retryTomorrow } from './messages.js';
@@ -47,7 +48,7 @@ export async function processSendJob(messageId) {
   let body = msg.body;
   if (msg.channel === 'sms' && template && !body) {
     // Bulk SMS: personalise the SMS version the same way (name, offer, sales code...).
-    values = valuesFor(contact, msg.variables || {});
+    values = valuesFor(contact, { ...(msg.variables || {}), ...(await shopValues(msg.client_id)) });
     if (extractVariables(template.sms_body || '').includes('offer_code')) {
       values.offer_code = await reserveCode(msg, contact, cleanPrefix(msg.variables?.code_prefix, 'OFFER'));
     }
@@ -57,7 +58,7 @@ export async function processSendJob(messageId) {
     await query(`UPDATE messages SET body = $2, template_values = $3 WHERE id = $1`, [msg.id, body, values]);
   }
   if (msg.channel === 'whatsapp' && template && !body) {
-    values = valuesFor(contact, msg.variables || {});
+    values = valuesFor(contact, { ...(msg.variables || {}), ...(await shopValues(msg.client_id)) });
     if (extractVariables(template.body).includes('offer_code')) {
       const prefix = cleanPrefix(msg.variables?.code_prefix, CODE_PREFIX[occasion?.kind] || 'OFFER');
       values.offer_code = await reserveCode(msg, contact, prefix);
@@ -158,7 +159,7 @@ export async function fallbackToSms(messageId) {
   );
   if (!m || m.channel !== 'whatsapp' || m.status !== 'failed' || !NOT_ON_WHATSAPP.has(String(m.error_code))) return null;
   if (!(m.c_fb || m.o_fb) || !m.sms_opt_in || m.opted_out_at || !m.sms_body) return null;
-  const values = { ...valuesFor(m, m.variables || {}), ...(m.template_values || {}) };
+  const values = { ...valuesFor(m, { ...(m.variables || {}), ...(await shopValues(m.client_id)) }), ...(m.template_values || {}) };
   const { text, missing } = render(m.sms_body, values);
   if (missing.length) return null;
   const { rows: [sms] } = await query(

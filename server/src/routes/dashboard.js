@@ -5,6 +5,8 @@ import { config } from '../config.js';
 import { getProvider, getSmsProvider } from '../providers/index.js';
 import { clientSettings } from '../lib/campaigns.js';
 import { calendar, indiaNow, ensureDefaultWishes } from '../lib/occasions.js';
+import { getShop, forgetShop } from '../lib/shop.js';
+import { normalizePhone } from '../lib/phone.js';
 import { requireRole } from './auth.js';
 
 const router = express.Router();
@@ -67,8 +69,10 @@ router.get('/settings', async (req, res) => {
   const sms = getSmsProvider();
   const limits = await clientSettings(req.clientId);
   const { rows: [cl] } = await query('SELECT last_export_at, sales_codes FROM clients WHERE id = $1', [req.clientId]);
+  const shop = await getShop(req.clientId);
   res.json({
-    businessName: config.businessName,
+    businessName: shop.name,
+    shop,
     provider: { name: p.name, label: p.label, stub: Boolean(p.stub), missing: p.missingConfig() },
     sms: { name: sms.name, label: sms.label, live: sms.live, missing: sms.missingConfig(), costPerSms: config.sms.costPerSms },
     metaTemplatesReady: Boolean((config.meta.wabaId && config.meta.accessToken) || savedMetaProvider()),
@@ -96,6 +100,30 @@ router.put('/settings', requireRole('admin'), async (req, res) => {
   if (!Number.isInteger(threshold) || threshold < 1) return res.status(400).json({ error: 'Approval size: a whole number of customers, 1 or more.' });
   await query('UPDATE clients SET weekly_cap = $2, approval_threshold = $3 WHERE id = $1', [req.clientId, cap, threshold]);
   res.json({ weeklyCap: cap, approvalThreshold: threshold });
+});
+
+// The owner edits the shop's name, address, phone and Google review link.
+router.put('/shop', requireRole('admin'), async (req, res) => {
+  const b = req.body || {};
+  const clean = (v, max) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
+  const name = clean(b.name, 80);
+  const errors = {};
+  if (!name) errors.name = 'Enter the shop name.';
+  let phone = clean(b.phone, 30);
+  if (phone) {
+    const p = normalizePhone(phone);
+    if (!p.ok) errors.phone = p.reason;
+    else phone = p.display;
+  }
+  const link = clean(b.googleReviewLink, 300);
+  if (link && !/^https:\/\/\S+\.\S+/.test(link)) errors.googleReviewLink = 'The link must start with https://';
+  if (Object.keys(errors).length) return res.status(400).json({ error: 'Please fix the highlighted fields.', fields: errors });
+  await query(
+    'UPDATE clients SET name = $2, address = $3, shop_phone = $4, google_review_link = $5 WHERE id = $1',
+    [req.clientId, name, clean(b.address, 200) || null, phone || null, link || null],
+  );
+  forgetShop(req.clientId);
+  res.json({ shop: await getShop(req.clientId) });
 });
 
 // The owner switches sales codes on or off.

@@ -10,7 +10,7 @@ const clientId = await ensureClient(config.businessName);
 
 const first = ['Priya', 'Ravi', 'Lakshmi', 'Arjun', 'Divya', 'Kiran', 'Meena', 'Suresh', 'Anitha', 'Vikram', 'Swapna', 'Rahul', 'Kavya', 'Naveen', 'Sravani', 'Harish'];
 const last = ['Sharma', 'Reddy', 'Rao', 'Kumar', 'Naidu', 'Varma', 'Goud', 'Iyer'];
-const cities = ['Hyderabad', 'Secunderabad', 'Kukatpally', 'Gachibowli', 'Warangal'];
+const cities = ['Warangal', 'Hanamkonda', 'Kazipet', 'Hyderabad', 'Karimnagar'];
 const items = ['gold bangles', 'diamond ring', 'temple necklace', 'silver anklets', 'gold chain', 'bridal set', 'diamond earrings'];
 const interests = ['bridal', 'diamonds', 'gold', 'daily wear', 'gifting', 'temple jewellery'];
 const pad = (n) => String(n).padStart(2, '0');
@@ -47,7 +47,7 @@ if (!n) {
   const { rows: [bday] } = await t('Birthday gift', 'utility',
     'Happy birthday {{name}}! To celebrate, here is {{offer}} on anything you pick this month. Show code {{offer_code}} at the counter.',
     [{ type: 'quick_reply', text: 'Book a visit' }, { type: 'quick_reply', text: 'Not now' }],
-    'Happy birthday {{name}}! {{offer}} this month at Swathi Tanishq. Code {{offer_code}}. -SWATHI');
+    'Happy birthday {{name}}! {{offer}} this month at My Shop. Code {{offer_code}}.');
   const { rows: [anniv] } = await t('Anniversary gift reminder', 'utility',
     'Hi {{name}}, your anniversary is in {{days_left}} days. Surprise your partner: {{offer}} with code {{offer_code}}.',
     [{ type: 'quick_reply', text: 'Interested' }, { type: 'quick_reply', text: 'Not now' }]);

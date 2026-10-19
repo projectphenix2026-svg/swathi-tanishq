@@ -4,6 +4,7 @@ import { ArrowDownRight, ArrowUpRight, Check, ChevronRight, Plus, Smartphone } f
 import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.js';
 import { Alert, CampaignStatus, Pic, Skeleton } from '../components/ui.jsx';
+import { iconFor } from '../lib/ready.js';
 import { dateOnly, dateTime, greeting, inr, num, pct, plural } from '../lib/format.js';
 import { useT } from '../lib/i18n.jsx';
 
@@ -65,7 +66,7 @@ export default function Dashboard() {
                   <Link key={c.id} to={`/campaigns/${c.id}`} className="list-item" style={{ textDecoration: 'none', color: 'inherit' }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div className="row" style={{ gap: 8 }}>
-                        <b style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</b>
+                        <Pic name={iconFor(c.name)} size={24} /><b style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</b>
                         <CampaignStatus status={c.status} />
                       </div>
                       <div className="subtle">{dateTime(c.scheduled_at || c.created_at)} · {plural(c.total, 'customer')}, {num(c.read)} read it</div>

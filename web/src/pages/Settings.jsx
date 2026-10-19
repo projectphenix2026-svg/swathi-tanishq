@@ -12,6 +12,7 @@ import { GoLive } from './GoLive.jsx';
 // Settings in sections: a menu on the left (chips on phones) and one section at a time.
 // The owner sees every section; staff see their own account and the shop's sending rules.
 const SECTIONS = [
+  { id: 'shop', label: 'Shop details', pic: 'home', owner: true },
   { id: 'go-live', label: 'WhatsApp and going live', pic: 'speech', owner: true },
   { id: 'messages', label: 'Message rules', pic: 'megaphone' },
   { id: 'staff', label: 'Staff', pic: 'people', owner: true },
@@ -63,6 +64,7 @@ export default function Settings() {
         </nav>
         <div className="settings-body stack">
           <h2 className="settings-title">{current.label}</h2>
+          {current.id === 'shop' && <ShopDetails shop={settings?.shop} onSaved={reloadSettings} />}
           {current.id === 'go-live' && (
             <>
               <GoLive onChange={() => setVersion((v) => v + 1)} />
@@ -82,6 +84,56 @@ export default function Settings() {
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * The shop's own details. They are filled into messages ({{store}}, {{address}}, {{shop_phone}})
+ * when they are sent, so changing them here changes every message from now on.
+ */
+function ShopDetails({ shop, onSaved }) {
+  const toast = useToast();
+  const [f, setF] = useState({ name: '', address: '', phone: '', googleReviewLink: '' });
+  const [errors, setErrors] = useState({});
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (shop) setF({ name: shop.name || '', address: shop.address || '', phone: shop.phone || '', googleReviewLink: shop.googleReviewLink || '' });
+  }, [shop]);
+  const set = (k) => (e) => {
+    setF((x) => ({ ...x, [k]: e.target.value }));
+    setErrors((x) => ({ ...x, [k]: null }));
+  };
+  async function save(e) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      await api('/api/dashboard/shop', { method: 'PUT', body: f });
+      toast('Shop details saved');
+      onSaved?.();
+    } catch (err) {
+      setErrors(err.data?.fields || {});
+      toast(err.message, 'bad');
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <form className="card card-pad stack" style={{ maxWidth: 620, gap: 14 }} onSubmit={save} noValidate autoComplete="off">
+      <p className="subtle">These appear in your messages and in the app. You can change them at any time; messages use the new details from then on.</p>
+      <Field label={<>Shop name <span className="req">*</span></>} htmlFor="shop-name" error={errors.name} hint="Shown in the menu, on the sign-in page and in messages as {{store}}.">
+        <input id="shop-name" className={`input ${errors.name ? 'invalid' : ''}`} value={f.name} onChange={set('name')} placeholder="Tanishq Warangal" />
+      </Field>
+      <Field label="Address" htmlFor="shop-address" error={errors.address} hint="Used in messages that include {{address}}.">
+        <textarea id="shop-address" className="textarea" rows={2} value={f.address} onChange={set('address')} placeholder="Shop number, street, area, city" />
+      </Field>
+      <Field label="Shop phone" htmlFor="shop-phone" error={errors.phone} hint="Used in messages that include {{shop_phone}}.">
+        <input id="shop-phone" className={`input ${errors.phone ? 'invalid' : ''}`} value={f.phone} onChange={set('phone')} inputMode="tel" placeholder="98765 43210" />
+      </Field>
+      <Field label="Google review link" htmlFor="shop-review" error={errors.googleReviewLink} hint="Optional. Google Business Profile → Ask for reviews → copy link. Used for the thank-you message.">
+        <input id="shop-review" className={`input ${errors.googleReviewLink ? 'invalid' : ''}`} value={f.googleReviewLink} onChange={set('googleReviewLink')} inputMode="url" placeholder="https://g.page/r/..." />
+      </Field>
+      <div className="row" style={{ justifyContent: 'flex-end' }}><button className="btn primary" disabled={busy}>{busy ? <Spinner /> : 'Save shop details'}</button></div>
+    </form>
   );
 }
 

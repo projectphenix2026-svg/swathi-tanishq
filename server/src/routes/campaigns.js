@@ -7,6 +7,7 @@ import { kick } from '../lib/dispatch.js';
 import { normalizePhone } from '../lib/phone.js';
 import { pace, finishEstimate } from '../lib/pacing.js';
 import { render, valuesFor } from '../lib/template.js';
+import { shopValues } from '../lib/shop.js';
 import { withButtons } from '../providers/twilio.js';
 import { requireRole } from './auth.js';
 
@@ -62,7 +63,7 @@ router.post('/render', async (req, res) => {
   const { rows: [t] } = await query('SELECT * FROM templates WHERE id = $1 AND client_id = $2', [templateId, req.clientId]);
   const { rows: [c] } = await query('SELECT * FROM contacts WHERE id = $1 AND client_id = $2', [contactId, req.clientId]);
   if (!t || !c) return res.status(404).json({ error: 'Template or customer not found.' });
-  const { text, missing } = render(t.body, valuesFor(c, variables));
+  const { text, missing } = render(t.body, valuesFor(c, { ...variables, ...(await shopValues(req.clientId)) }));
   res.json({
     text,
     missing,

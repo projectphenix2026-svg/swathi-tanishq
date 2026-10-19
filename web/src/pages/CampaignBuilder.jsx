@@ -12,6 +12,7 @@ import { READY_MESSAGES } from '../lib/ready.js';
 import { LANGS, isReadyText, readyFor, readyIn } from '../lib/ready-lang.js';
 import { toFriendly } from '../lib/friendly.js';
 import { useT } from '../lib/i18n.jsx';
+import { SHOP_KEYS, shopVars } from '../lib/shop.js';
 import { CustomersStep, LeftOut } from '../components/CustomerPicker.jsx';
 import { TemplateChooser } from '../components/TemplatePicker.jsx';
 
@@ -33,7 +34,7 @@ export default function CampaignBuilder() {
   const [step, setStep] = useState(0);
   const [templates, setTemplates] = useState(null);
   const [templateId, setTemplateId] = useState(params.get('template') ? Number(params.get('template')) : null);
-  const [variables, setVariables] = useState({ offer: '', offer_ends: '', store: settings?.businessName || '' });
+  const [variables, setVariables] = useState({ offer: '', offer_ends: '' });
   // Who gets it: the filters, then single people ticked off (everyone else stays in) or,
   // after "Untick all", only the people ticked by hand.
   const [filters, setFilters] = useState({ cities: [], tags: [], search: '' });
@@ -76,11 +77,6 @@ export default function CampaignBuilder() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [step]);
 
-  // The shop name arrives after the page opens; use it for {{store}}.
-  useEffect(() => {
-    if (settings?.businessName) setVariables((x) => (x.store ? x : { ...x, store: settings.businessName }));
-  }, [settings?.businessName]);
-
   useEffect(() => {
     if (template) setName(`${template.name.replace(/^\W+\s*/u, '')} · ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`);
   }, [template]);
@@ -89,7 +85,7 @@ export default function CampaignBuilder() {
   const previewAs = sample.length ? sample[sampleAt % sample.length] : null;
   const sendCount = preview?.sendable ?? 0;
   const cost = sendCount * (preview?.costPerMessage ?? settings?.costPerMessage ?? 0.8631);
-  const values = previewAs ? { ...valuesFor(previewAs, variables), offer_code: exampleCode(previewAs.name, variables.code_prefix) } : null;
+  const values = previewAs ? { ...valuesFor(previewAs, { ...variables, ...shopVars(settings) }), offer_code: exampleCode(previewAs.name, variables.code_prefix) } : null;
   const rendered = template && values ? render(isSms ? template.sms_body || '' : template.body, values) : null;
   const blank = neededVars.find((v) => !String(variables[v.key] || '').trim());
 
@@ -190,9 +186,14 @@ export default function CampaignBuilder() {
               ) : (
                 <PhonePreview body={template.body} values={values} buttons={template.buttons} imageUrl={template.image_url} businessName={settings?.businessName} />
               )}
-              {rendered?.missing.length > 0 && (
+              {rendered?.missing.some((k) => !SHOP_KEYS.includes(k)) && (
                 <span className="subtle" style={{ color: 'var(--warn)' }}>
-                  {previewAs.name || 'This customer'} has no {rendered.missing.map((k) => VAR_LABEL[k]).join(' or ')}, so they will be skipped.
+                  {previewAs.name || 'This customer'} has no {rendered.missing.filter((k) => !SHOP_KEYS.includes(k)).map((k) => VAR_LABEL[k]).join(' or ')}, so they will be skipped.
+                </span>
+              )}
+              {rendered?.missing.some((k) => SHOP_KEYS.includes(k)) && (
+                <span className="subtle" style={{ color: 'var(--warn)' }}>
+                  This template uses your {rendered.missing.filter((k) => SHOP_KEYS.includes(k)).map((k) => VAR_LABEL[k]).join(' and ')}, which is empty. <Link to="/settings#shop">Add it in Settings → Shop details</Link>.
                 </span>
               )}
             </>
@@ -254,7 +255,7 @@ function TemplateStep({ t, templates, setTemplates, templateId, setTemplateId, n
         setTemplates((list) => list.map((x) => (x.id === found.id ? found : x)));
       }
       setTemplateId(found.id);
-      setVariables((x) => ({ ...x, offer: x.offer || m.offer, offer_ends: x.offer_ends || inAWeek(), code_prefix: x.code_prefix || m.codeWord }));
+      setVariables((x) => ({ ...x, offer_ends: x.offer_ends || inAWeek(), code_prefix: x.code_prefix || m.codeWord }));
     } catch (e) {
       toast(e.message, 'bad');
     } finally {
