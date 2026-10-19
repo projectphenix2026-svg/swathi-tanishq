@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, Check, CheckCheck, Clock, Flame, IndianRupee, MessageCircle, MessageSquareText, RefreshCw, ShieldCheck, Ticket, Undo2, XCircle } from 'lucide-react';
 import { useAuth } from '../lib/auth.js';
+import { SearchBox, matches } from '../components/SearchBox.jsx';
 import { api } from '../lib/api.js';
 import { Alert, CampaignStatus, Kpi, MessageStatus, Skeleton, Spinner, useToast } from '../components/ui.jsx';
 import { Funnel, PROVIDER_NAMES } from './Campaigns.jsx';
@@ -22,6 +23,7 @@ export default function CampaignReport() {
   const [data, setData] = useState(null);
   const [tab, setTab] = useState('');
   const [messages, setMessages] = useState(null);
+  const [q, setQ] = useState('');
   const [cancelling, setCancelling] = useState(false);
   const [approving, setApproving] = useState(false);
   const { settings } = useAuth();
@@ -181,6 +183,7 @@ export default function CampaignReport() {
             <div className="chips" style={{ flexWrap: 'nowrap' }}>
               {TABS.map((t) => <button key={t.key} className={`chip ${tab === t.key ? 'on' : ''}`} onClick={() => { setTab(t.key); setMessages(null); }}>{t.label}</button>)}
             </div>
+            <SearchBox value={q} onChange={setQ} placeholder="Search name or phone" style={{ flex: '0 1 240px' }} />
           </div>
           {!messages ? (
             <div style={{ padding: 20 }}><Spinner /></div>
@@ -191,7 +194,7 @@ export default function CampaignReport() {
               <table className="table">
                 <thead><tr><th>Customer</th><th>Status</th><th className="hide-mobile">Sent</th><th className="hide-mobile">Read</th></tr></thead>
                 <tbody>
-                  {messages.map((m) => (
+                  {messages.filter((m) => matches(q, m.name, m.phone, m.offer_code)).map((m) => (
                     <tr key={m.id}>
                       <td><b>{m.name || 'No name'}</b><div className="subtle num">{phone(m.phone)}{m.offer_code ? ` · ${m.offer_code}` : ''}</div></td>
                       <td>

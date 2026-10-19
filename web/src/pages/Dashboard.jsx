@@ -43,7 +43,7 @@ export default function Dashboard() {
               <Tile label="Messages sent" value={num(d.month.sent)} sub="this month" />
               <Tile label="Read" value={d.month.sent ? `${pct(d.month.read, d.month.sent)}%` : '—'} sub={<Change now={pct(d.month.read, d.month.sent)} before={d.last_sent ? pct(d.last_read, d.last_sent) : null} hasNow={d.month.sent > 0} />} />
               <Tile label="Replies" value={num(d.replies)} sub={`${num(d.interested)} said Interested`} />
-              <Tile label="WhatsApp cost" value={inr(d.month.spend)} sub="this month, plus GST" />
+              <Link to="/spending" className="tile-link"><Tile label="WhatsApp cost" value={inr(d.month.spend)} sub="this month, plus GST · see daily" /></Link>
             </div>
 
             <div className="home-grid">

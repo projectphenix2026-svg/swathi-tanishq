@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ExternalLink, Phone, Plus, Reply } from 'lucide-react';
+import { SearchBox, matches } from '../components/SearchBox.jsx';
 import { api } from '../lib/api.js';
 import { Pic, Skeleton, Spinner, useToast } from '../components/ui.jsx';
 import { Highlighted } from '../components/PhonePreview.jsx';
@@ -18,6 +19,8 @@ const READY_NAMES = new Set(READY_MESSAGES.flatMap((m) => LANGS.map((l) => ready
 export default function Templates() {
   const [list, setList] = useState(null);
   const [busy, setBusy] = useState(null);
+  const [q, setQ] = useState('');
+  const [show, setShow] = useState('all');
   const navigate = useNavigate();
   const toast = useToast();
   const { settings } = useAuth();
@@ -57,7 +60,16 @@ export default function Templates() {
         <Link to="/templates/new" className="btn primary"><Plus size={18} />New template</Link>
       </div>
 
-      <div className="card card-pad stack" style={{ gap: 12 }}>
+      <div className="list-tools card" style={{ marginBottom: 16 }}>
+        <SearchBox value={q} onChange={setQ} placeholder="Search templates by name or words" style={{ flex: '1 1 260px' }} />
+        <div className="chips">
+          {[['all', 'All'], ['approved', 'Ready'], ['waiting', 'Not ready yet']].map(([k, label]) => (
+            <button key={k} type="button" className={`chip ${show === k ? 'on' : ''}`} onClick={() => setShow(k)}>{label}</button>
+          ))}
+        </div>
+      </div>
+
+      {!q && show === 'all' && <div className="card card-pad stack" style={{ gap: 12 }}>
         <h2>Ready-made</h2>
         <div className="ready-grid">
           {READY_MESSAGES.map((m) => (
@@ -68,7 +80,7 @@ export default function Templates() {
             </button>
           ))}
         </div>
-      </div>
+      </div>}
 
       <div className="row between" style={{ margin: '20px 0 10px' }}>
         <h2>Your templates</h2>
@@ -81,7 +93,10 @@ export default function Templates() {
         <div className="card card-pad subtle">None yet. Open a ready-made template above, or click New template.</div>
       ) : (
         <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
-          {[...own, ...list.filter((t) => READY_NAMES.has(t.name))].map((t) => {
+          {[...own, ...list.filter((t) => READY_NAMES.has(t.name))].filter((t) => matches(q, t.name, t.body) && (show === 'all' || (show === 'approved' ? t.status === 'approved' : t.status !== 'approved'))).length === 0 && (
+            <p className="subtle">No template matches. Try other words, or make a new one.</p>
+          )}
+          {[...own, ...list.filter((t) => READY_NAMES.has(t.name))].filter((t) => matches(q, t.name, t.body) && (show === 'all' || (show === 'approved' ? t.status === 'approved' : t.status !== 'approved'))).map((t) => {
             const [tone, label] = STATUS[t.status] || ['neutral', t.status];
             return (
               <Link key={t.id} to={`/templates/${t.id}`} className="card card-pad stack" style={{ textDecoration: 'none', color: 'inherit', gap: 10 }}>

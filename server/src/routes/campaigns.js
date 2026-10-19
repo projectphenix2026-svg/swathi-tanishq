@@ -38,7 +38,9 @@ router.post('/preview', async (req, res) => {
   const channel = req.body?.channel === 'sms' ? 'sms' : 'whatsapp';
   let template = null;
   if (templateId) template = (await query('SELECT * FROM templates WHERE id = $1 AND client_id = $2', [templateId, req.clientId])).rows[0];
-  const result = await previewAudience(req.clientId, { audience, template, variables, channel });
+  // Wishes (special days) never count towards the weekly limit.
+  const ignoreCap = Boolean(req.body?.wish);
+  const result = await previewAudience(req.clientId, { audience, template, variables, channel, ignoreCap });
   // Meta's daily limit (WhatsApp only): how many go out now, and when the rest should be done.
   const p = channel === 'sms' ? null : await pace();
   const count = template ? result.sendable : result.eligible;
@@ -51,7 +53,7 @@ router.post('/audience-list', async (req, res) => {
   const channel = req.body?.channel === 'sms' ? 'sms' : 'whatsapp';
   let template = null;
   if (templateId) template = (await query('SELECT * FROM templates WHERE id = $1 AND client_id = $2', [templateId, req.clientId])).rows[0];
-  res.json(await audienceList(req.clientId, { audience, template, variables, channel, q: String(q).slice(0, 60), limit, offset }));
+  res.json(await audienceList(req.clientId, { audience, template, variables, channel, q: String(q).slice(0, 60), limit, offset, ignoreCap: Boolean(req.body?.wish) }));
 });
 
 // The exact message one customer would receive.

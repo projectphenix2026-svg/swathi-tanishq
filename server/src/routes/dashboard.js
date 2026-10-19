@@ -4,12 +4,13 @@ import { query, indiaStartOf, ago } from '../db/index.js';
 import { config } from '../config.js';
 import { getProvider, getSmsProvider } from '../providers/index.js';
 import { clientSettings } from '../lib/campaigns.js';
-import { calendar, indiaNow } from '../lib/occasions.js';
+import { calendar, indiaNow, ensureDefaultWishes } from '../lib/occasions.js';
 import { requireRole } from './auth.js';
 
 const router = express.Router();
 
 router.get('/', async (req, res) => {
+  await ensureDefaultWishes(req.clientId);
   const { rows: [customers] } = await query(
     `SELECT count(*) AS total,
             count(*) FILTER (WHERE whatsapp_opt_in = 1 AND opted_out_at IS NULL) AS reachable
@@ -103,6 +104,58 @@ router.put('/settings/sales-codes', requireRole('admin'), async (req, res) => {
   await query('UPDATE clients SET sales_codes = $2 WHERE id = $1', [req.clientId, on ? 1 : 0]);
   res.json({ salesCodes: on });
 });
+
+/**
+ * Spending: what messages cost between two India dates (inclusive), day by day, by kind of
+ * message and by send. Costs are the app's estimate (Meta's published price per message, as
+ * recorded when each message went out); GST is added on top for the "with GST" figures.
+ */
+router.get('/spending', async (req, res) => {
+  const isDay = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
+  const today = indiaNow().date;
+  const to = isDay(req.query.to) ? req.query.to : today;
+  const from = isDay(req.query.from) ? req.query.from : `${to.slice(0, 8)}01`;
+  if (from > to) return res.status(400).json({ error: 'The start date is after the end date.' });
+  const days = Math.round((Date.parse(to) - Date.parse(from)) / 86400000) + 1;
+  if (days > 400) return res.status(400).json({ error: 'Pick a range of up to about a year.' });
+  // India date of each message: UTC time + 5:30.
+  const day = "date(COALESCE(m.sent_at, m.created_at), '+330 minutes')";
+  const base = `FROM messages m WHERE m.client_id = $1 AND m.direction = 'outbound' AND m.status IN ('sent', 'delivered', 'read')
+                AND ${day} BETWEEN $2 AND $3`;
+  const kind = `CASE WHEN m.channel = 'sms' THEN 'sms' WHEN m.occasion_id IS NOT NULL THEN 'wishes'
+                     WHEN m.campaign_id IS NOT NULL THEN 'messages' ELSE 'replies' END`;
+  const params = [req.clientId, from, to];
+  const { rows: byDay } = await query(`SELECT ${day} AS day, count(*) AS sent, COALESCE(sum(m.cost), 0) AS cost ${base} GROUP BY 1 ORDER BY 1`, params);
+  const { rows: byKind } = await query(`SELECT ${kind} AS kind, count(*) AS sent, COALESCE(sum(m.cost), 0) AS cost ${base} GROUP BY 1`, params);
+  const { rows: bySend } = await query(
+    `SELECT COALESCE(c.id, -o.id) AS id, COALESCE(c.name, o.name) AS name, CASE WHEN c.id IS NULL THEN 'wishes' ELSE 'messages' END AS kind,
+            min(${day}) AS first_day, count(*) AS sent, COALESCE(sum(m.cost), 0) AS cost
+       FROM messages m LEFT JOIN campaigns c ON c.id = m.campaign_id LEFT JOIN occasions o ON o.id = m.occasion_id
+      WHERE m.client_id = $1 AND m.direction = 'outbound' AND m.status IN ('sent', 'delivered', 'read')
+        AND ${day} BETWEEN $2 AND $3 AND (m.campaign_id IS NOT NULL OR m.occasion_id IS NOT NULL)
+      GROUP BY 1, 2, 3 ORDER BY cost DESC, sent DESC LIMIT 20`,
+    params,
+  );
+  // Every day in the range, with zeros for days without messages, so the chart has no gaps.
+  const map = new Map(byDay.map((d) => [d.day, d]));
+  const series = Array.from({ length: days }, (_, i) => {
+    const d = new Date(Date.parse(`${from}T00:00:00Z`) + i * 86400000).toISOString().slice(0, 10);
+    const r = map.get(d) || { sent: 0, cost: 0 };
+    return { day: d, sent: r.sent, cost: round2(r.cost) };
+  });
+  const total = series.reduce((t, d) => ({ sent: t.sent + d.sent, cost: t.cost + d.cost }), { sent: 0, cost: 0 });
+  res.json({
+    from, to, days,
+    gst: 0.18,
+    pricePerMessage: config.costPerMessage,
+    total: { sent: total.sent, cost: round2(total.cost), withGst: round2(total.cost * 1.18), perDay: round2(total.cost / days) },
+    byKind: Object.fromEntries(byKind.map((k) => [k.kind, { sent: k.sent, cost: round2(k.cost) }])),
+    series,
+    bySend: bySend.map((s) => ({ ...s, cost: round2(s.cost) })),
+  });
+});
+
+const round2 = (n) => Math.round(Number(n || 0) * 100) / 100;
 
 /**
  * Home's numbers and charts: new customers, last month's read rate, replies and Interested,

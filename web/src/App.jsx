@@ -12,6 +12,7 @@ import AddCustomers from './pages/AddCustomers.jsx';
 import Templates from './pages/Templates.jsx';
 import TemplateEditor from './pages/TemplateEditor.jsx';
 import Campaigns from './pages/Campaigns.jsx';
+import Spending from './pages/Spending.jsx';
 import CampaignBuilder from './pages/CampaignBuilder.jsx';
 import CampaignReport from './pages/CampaignReport.jsx';
 import Inbox from './pages/Inbox.jsx';
@@ -90,6 +91,7 @@ export default function App() {
           <Route path="templates/new" element={<TemplateEditor />} />
           <Route path="templates/:id" element={<TemplateEditor />} />
           <Route path="campaigns" element={<Campaigns />} />
+          <Route path="spending" element={<Spending />} />
           <Route path="campaigns/new" element={<CampaignBuilder />} />
           <Route path="campaigns/:id" element={<CampaignReport />} />
           <Route path="inbox" element={<Inbox />} />

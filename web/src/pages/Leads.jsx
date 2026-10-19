@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Check, Flame, MessageCircle, Phone, ShoppingBag, ThumbsDown, X } from 'lucide-react';
+import { SearchBox, matches } from '../components/SearchBox.jsx';
 import { api } from '../lib/api.js';
 import { Avatar, Empty, Pic, SectionTabs, Skeleton, useToast } from '../components/ui.jsx';
 import { useT } from '../lib/i18n.jsx';
@@ -16,6 +17,7 @@ export default function Leads() {
   const toast = useToast();
   const [tab, setTab] = useState('');
   const [data, setData] = useState(null);
+  const [q, setQ] = useState('');
   const { t } = useT();
 
   const load = useCallback(() => {
@@ -53,12 +55,15 @@ export default function Leads() {
           <div style={{ flex: 1 }}><b>{num(c.overdue)} {c.overdue === 1 ? 'customer has' : 'customers have'} waited more than a day.</b> Call them first: interest fades fast.</div>
         </div>
       )}
-      <div className="chips" style={{ marginBottom: 16 }}>
+      <div className="row wrap" style={{ gap: 10, marginBottom: 16, alignItems: 'center' }}>
+      <SearchBox value={q} onChange={setQ} placeholder={t('Search name, phone, city or message')} style={{ flex: '1 1 240px', maxWidth: 360 }} />
+      <div className="chips">
         {TABS.map((x) => (
           <button key={x.key} className={`chip ${tab === x.key ? 'on' : ''}`} onClick={() => { setTab(x.key); setData(null); }}>
             {t(x.label)} <span className="n">{num(x.key ? c[x.key] || 0 : (c.new || 0) + (c.called || 0))}</span>
           </button>
         ))}
+      </div>
       </div>
       <div className="card">
         {!data ? (
@@ -67,8 +72,10 @@ export default function Leads() {
           <Empty icon={Flame} title={tab ? 'Nobody here yet' : 'No one to call right now'}>
             {tab ? 'Customers move here when you mark them.' : 'Customers who tap “Interested” on a message show up here, so you can call them.'}
           </Empty>
+        ) : !data.leads.some((l) => matches(q, l.name, l.phone, l.city, l.campaign_name, l.reply)) ? (
+          <p className="subtle" style={{ padding: 20 }}>{t('Nobody matches.')}</p>
         ) : (
-          data.leads.map((l) => (
+          data.leads.filter((l) => matches(q, l.name, l.phone, l.city, l.campaign_name, l.reply)).map((l) => (
             <div key={l.id} className="lead-card">
               <Avatar name={l.name} seed={l.phone} size={44} />
               <div style={{ minWidth: 0 }}>

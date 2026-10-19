@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, Check, CheckCheck, Clock, ExternalLink, FlaskConical, Inbox as InboxIcon, Lock, Phone, Reply, SendHorizontal } from 'lucide-react';
+import { SearchBox, matches } from '../components/SearchBox.jsx';
 import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.js';
 import { Avatar, Empty, SectionTabs, Spinner, useToast } from '../components/ui.jsx';
@@ -15,6 +16,7 @@ export default function Inbox() {
   const { contactId } = useParams();
   const [list, setList] = useState(null);
   const [filter, setFilter] = useState('all');
+  const [q, setQ] = useState('');
 
   const loadList = useCallback(() => {
     api(`/api/inbox${filter === 'unread' ? '?filter=unread' : ''}`).then((r) => setList(r.conversations)).catch(() => setList([]));
@@ -34,6 +36,7 @@ export default function Inbox() {
           <h1 style={{ fontSize: '1.3rem' }}>{t('Replies')}</h1>
           <p className="subtle" style={{ marginBottom: 10 }}>{t('What customers wrote back, newest first.')}</p>
           <div style={{ marginBottom: 10 }}><SectionTabs tabs={[{ to: '/inbox', label: t('Chats') }, { to: '/leads', label: t('Interested') }]} /></div>
+          <SearchBox value={q} onChange={setQ} placeholder={t('Search name, phone or message')} style={{ marginBottom: 8 }} />
           <div className="chips">
             <button className={`chip ${filter === 'all' ? 'on' : ''}`} onClick={() => setFilter('all')}>{t('All')}</button>
             <button className={`chip ${filter === 'unread' ? 'on' : ''}`} onClick={() => setFilter('unread')}>{t('Unread')}</button>
@@ -45,8 +48,10 @@ export default function Inbox() {
           <Empty icon={InboxIcon} title={filter === 'unread' ? 'All caught up' : 'No replies yet'} actions={filter === 'unread' ? null : <Link to="/campaigns/new" className="btn primary">Send a message</Link>}>
             {filter === 'unread' ? 'Every reply has been read.' : 'When customers reply to a message, you answer them here. Replies within 24 hours are free.'}
           </Empty>
+        ) : !list.some((c) => matches(q, c.name, c.phone, c.last_body)) ? (
+          <p className="subtle" style={{ padding: 16 }}>{t('Nobody matches.')}</p>
         ) : (
-          list.map((c) => (
+          list.filter((c) => matches(q, c.name, c.phone, c.last_body)).map((c) => (
             <Link key={c.contact_id} to={`/inbox/${c.contact_id}`} className={`convo ${String(c.contact_id) === contactId ? 'on' : ''}`}>
               <Avatar name={c.name} seed={c.phone} size={44} />
               <div style={{ flex: 1, minWidth: 0 }}>

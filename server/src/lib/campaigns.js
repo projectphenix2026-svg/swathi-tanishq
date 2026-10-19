@@ -99,7 +99,7 @@ export async function sendConditions(clientId, template, variables, { ignoreCap 
 }
 
 /** Numbers for the builder: how many match, how many can be sent to, and why the rest cannot. */
-export async function previewAudience(clientId, { audience, template, variables, channel = 'whatsapp' }) {
+export async function previewAudience(clientId, { audience, template, variables, channel = 'whatsapp', ignoreCap = false }) {
   const { where, params } = audienceWhere(clientId, audience);
   const ELIGIBLE = eligibleFor(channel);
   const consent = channel === 'sms' ? 'c.sms_opt_in' : 'c.whatsapp_opt_in';
@@ -111,7 +111,7 @@ export async function previewAudience(clientId, { audience, template, variables,
        FROM contacts c WHERE ${where}`,
     params,
   );
-  const { keys, conds, campaignBlank, capped } = await sendConditions(clientId, template, variables, { channel });
+  const { keys, conds, campaignBlank, capped } = await sendConditions(clientId, template, variables, { channel, ignoreCap });
   // Which placeholders some customers have no value for (they are left out).
   const missing = {};
   const missingCols = [...new Set(keys.map((k) => CUSTOMER_KEYS[k]).filter(Boolean))];
@@ -178,11 +178,11 @@ export async function previewAudience(clientId, { audience, template, variables,
  * customer cannot get this message (null when they can). Sendable customers come first.
  * reason: 'stop' | 'consent' | 'cap' | 'details'
  */
-export async function audienceList(clientId, { audience = {}, template, variables, channel = 'whatsapp', q = '', limit = 50, offset = 0 }) {
+export async function audienceList(clientId, { audience = {}, template, variables, channel = 'whatsapp', q = '', limit = 50, offset = 0, ignoreCap = false }) {
   const base = { ...audience, mode: audience.mode === 'selected' ? 'all' : audience.mode, excludeIds: [] };
   const { where, params } = audienceWhere(clientId, base);
   const consent = channel === 'sms' ? 'c.sms_opt_in' : 'c.whatsapp_opt_in';
-  const { conds, capped } = await sendConditions(clientId, template, variables, { channel });
+  const { conds, capped } = await sendConditions(clientId, template, variables, { channel, ignoreCap });
   const conditions = [where];
   if (q) {
     params.push(`%${q}%`);

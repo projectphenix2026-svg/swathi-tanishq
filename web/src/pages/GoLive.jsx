@@ -40,7 +40,7 @@ export function GoLive({ onChange }) {
   if (!c) return <div className="card card-pad" id="go-live"><Spinner /></div>;
   const t = c.ready?.templates || {};
   const steps = [
-    { done: c.connected, title: 'Business verified with Meta', text: 'Meta checks the shop’s documents (1–3 days). Follow Part A of the guide.' },
+    { done: c.connected, title: 'Business verified with Meta', text: 'Meta checks the shop’s documents (1–3 days). Follow Part B of the guide.' },
     { done: c.connected, title: 'Connect WhatsApp', text: c.connected ? `Connected${c.phone ? `: ${c.phone}` : ''}` : 'Paste the four details from Meta below and press Test and connect.', action: !c.connected && <a href="#connect-whatsapp" className="btn sm">Connect below</a> },
     { done: t.approved > 0, title: 'Templates approved by WhatsApp', text: t.total ? `${t.approved || 0} approved, ${t.waiting || 0} waiting` : 'Send your templates for approval.', action: <Link to="/templates" className="btn sm">Templates</Link> },
     { done: Boolean(c.ready?.testSentAt), title: 'Send a real test to your own phone', text: c.ready?.testSentAt ? `Sent ${dateTime(c.ready.testSentAt)}` : 'In Send a message, use “Send a test to my phone”.', action: c.connected && !c.ready?.testSentAt && <Link to="/campaigns/new" className="btn sm">Send a test</Link> },

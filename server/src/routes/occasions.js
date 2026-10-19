@@ -1,7 +1,7 @@
 import express from 'express';
 import { query } from '../db/index.js';
 import { requireRole } from './auth.js';
-import { runOccasion, upcoming, indiaNow, calendar, addDays } from '../lib/occasions.js';
+import { runOccasion, upcoming, indiaNow, calendar, addDays, ensureDefaultWishes, wishPeople } from '../lib/occasions.js';
 
 const router = express.Router();
 const canEdit = requireRole('admin', 'manager');
@@ -10,6 +10,7 @@ const canEdit = requireRole('admin', 'manager');
 const KINDS = ['birthday', 'anniversary', 'festival', 'thank_you', 'personal'];
 
 router.get('/', async (req, res) => {
+  await ensureDefaultWishes(req.clientId);
   const { rows } = await query(
     `SELECT o.*, t.name AS template_name, t.body AS template_body, t.buttons AS template_buttons,
             (SELECT count(*) FROM messages m WHERE m.occasion_id = o.id AND m.channel = 'whatsapp'
@@ -30,6 +31,18 @@ router.get('/', async (req, res) => {
     [req.clientId],
   );
   res.json({ occasions: rows, dates, today: indiaNow() });
+});
+
+// Who has a birthday (or anniversary) saved, soonest first, and whether the wish reaches them.
+router.get('/people/:kind', async (req, res) => {
+  const kind = req.params.kind;
+  if (!['birthday', 'anniversary'].includes(kind)) return res.status(400).json({ error: 'Birthday or anniversary.' });
+  const { rows: [o] } = await query(
+    `SELECT o.*, t.name AS template_name FROM occasions o JOIN templates t ON t.id = o.template_id
+      WHERE o.client_id = $1 AND o.kind = $2 ORDER BY o.enabled DESC, o.id LIMIT 1`,
+    [req.clientId, kind],
+  );
+  res.json({ occasion: o || null, ...(await wishPeople(req.clientId, kind, o)) });
 });
 
 // The Special days calendar: up to 6 weeks from a start date.
