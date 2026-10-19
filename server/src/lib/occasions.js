@@ -4,6 +4,7 @@
 import { query } from '../db/index.js';
 import { audienceWhere, ELIGIBLE, queueMessages } from './campaigns.js';
 import { kick } from './dispatch.js';
+import { VARIABLES, extractVariables } from './template.js';
 
 const TZ = 'Asia/Kolkata';
 
@@ -273,20 +274,37 @@ export async function upcoming(clientId, occasion, days = 30, now = new Date()) 
 
 // The birthday and anniversary wishes every shop starts with, switched on, at 10 am on the day.
 // Same names and wording as the ready-made wishes on the web, so the editor recognises them.
+const CLEANED = 'wishes-off';
+const OLD_DEFAULT_OFFERS = { birthday: 'a free silver coin with any purchase', anniversary: '10% off making charges' };
+
+/**
+ * The details a wish still needs before it can be switched on: the offer and the date it is valid
+ * till, when its template uses them. Labels in plain words, empty when nothing is missing.
+ */
+export async function missingForSwitchOn(templateId, variables) {
+  const { rows: [t] } = await query('SELECT body FROM templates WHERE id = $1', [templateId]);
+  if (!t) return [];
+  const used = extractVariables(t.body);
+  return VARIABLES
+    .filter((v) => v.source === 'campaign' && v.key !== 'store' && used.includes(v.key))
+    .filter((v) => !String(variables?.[v.key] ?? '').trim())
+    .map((v) => v.label.toLowerCase());
+}
+
 export const DEFAULT_WISHES = {
   birthday: {
     name: 'Birthday wishes',
     template: '🎂 Birthday wish',
     body: 'Happy birthday, {{name}}! 🎂\n\nEveryone at {{store}} wishes you a wonderful year ahead.\n\n*A birthday gift for you:* {{offer}}\n*Valid till:* {{offer_ends}}\n\nWe would love to see you at the store.',
     sms: 'Happy birthday {{name}}! Birthday gift at {{store}}: {{offer}} till {{offer_ends}}. -SWATHI',
-    variables: { offer: 'a free silver coin with any purchase', offer_ends: 'a week after your birthday' },
+    variables: {},
   },
   anniversary: {
     name: 'Anniversary wishes',
     template: '💐 Anniversary wish',
     body: 'Happy anniversary, {{name}}! 💐\n\nWishing you both many more happy years together, from all of us at {{store}}.\n\n*Your anniversary gift:* {{offer}}\n*Valid till:* {{offer_ends}}\n\nWe look forward to seeing you both.',
     sms: 'Happy anniversary {{name}}! Gift at {{store}}: {{offer}} till {{offer_ends}}. -SWATHI',
-    variables: { offer: '10% off making charges', offer_ends: 'a week after your anniversary' },
+    variables: {},
   },
 };
 
@@ -299,6 +317,20 @@ export async function ensureDefaultWishes(clientId) {
   const { rows: [client] } = await query('SELECT name, auto_wishes FROM clients WHERE id = $1', [clientId]);
   if (!client) return;
   const done = new Set(String(client.auto_wishes || '').split(',').filter(Boolean));
+  if (!done.has(CLEANED)) {
+    // Earlier versions created these switched on with an offer we wrote ("a free silver coin..."),
+    // which would have gone to real customers. Wishes still carrying that untouched wording are
+    // switched off and the offer cleared; anything the owner edited is left alone.
+    for (const [kind, offer] of Object.entries(OLD_DEFAULT_OFFERS)) {
+      await query(
+        `UPDATE occasions SET enabled = 0, variables = json_remove(variables, '$.offer', '$.offer_ends')
+          WHERE client_id = $1 AND kind = $2 AND json_extract(variables, '$.offer') = $3`,
+        [clientId, kind, offer],
+      );
+    }
+    done.add(CLEANED);
+    await query('UPDATE clients SET auto_wishes = $2 WHERE id = $1', [clientId, [...done].join(',')]);
+  }
   const todo = Object.keys(DEFAULT_WISHES).filter((k) => !done.has(k));
   if (!todo.length) return;
   for (const kind of todo) {
@@ -314,7 +346,7 @@ export async function ensureDefaultWishes(clientId) {
       }
       await query(
         `INSERT INTO occasions (client_id, name, kind, days_before, send_hour, template_id, variables, audience, enabled)
-         VALUES ($1, $2, $3, '[0]', 10, $4, $5, '{"mode":"all"}', 1)`,
+         VALUES ($1, $2, $3, '[0]', 10, $4, $5, '{"mode":"all"}', 0)`,
         [clientId, w.name, kind, t.id, JSON.stringify({ store: client.name, ...w.variables })],
       );
     }

@@ -61,7 +61,7 @@ export function WishPeople({ kind, canEdit, today, reloadKey, onToggle, onEdit }
         <div style={{ flex: '1 1 220px', minWidth: 0 }}>
           <h2>{S.title}</h2>
           <div className="subtle">
-            {o ? <>Automatic · on the day, {hourText(o.send_hour)} · {o.template_name || 'wish'}</> : 'Switched off: no wish is set up.'}
+            {o ? (o.enabled ? <>Automatic · on the day, {hourText(o.send_hour)} · {o.template_name || 'wish'}</> : 'Switched off · add your offer in “Change message”, then switch on') : 'Switched off: no wish is set up.'}
           </div>
         </div>
         {o && canEdit && (

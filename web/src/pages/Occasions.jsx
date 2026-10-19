@@ -104,6 +104,7 @@ export default function Occasions() {
       load();
     } catch (e) {
       toast(e.message, 'bad');
+      if (e.data?.missing?.length) setEditing(o);
     }
   }
   async function runNow(o) {
@@ -149,7 +150,7 @@ export default function Occasions() {
 
           <div className="wp-intro">
             <h2>Birthday and anniversary wishes</h2>
-            <p className="subtle">These are automatic: every customer with a birthday or anniversary saved gets a wish on the day. Nothing to set up.</p>
+            <p className="subtle">Switch these on when you are ready. First write the birthday or anniversary gift in “Change message”. Then every customer with that date saved gets a wish on the day.</p>
           </div>
           <WishPeople kind="birthday" canEdit={canEdit} today={data.today.date} reloadKey={data} onToggle={toggle} onEdit={(o) => setEditing(o)} />
           <WishPeople kind="anniversary" canEdit={canEdit} today={data.today.date} reloadKey={data} onToggle={toggle} onEdit={(o) => setEditing(o)} />
@@ -417,8 +418,8 @@ function OccasionEditor({ initial, templates, setTemplates, businessName, smsOn,
   async function save() {
     setBusy(true);
     try {
-      await api(isNew ? '/api/occasions' : `/api/occasions/${initial.id}`, { method: isNew ? 'POST' : 'PUT', body: { ...o, audience } });
-      toast(isNew ? `${o.name} switched on` : 'Saved');
+      await api(isNew ? '/api/occasions' : `/api/occasions/${initial.id}`, { method: isNew ? 'POST' : 'PUT', body: { ...o, audience, enabled: true } });
+      toast(isNew || !initial.enabled ? `${o.name} switched on` : 'Saved');
       onSaved();
     } catch (e) {
       toast(e.message, 'bad');
@@ -441,7 +442,7 @@ function OccasionEditor({ initial, templates, setTemplates, businessName, smsOn,
             {step < steps.length - 1 ? (
               <button className="btn primary" disabled={Boolean(error)} onClick={() => setStep(step + 1)}>Next<ArrowRight size={16} /></button>
             ) : (
-              <button className="btn primary" disabled={Boolean(error) || busy} onClick={save}>{busy ? <Spinner /> : <><Check size={16} />{isNew ? 'Switch on' : 'Save'}</>}</button>
+              <button className="btn primary" disabled={Boolean(error) || busy} onClick={save}>{busy ? <Spinner /> : <><Check size={16} />{isNew ? 'Switch on' : initial.enabled ? 'Save' : 'Save and switch on'}</>}</button>
             )}
           </span>
         </div>

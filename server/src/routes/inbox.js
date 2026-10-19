@@ -4,8 +4,11 @@ import { query } from '../db/index.js';
 import { kick } from '../lib/dispatch.js';
 import { recordInbound } from '../lib/messages.js';
 import { getProvider } from '../providers/index.js';
+import { requireRole } from './auth.js';
 
 const router = express.Router();
+// Owner and Staff can answer customers; View only can read.
+const canEdit = requireRole('admin', 'manager');
 
 // One row per customer who has written to us, newest first.
 router.get('/', async (req, res) => {
@@ -55,7 +58,7 @@ router.get('/:contactId', async (req, res) => {
 });
 
 // Test mode only: pretend a customer wrote in, so the inbox can be tried without a phone.
-router.post('/simulate', async (req, res) => {
+router.post('/simulate', canEdit, async (req, res) => {
   if (getProvider().name !== 'mock') return res.status(404).json({ error: 'Only available in test mode.' });
   const { rows: [c] } = await query('SELECT * FROM contacts WHERE id = $1 AND client_id = $2', [req.body?.contactId, req.clientId]);
   if (!c) return res.status(404).json({ error: 'Customer not found.' });
@@ -69,7 +72,7 @@ router.post('/simulate', async (req, res) => {
 });
 
 // Staff reply. clientRequestId comes from the browser, so a double-click sends once.
-router.post('/:contactId/reply', async (req, res) => {
+router.post('/:contactId/reply', canEdit, async (req, res) => {
   const body = String(req.body?.body || '').trim();
   if (!body) return res.status(400).json({ error: 'Type a reply first.' });
   if (body.length > 4096) return res.status(400).json({ error: 'That reply is too long.' });

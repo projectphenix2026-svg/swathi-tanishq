@@ -1,8 +1,10 @@
 // Hot leads: customers who tapped "Interested" or "Book a visit", for staff to call the same day.
 import express from 'express';
 import { query, ago } from '../db/index.js';
+import { requireRole } from './auth.js';
 
 const router = express.Router();
+const canEdit = requireRole('admin', 'manager');
 const STATUSES = ['new', 'called', 'won', 'lost'];
 
 router.get('/', async (req, res) => {
@@ -44,7 +46,7 @@ router.get('/summary', async (req, res) => {
   res.json({ staff: rows });
 });
 
-router.patch('/:id', async (req, res) => {
+router.patch('/:id', canEdit, async (req, res) => {
   const status = req.body?.status;
   if (status && !STATUSES.includes(status)) return res.status(400).json({ error: 'Unknown status.' });
   const { rows: [l] } = await query(
