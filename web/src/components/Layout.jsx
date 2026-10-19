@@ -74,7 +74,7 @@ export function Layout() {
           <BrandMark />
           <div>
             <div className="brand-name">{settings?.businessName || ''}</div>
-            <div className="brand-sub">{t('WhatsApp messages')}</div>
+            <div className="brand-sub">{t('Customer messaging')}</div>
           </div>
         </div>
         {canSend && <NavLink to="/campaigns/new" className="btn primary nav-send"><Plus size={18} />{t('Send a message')}</NavLink>}

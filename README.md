@@ -1,4 +1,4 @@
-# WhatsApp messaging for a shop (delivered as Tanishq Warangal)
+# Sandesh: customer messaging (WhatsApp now, more channels later), delivered as Tanishq Warangal
 
 A web app for a jewellery franchise to send **personal, relevant WhatsApp offers** to its customers (up to 30,000 a month), track who received and read them, and answer replies in one shared inbox. SMS backup (MSG91) and automatic birthday/anniversary greetings come in later phases.
 
