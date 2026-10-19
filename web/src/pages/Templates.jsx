@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ExternalLink, Phone, Plus, Reply } from 'lucide-react';
+import { ExternalLink, Phone, Plus, Reply, Trash2 } from 'lucide-react';
 import { SearchBox, matches } from '../components/SearchBox.jsx';
 import { api } from '../lib/api.js';
 import { Pic, Skeleton, Spinner, useToast } from '../components/ui.jsx';
@@ -26,6 +26,17 @@ export default function Templates() {
   const toast = useToast();
   const { settings } = useAuth();
   const canWrite = atLeast(settings?.role, 'manager');
+  const [asking, setAsking] = useState(null);
+  async function removeTemplate(tpl) {
+    try {
+      await api(`/api/templates/${tpl.id}`, { method: 'DELETE' });
+      toast(`${tpl.name} deleted`);
+      setList((l) => l.filter((x) => x.id !== tpl.id));
+    } catch (e) {
+      toast(e.message, 'bad');
+    }
+    setAsking(null);
+  }
   // Ready-made templates are shown in this person's app language.
   const { lang } = useT();
   useEffect(() => {
@@ -120,7 +131,18 @@ export default function Templates() {
                     </div>
                   )}
                 </div>
-                <div className="subtle">Updated {dateOnly(t.updated_at)}{t.used_in ? ` · sent ${t.used_in} time${t.used_in > 1 ? 's' : ''}` : ''}</div>
+                <div className="row between" style={{ gap: 8 }} onClick={(e) => asking === t.id && e.preventDefault()}>
+                  <span className="subtle">Updated {dateOnly(t.updated_at)}{t.used_in ? ` · sent ${t.used_in} time${t.used_in > 1 ? 's' : ''}` : ''}</span>
+                  {canWrite && (asking === t.id ? (
+                    <span className="row" style={{ gap: 6 }}>
+                      <span className="subtle">Delete this template?</span>
+                      <button type="button" className="btn sm" onClick={(e) => { e.preventDefault(); setAsking(null); }}>Keep</button>
+                      <button type="button" className="btn sm danger" onClick={(e) => { e.preventDefault(); removeTemplate(t); }}>Yes, delete</button>
+                    </span>
+                  ) : (
+                    <button type="button" className="btn ghost sm danger" onClick={(e) => { e.preventDefault(); setAsking(t.id); }} aria-label={`Delete ${t.name}`}><Trash2 size={15} />Delete</button>
+                  ))}
+                </div>
               </Link>
             );
           })}

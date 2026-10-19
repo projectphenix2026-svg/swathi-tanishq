@@ -359,6 +359,33 @@ describe('Phase 5: offer codes, leads, weekly limit, roles', () => {
     expect((await owner.get('/api/auth/users')).status).toBe(200);
   });
 
+  it('deletes templates: removed when never used, hidden but kept when used, refused while a wish uses it', async () => {
+    const mgr = await login('manager@example.com');
+    const st = await login('staff@example.com');
+    const unused = await template('Hello {{name}}, this one is never sent anywhere.', { name: 'Unused' });
+    expect((await st.delete(`/api/templates/${unused.id}`)).status).toBe(403);
+    expect((await mgr.delete(`/api/templates/${unused.id}`)).body).toMatchObject({ ok: true, kept: false });
+    expect((await query('SELECT count(*) AS n FROM templates WHERE id = $1', [unused.id])).rows[0].n).toBe(0);
+
+    // A template past messages used is hidden from the lists but kept for the reports.
+    await contact('Del Test', '+919000055555');
+    const used = await template('Hello {{name}}, thanks for visiting us.', { name: 'Used before' });
+    const admin = await login('admin@example.com');
+    expect((await admin.post('/api/campaigns').send({ name: 'Old send', templateId: used.id, audience: { mode: 'all' }, variables: {}, expectedCount: 1 })).status).toBe(201);
+    await drain();
+    expect((await mgr.delete(`/api/templates/${used.id}`)).body).toMatchObject({ ok: true, kept: true });
+    expect((await mgr.get('/api/templates')).body.templates.some((x) => x.id === used.id)).toBe(false);
+    expect((await mgr.get('/api/campaigns')).body.campaigns.some((c) => c.template_name === 'Used before')).toBe(true);
+    expect((await mgr.delete(`/api/templates/${used.id}`)).status).toBe(404);
+
+    // A switched-on wish still using it blocks the delete, and says which wish.
+    const wishTpl = await template('Hello {{name}}, happy birthday from us.', { name: 'Wish text' });
+    await query(`INSERT INTO occasions (client_id, name, kind, days_before, template_id, enabled) VALUES ($1, 'Birthday wishes', 'birthday', '[0]', $2, 1)`, [clientId, wishTpl.id]);
+    const refused = await mgr.delete(`/api/templates/${wishTpl.id}`);
+    expect(refused.status).toBe(409);
+    expect(refused.body.error).toMatch(/Birthday wishes still uses this template/);
+  });
+
   it('lets only the owner edit the shop details, and messages use the current ones', async () => {
     const admin = await login('admin@example.com');
     const m = await login('manager@example.com');

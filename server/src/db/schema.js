@@ -250,6 +250,8 @@ export const EXTRA_COLUMNS = {
   campaigns: [['channel', "TEXT NOT NULL DEFAULT 'whatsapp'"]],
   // A shop event (festival, sale, store anniversary) that comes back on the same date every year.
   occasions: [['repeat_yearly', 'INTEGER NOT NULL DEFAULT 0']],
+  // A deleted template that past messages used: hidden from every list, kept so reports still work.
+  templates: [['archived_at', 'TEXT']],
   // Each person's app language (en | te | hi): the whole app opens in it, on any device.
   // session_version goes up when a password or role changes, which signs that person out everywhere;
   // disabled_at marks a removed staff login (kept so past reports still show who did what).
