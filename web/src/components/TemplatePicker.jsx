@@ -38,6 +38,9 @@ export function TemplateChooser({ items, chosenKey, onPick, busyKey, t = (s) => 
           ))}
         </div>
       )}
+      {!chosen && (
+        <Link to="/templates/new" className="tpl-new-link"><Plus size={18} />{t('Write a new template')}<span className="subtle">{t('It comes straight back here when you save it.')}</span></Link>
+      )}
       {open && <TemplateSearch items={items} chosenKey={chosenKey} busyKey={busyKey} t={t} onClose={() => setOpen(false)} onPick={(i) => { onPick(i); setOpen(false); }} />}
     </div>
   );

@@ -95,18 +95,27 @@ export default function Templates() {
         </div>
       </div>}
 
-      <div className="row between" style={{ margin: '20px 0 10px' }}>
+      <div className="row between wrap" style={{ margin: '20px 0 10px', gap: 8 }}>
         <h2>Your templates</h2>
+        {canWrite && <Link to="/templates/new" className="btn sm"><Plus size={16} />New template</Link>}
       </div>
+      {!canWrite && <p className="subtle" style={{ marginTop: -4, marginBottom: 12 }}>Only the store manager or owner can add or change templates.</p>}
       {!list ? (
         <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
           {[0, 1, 2].map((i) => <div key={i} className="card card-pad"><Skeleton h={16} w="50%" /><Skeleton h={80} style={{ marginTop: 14 }} /></div>)}
         </div>
-      ) : list.length === 0 ? (
-        <div className="card card-pad subtle">None yet. Open a ready-made template above, or click New template.</div>
+      ) : list.length === 0 && !canWrite ? (
+        <div className="card card-pad subtle">No templates yet.</div>
       ) : (
         <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
-          {[...own, ...list.filter((t) => READY_NAMES.has(t.name))].filter((t) => matches(q, t.name, t.body) && (show === 'all' || (show === 'approved' ? t.status === 'approved' : t.status !== 'approved'))).length === 0 && (
+          {canWrite && (
+            <Link to="/templates/new" className="card card-pad new-tpl-card">
+              <span className="new-tpl-plus"><Plus size={28} /></span>
+              <b>Create a new template</b>
+              <span className="subtle">Write your own wording. Add the customer's name, an offer and a photo, and see it on a phone as you type.</span>
+            </Link>
+          )}
+          {list.length > 0 && [...own, ...list.filter((t) => READY_NAMES.has(t.name))].filter((t) => matches(q, t.name, t.body) && (show === 'all' || (show === 'approved' ? t.status === 'approved' : t.status !== 'approved'))).length === 0 && (
             <p className="subtle">No template matches. Try other words, or make a new one.</p>
           )}
           {[...own, ...list.filter((t) => READY_NAMES.has(t.name))].filter((t) => matches(q, t.name, t.body) && (show === 'all' || (show === 'approved' ? t.status === 'approved' : t.status !== 'approved'))).map((t) => {
