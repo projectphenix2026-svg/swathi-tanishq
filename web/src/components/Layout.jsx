@@ -25,7 +25,10 @@ const LINKS = [
     { to: '/occasions#events', label: 'Festivals and events' },
   ] },
   { to: '/inbox', label: 'Replies', pic: 'speech', badge: 'replies', also: ['/leads'] },
-  { to: '/templates', label: 'Templates', pic: 'memo' },
+  { to: '/templates', label: 'Templates', pic: 'memo', subs: [
+    { to: '/templates', label: 'All templates', end: true },
+    { to: '/templates/new', label: 'New template' },
+  ] },
 ];
 const SALES_CODES = { to: '/offers', label: 'Sales codes', pic: 'ticket' };
 const SETTINGS = { to: '/settings', label: 'Settings', pic: 'gear' };
@@ -62,7 +65,8 @@ export function Layout() {
   const signOut = () => logout().then(() => navigate('/login'));
   // Staff do not send messages: for them Send is the list of what was sent, with no Send button.
   const canSend = atLeast(user.role, 'manager');
-  const shown = canSend ? LINKS : LINKS.map((l) => (l.to === '/campaigns' ? { ...l, label: 'Sent messages', subs: undefined } : l));
+  // Staff cannot write templates either, so they get no "New template" link.
+  const shown = canSend ? LINKS : LINKS.map((l) => (l.to === '/campaigns' ? { ...l, label: 'Sent messages', subs: undefined } : l.to === '/templates' ? { ...l, subs: undefined } : l));
   const links = [...shown, ...(settings?.salesCodes ? [SALES_CODES] : [])];
   const extra = [LINKS[5], ...(settings?.salesCodes ? [SALES_CODES] : []), SETTINGS];
   const sending = location.pathname === '/campaigns/new';
@@ -142,8 +146,9 @@ export function Layout() {
               <NavLink to="/campaigns" end className="more-item"><Pic name="megaphone" size={44} />{t('Sent messages')}</NavLink>
               <NavLink to="/spending" className="more-item"><Pic name="moneybag" size={44} />{t('Spending')}</NavLink>
               {extra.map(({ to, label, pic }) => (
-                <NavLink key={to} to={to} className="more-item"><Pic name={pic} size={44} />{t(label)}</NavLink>
+                <NavLink key={to} to={to} end={to === '/templates'} className="more-item"><Pic name={pic} size={44} />{t(label)}</NavLink>
               ))}
+              {canSend && <NavLink to="/templates/new" className="more-item"><span className="more-new"><Plus size={26} /></span>{t('New template')}</NavLink>}
             </div>
             <div className="stack-sm" style={{ padding: '0 16px 12px' }}>
               <span className="label">{t('Special days')}</span>
