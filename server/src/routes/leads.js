@@ -8,7 +8,9 @@ const canEdit = requireLevel('staff');
 const STATUSES = ['new', 'called', 'won', 'lost'];
 
 router.get('/', async (req, res) => {
+  // A status, "all", or (default) everyone still to deal with: new and called.
   const status = STATUSES.includes(req.query.status) ? req.query.status : null;
+  const all = req.query.status === 'all';
   const { rows } = await query(
     `SELECT l.*, c.name, c.phone, c.city, c.last_purchase, c.interests, cp.name AS campaign_name,
             u.name AS updated_by_name, i.body AS reply,
@@ -17,7 +19,7 @@ router.get('/', async (req, res) => {
        LEFT JOIN campaigns cp ON cp.id = l.campaign_id
        LEFT JOIN users u ON u.id = l.updated_by
        LEFT JOIN messages i ON i.id = l.message_id
-      WHERE l.client_id = $1 ${status ? 'AND l.status = $2' : `AND l.status IN ('new', 'called')`}
+      WHERE l.client_id = $1 ${status ? 'AND l.status = $2' : all ? '' : `AND l.status IN ('new', 'called')`}
       ORDER BY (l.status = 'new' AND l.created_at < ${ago('24 hours')}) DESC, (l.status = 'new') DESC, l.created_at DESC LIMIT 300`,
     status ? [req.clientId, status] : [req.clientId],
   );

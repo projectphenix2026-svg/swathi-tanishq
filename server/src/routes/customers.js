@@ -12,7 +12,12 @@ const router = express.Router();
 const canEdit = requireLevel('staff');
 const canManage = requireLevel('manager');
 
-const SORTS = { recent: 'created_at DESC', name: 'name IS NULL, name ASC' };
+// Column sorting on the Customers page (the list is paged, so the server sorts).
+const SORTS = {
+  recent: 'created_at DESC', oldest: 'created_at ASC',
+  name: 'name IS NULL, name COLLATE NOCASE ASC', name_desc: 'name IS NULL, name COLLATE NOCASE DESC',
+  city: "COALESCE(city, '') = '', city COLLATE NOCASE ASC", city_desc: "COALESCE(city, '') = '', city COLLATE NOCASE DESC",
+};
 const DATE_KINDS = ['spouse_birthday', 'child_birthday', 'other'];
 const CITY_NEEDED = 'Add the customer’s city or town.';
 // Each customer's extra special days, as a JSON list.

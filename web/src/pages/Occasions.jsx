@@ -72,6 +72,8 @@ export default function Occasions() {
   const [allTemplates, setAllTemplates] = useState([]);
   const [editing, setEditing] = useState(null);
   const [soon, setSoon] = useState(null);
+  const [who, setWho] = useState(null); // kind whose coming-up list is open
+  const [openDay, setOpenDay] = useState(null); // a Coming up row showing everyone
 
   const load = () => api('/api/occasions').then((r) => {
     setData(r);
@@ -139,8 +141,14 @@ export default function Occasions() {
             {kind === 'festival' ? `Goes to all ${num(data.dates?.total || 0)} customers who agreed to messages`
               : kind === 'thank_you' ? 'Goes to each customer after they use a sales code'
                 : n != null ? `Goes to every customer with ${an(K.one)} saved (${num(n)} now)` : `Goes to every customer with ${an(K.one)} saved`}
-            {next && kind !== 'festival' ? ` · next: ${next.names.slice(0, 2).join(', ')}${next.names.length > 2 ? ` +${next.names.length - 2}` : ''}, ${whenLabel(next.date)}` : ''}
           </span>
+          {next && kind !== 'festival' && (
+            <span className="subtle">
+              Next: <b>{whenLabel(next.date)}</b>, {plural(next.names.length, K.one, kind === 'anniversary' ? 'anniversaries' : undefined)}
+              {' '}({next.names.slice(0, 2).join(', ')}{next.names.length > 2 ? ` +${num(next.names.length - 2)}` : ''})
+              {' · '}<button type="button" className="link-btn" onClick={() => setWho(kind)}>See who (next 7 days)</button>
+            </span>
+          )}
         </div>
         <span className="subtle sd-gift">{o?.variables?.offer ? `${kind === 'festival' ? 'Offer' : 'Gift'}: ${o.variables.offer}` : ''}</span>
         {canEdit ? (
@@ -178,13 +186,40 @@ export default function Occasions() {
             <h2 style={{ marginBottom: 6 }}>Coming up (next 7 days)</h2>
             {!soon ? <Spinner /> : upcoming.length === 0 ? <p className="subtle" style={{ margin: 0 }}>No birthdays, anniversaries or events in the next 7 days.</p> : (
               <div className="sd-soon">
-                {upcoming.slice(0, 12).map((u, i) => (
-                  <div key={i}><b>{whenLabel(u.date)}</b><span className="subtle"> · {u.kind === 'festival' ? 'Event' : KINDS[u.kind].one[0].toUpperCase() + KINDS[u.kind].one.slice(1)} · {u.names.slice(0, 4).join(', ')}{u.names.length > 4 ? ` and ${u.names.length - 4} more` : ''}</span></div>
-                ))}
+                {upcoming.map((u, i) => {
+                  const key = `${u.date}|${u.kind}`;
+                  const all = openDay === key;
+                  const label = u.kind === 'festival' ? 'Event' : plural(u.names.length, KINDS[u.kind].one, u.kind === 'anniversary' ? 'anniversaries' : undefined);
+                  return (
+                    <div key={i} className="sd-soon-row">
+                      <b>{whenLabel(u.date)}</b>
+                      <span className="subtle"> · {label} · {(all ? u.names : u.names.slice(0, 3)).join(', ')}</span>
+                      {u.names.length > 3 && (
+                        <button type="button" className="link-btn" style={{ marginLeft: 6 }} onClick={() => setOpenDay(all ? null : key)}>{all ? 'Show less' : `and ${num(u.names.length - 3)} more`}</button>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
         </div>
+      )}
+
+      {who && (
+        <Modal title={`${KINDS[who].label}: next 7 days`} onClose={() => setWho(null)} width={560}>
+          {upcoming.filter((u) => u.kind === who).length === 0 ? <p className="subtle">Nobody in the next 7 days.</p> : (
+            <div className="stack-sm">
+              {upcoming.filter((u) => u.kind === who).map((u) => (
+                <div key={u.date}>
+                  <b>{whenLabel(u.date)}</b> <span className="subtle">· {plural(u.names.length, KINDS[who].one, who === 'anniversary' ? 'anniversaries' : undefined)}</span>
+                  <div className="sd-names">{u.names.map((nm, j) => <span key={j} className="chip">{nm}</span>)}</div>
+                </div>
+              ))}
+              <p className="subtle" style={{ margin: 0 }}>{first(who)?.enabled ? `Each gets the wish at ${hourText(first(who).send_hour)} on the day.` : 'Wishes are off: switch them on to send these.'}</p>
+            </div>
+          )}
+        </Modal>
       )}
 
       {editing && (

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Ban, Download, Search, Send, Tag, Trash2, UserPlus, Users } from 'lucide-react';
 import { SelectBar, allTicked, toggleIn } from '../components/SelectBar.jsx';
+import { SortTh, useSort } from '../components/SortHead.jsx';
 import { downloadCsv } from '../lib/csv.js';
 import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.js';
@@ -35,6 +36,9 @@ export default function Customers() {
   const testMode = appSettings?.provider?.name === 'mock';
   const toastList = useToast();
   const navigate = useNavigate();
+  // Column order: the server sorts (the list comes in pages of 50).
+  const { sort, toggle } = useSort(null, {}, { key: 'added', dir: 'desc' });
+  const sortParam = { name: ['name', 'name_desc'], city: ['city', 'city_desc'], added: ['oldest', 'recent'] }[sort.key]?.[sort.dir === 'asc' ? 0 : 1] || 'recent';
   // Ticked customers (on this page) and what to do with them.
   const [sel, setSel] = useState(new Set());
   const [groupName, setGroupName] = useState('');
@@ -70,7 +74,7 @@ export default function Customers() {
   const reload = () => {
     api('/api/customers/summary').then(setSummary).catch(() => {});
     api('/api/customers/samples').then((r) => setSamples(r.samples)).catch(() => {});
-    const params = new URLSearchParams({ filter, q, limit: PAGE, offset: page * PAGE });
+    const params = new URLSearchParams({ filter, q, limit: PAGE, offset: page * PAGE, sort: sortParam });
     api(`/api/customers?${params}`).then(setData).catch(() => setData({ customers: [], total: 0 }));
   };
 
@@ -78,9 +82,9 @@ export default function Customers() {
     const t = setTimeout(reload, q ? 250 : 0);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter, q, page]);
+  }, [filter, q, page, sortParam]);
 
-  useEffect(() => setPage(0), [filter, q]);
+  useEffect(() => setPage(0), [filter, q, sortParam]);
   useEffect(() => setSel(new Set()), [filter, q, page]);
 
   async function samplesAction(add) {
@@ -188,7 +192,8 @@ export default function Customers() {
                   <thead>
                     <tr>
                       <th className="tick-col"><input type="checkbox" aria-label="Select all on this page" checked={allTicked(sel, pageIds)} onChange={(e) => setSel(e.target.checked ? new Set([...sel, ...pageIds]) : new Set([...sel].filter((id) => !pageIds.includes(id))))} /></th>
-                      <th>Customer</th><th>Phone</th><th>City</th><th>Special days</th><th>WhatsApp</th><th>Added</th>
+                      <SortTh label="Customer" k="name" sort={sort} toggle={toggle} /><th>Phone</th><SortTh label="City" k="city" sort={sort} toggle={toggle} />
+                      <th>Special days</th><th>WhatsApp</th><SortTh label="Added" k="added" sort={sort} toggle={toggle} />
                     </tr>
                   </thead>
                   <tbody>

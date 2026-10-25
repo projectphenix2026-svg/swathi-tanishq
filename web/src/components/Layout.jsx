@@ -14,8 +14,8 @@ import { atLeast, roleLabel } from '@shared/roles.js';
 // only when the owner switches sales codes on.
 const LINKS = [
   { to: '/', label: 'Home', pic: 'home', end: true },
-  { to: '/campaigns', label: 'Send', pic: 'megaphone', also: ['/spending'], subs: [
-    { to: '/campaigns', label: 'Sent messages', end: true },
+  { to: '/campaigns', label: 'Campaigns', pic: 'megaphone', also: ['/spending'], subs: [
+    { to: '/campaigns', label: 'All campaigns', end: true },
     { to: '/spending', label: 'Spending' },
   ] },
   { to: '/customers', label: 'Customers', pic: 'people' },
@@ -71,7 +71,7 @@ export function Layout() {
   // Staff do not send messages: for them Send is the list of what was sent, with no Send button.
   const canSend = atLeast(user.role, 'manager');
   // Staff cannot write templates either, so they get no "New template" link.
-  const shown = canSend ? LINKS : LINKS.map((l) => (l.to === '/campaigns' ? { ...l, label: 'Sent messages', subs: undefined } : l.to === '/templates' ? { ...l, subs: undefined } : l));
+  const shown = canSend ? LINKS : LINKS.map((l) => (l.to === '/campaigns' ? { ...l, label: 'Campaigns', subs: undefined } : l.to === '/templates' ? { ...l, subs: undefined } : l));
   const links = [...shown, ...(settings?.salesCodes ? [SALES_CODES] : [])];
   const extra = [LINKS[5], ...(settings?.salesCodes ? [SALES_CODES] : []), SETTINGS];
   const sending = location.pathname === '/campaigns/new';
@@ -148,7 +148,7 @@ export function Layout() {
               <button className="icon-btn" onClick={() => setSheet(false)} aria-label="Close"><X size={20} /></button>
             </div>
             <div className="more-grid">
-              <NavLink to="/campaigns" end className="more-item"><Pic name="megaphone" size={44} />{t('Sent messages')}</NavLink>
+              <NavLink to="/campaigns" end className="more-item"><Pic name="megaphone" size={44} />{t('Campaigns')}</NavLink>
               <NavLink to="/spending" className="more-item"><Pic name="moneybag" size={44} />{t('Spending')}</NavLink>
               {extra.map(({ to, label, pic }) => (
                 <NavLink key={to} to={to} end={to === '/templates'} className="more-item"><Pic name={pic} size={44} />{t(label)}</NavLink>

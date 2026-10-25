@@ -14,6 +14,7 @@ import { atLeast } from '@shared/roles.js';
 import { useT } from '../lib/i18n.jsx';
 import { META_BADGE, isApproved, metaState } from '../lib/approval.js';
 import { SelectBar, allTicked, toggleIn } from '../components/SelectBar.jsx';
+import { SortTh, useSort } from '../components/SortHead.jsx';
 
 const STATUS = { approved: ['ok', 'Ready'], draft: ['neutral', 'Not finished'], rejected: ['bad', 'Needs a change'] };
 const READY_NAMES = new Set(READY_MESSAGES.flatMap((m) => LANGS.map((l) => readyIn(m, l.code).name)));
@@ -118,8 +119,16 @@ export default function Templates() {
   const all = [...own, ...(list || []).filter((t) => READY_NAMES.has(t.name))];
   const nApproved = all.filter(ok).length;
   // Approved ones first, so the ones that can be sent are easy to find.
-  const shown = all.filter((t) => matches(q, t.name, t.body) && (show === 'all' || (show === 'approved') === ok(t)))
+  const filteredList = all.filter((t) => matches(q, t.name, t.body) && (show === 'all' || (show === 'approved') === ok(t)))
     .sort((a, b) => ok(b) - ok(a));
+  // Click a heading to sort by it (otherwise approved first).
+  const ORDER = { approved: 0, waiting: 1, not_sent: 2, rejected: 3 };
+  const { sorted: shown, sort, toggle } = useSort(filteredList, {
+    name: (t) => t.name.toLowerCase(),
+    meta: (t) => (needsMeta ? ORDER[metaState(t)] : t.status === 'approved' ? 0 : 1),
+    used: (t) => Number(t.used_in || 0),
+    updated: (t) => Date.parse(t.updated_at),
+  });
 
   return (
     <div className="page">
@@ -189,10 +198,10 @@ export default function Templates() {
           <div className={`tpl-table ${canWrite ? 'with-tick' : ''}`} role="table" aria-label="Your templates">
             <div className="tpl-row tpl-head" role="row">
               {canWrite && <span role="columnheader" className="tick"><input type="checkbox" aria-label="Select all shown" checked={allTicked(sel, shown.map((x) => x.id))} onChange={(e) => setSel(e.target.checked ? new Set(shown.map((x) => x.id)) : new Set())} /></span>}
-              <span role="columnheader">Template</span>
+              <SortTh as="span" label="Template" k="name" sort={sort} toggle={toggle} />
               <span role="columnheader">Has</span>
-              <span role="columnheader">{needsMeta ? 'Meta approval' : 'Status'}</span>
-              <span role="columnheader">Used</span>
+              <SortTh as="span" label={needsMeta ? 'Meta approval' : 'Status'} k="meta" sort={sort} toggle={toggle} />
+              <SortTh as="span" label="Used" k="used" sort={sort} toggle={toggle} />
               <span role="columnheader" />
             </div>
             {list.length > 0 && shown.length === 0 && <p className="subtle" style={{ padding: 20 }}>No template matches. Try other words, or make a new one.</p>}
