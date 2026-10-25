@@ -8,7 +8,7 @@ const PLACEHOLDER = /\{\{\s*([a-zA-Z_]+)\s*\}\}/g;
  * Filled-in personal values are highlighted in gold; missing ones in red.
  */
 
-export function PhonePreview({ body, values, buttons = [], imageUrl, businessName = '', caption }) {
+export function PhonePreview({ body, values, buttons = [], imageUrl, videoUrl, businessName = '', caption }) {
   return (
     <figure style={{ margin: 0 }}>
       <div className="phone" aria-label="Message preview">
@@ -25,7 +25,8 @@ export function PhonePreview({ body, values, buttons = [], imageUrl, businessNam
             {body ? (
               <>
                 <div className="bubble">
-                  {imageUrl && <img src={imageUrl} alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} />}
+                  {videoUrl ? <video src={videoUrl} muted playsInline controls preload="metadata" />
+                    : imageUrl && <img src={imageUrl} alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} />}
                   <Highlighted body={body} values={values} />
                   <span className="meta">{timeOnly(new Date())}</span>
                 </div>

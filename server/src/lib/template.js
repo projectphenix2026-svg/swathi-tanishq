@@ -70,7 +70,7 @@ export function render(body, values) {
 }
 
 /** Checks a template before saving. Returns a list of plain-language problems. */
-export function validateTemplate({ name, body, buttons = [], image_url }) {
+export function validateTemplate({ name, body, buttons = [], image_url, video_url }) {
   const errors = [];
   if (!String(name || '').trim()) errors.push('Give the template a name.');
   const text = String(body || '');
@@ -82,6 +82,8 @@ export function validateTemplate({ name, body, buttons = [], image_url }) {
     errors.push('WhatsApp does not allow a message to start or end with a placeholder. Add a word before or after it.');
   }
   if (image_url && !/^https:\/\/\S+$/i.test(image_url)) errors.push('The image link must start with https://');
+  if (video_url && !/^https:\/\/\S+$/i.test(video_url)) errors.push('The video link must start with https://');
+  if (image_url && video_url) errors.push('A message can have a photo or a video, not both. Remove one.');
   if (!Array.isArray(buttons)) {
     errors.push('Buttons are not valid.');
     return errors;

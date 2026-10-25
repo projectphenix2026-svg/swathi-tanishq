@@ -30,7 +30,7 @@ router.get('/:id', async (req, res) => {
   res.json({ template: withVars(t) });
 });
 
-const COLS = ['name', 'category', 'language', 'body', 'image_url', 'buttons', 'status', 'provider_ref', 'sms_body', 'sms_dlt_template_id'];
+const COLS = ['name', 'category', 'language', 'body', 'image_url', 'video_url', 'buttons', 'status', 'provider_ref', 'sms_body', 'sms_dlt_template_id'];
 const values = (input) => COLS.map((c) => (c === 'buttons' ? JSON.stringify(input.buttons) : input[c]));
 
 router.post('/', canEdit, async (req, res) => {
@@ -53,7 +53,7 @@ router.put('/:id', canEdit, async (req, res) => {
   // Changing the wording invalidates a Meta approval: the approved text is what Meta sends.
   // Wording, buttons, or adding/removing a photo header need Meta's approval again (a different photo does not).
   const textChanged = existing.body !== input.body || JSON.stringify(existing.buttons) !== JSON.stringify(input.buttons)
-    || Boolean(existing.image_url) !== Boolean(input.image_url);
+    || Boolean(existing.image_url) !== Boolean(input.image_url) || Boolean(existing.video_url) !== Boolean(input.video_url);
   const { rows: [t] } = await query(
     `UPDATE templates SET ${COLS.map((c, i) => `${c} = $${i + 3}`).join(', ')},
             provider_status = CASE WHEN $${COLS.length + 3} THEN NULL ELSE provider_status END,
@@ -94,7 +94,7 @@ router.post('/:id/submit-meta', canEdit, async (req, res) => {
   const meta = metaProvider();
   const missing = meta.missingConfig();
   if (missing.length) return res.status(400).json({ error: `Meta is not set up yet. Missing: ${missing.join(', ')}.` });
-  const result = await meta.submitTemplate(t, EXAMPLES, { sample: await photoSample(t.image_url) });
+  const result = await meta.submitTemplate(t, EXAMPLES, { sample: await photoSample(t.video_url || t.image_url) });
   const { rows: [u] } = await query(
     `UPDATE templates SET provider_ref = $2, provider_status = $3, provider_reason = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = $1 RETURNING *`,
     [t.id, result.name, result.status],
@@ -114,7 +114,7 @@ router.post('/:id/sync-meta', async (req, res) => {
   res.json({ template: withVars(u) });
 });
 
-/** The message's photo bytes (from the app's own photo store, or its web link) for Meta's sample. */
+/** The message's photo or video bytes (from the app's own store, or its web link) for Meta's sample. */
 async function photoSample(url) {
   if (!url) return null;
   const own = /\/media\/([0-9a-f]{32})$/.exec(url);
@@ -141,6 +141,7 @@ function normalise(b = {}) {
     language: String(b.language || 'en').slice(0, 10),
     body: String(b.body || '').replace(/\r\n/g, '\n').trim(),
     image_url: String(b.image_url || '').trim() || null,
+    video_url: String(b.video_url || '').trim() || null,
     buttons: Array.isArray(b.buttons) ? cleanButtons(b.buttons) : [],
     status: ['draft', 'approved', 'rejected'].includes(b.status) ? b.status : 'approved',
     provider_ref: String(b.provider_ref || '').trim() || null,

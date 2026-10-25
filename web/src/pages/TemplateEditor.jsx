@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, BadgeCheck, Check, ChevronDown, ExternalLink, Image, MessageSquareText, MousePointerClick, Phone, Plus, RefreshCw, Reply, Settings2, Trash2 } from 'lucide-react';
+import { ArrowLeft, BadgeCheck, Check, ChevronDown, ExternalLink, Film, Image, MessageSquareText, MousePointerClick, Phone, Plus, RefreshCw, Reply, Settings2, Trash2 } from 'lucide-react';
 import { VARIABLES, extractVariables, render, validateTemplate } from '@shared/template.js';
 import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.js';
@@ -8,6 +8,7 @@ import { Alert, Field, Spinner, useToast } from '../components/ui.jsx';
 import { PhonePreview } from '../components/PhonePreview.jsx';
 import { READY_MESSAGES } from '../lib/ready.js';
 import { PhotoPicker } from '../components/PhotoPicker.jsx';
+import { VideoPicker } from '../components/VideoPicker.jsx';
 import { shopVars } from '../lib/shop.js';
 import { atLeast } from '@shared/roles.js';
 import { detailLabel, fromFriendly, toFriendly } from '../lib/friendly.js';
@@ -38,7 +39,7 @@ export default function TemplateEditor() {
   const isOwner = atLeast(user?.role, 'owner');
   const { lang } = useT();
   const textRef = useRef(null);
-  const [t, setT] = useState(id ? null : { name: '', body: '', buttons: [], image_url: '', status: 'approved', provider_ref: '', category: 'marketing', sms_body: '', sms_dlt_template_id: '' });
+  const [t, setT] = useState(id ? null : { name: '', body: '', buttons: [], image_url: '', video_url: '', status: 'approved', provider_ref: '', category: 'marketing', sms_body: '', sms_dlt_template_id: '' });
   const [busy, setBusy] = useState(false);
   const [tried, setTried] = useState(false);
   const [open, setOpen] = useState(null); // which extra row is open
@@ -47,7 +48,7 @@ export default function TemplateEditor() {
   useEffect(() => {
     if (id) {
       api(`/api/templates/${id}`)
-        .then((r) => setT({ ...r.template, image_url: r.template.image_url || '', provider_ref: r.template.provider_ref || '', sms_body: r.template.sms_body || '', sms_dlt_template_id: r.template.sms_dlt_template_id || '' }))
+        .then((r) => setT({ ...r.template, image_url: r.template.image_url || '', video_url: r.template.video_url || '', provider_ref: r.template.provider_ref || '', sms_body: r.template.sms_body || '', sms_dlt_template_id: r.template.sms_dlt_template_id || '' }))
         .catch((e) => { toast(e.message, 'bad'); navigate('/templates'); });
     }
   }, [id, navigate, toast]);
@@ -163,10 +164,17 @@ export default function TemplateEditor() {
 
           <div className="card te-extras">
             <Extra id="photo" open={open} setOpen={setOpen} icon={Image} title="Photo" summary={t.image_url ? 'Photo added' : 'None. A jewellery photo gets far more taps.'}>
-              <PhotoPicker value={t.image_url} onChange={(url) => set({ image_url: url || '' })} />
+              {t.video_url && <p className="subtle" style={{ margin: 0 }}>This message has a video. A message can have a photo or a video, so adding a photo removes the video.</p>}
+              <PhotoPicker value={t.image_url} onChange={(url) => set({ image_url: url || '', ...(url ? { video_url: '' } : {}) })} />
               <Field label="Or paste a photo link" hint="A public https:// link to a photo of the jewellery.">
-                <input id="tpl-image" className="input" value={t.image_url} onChange={(e) => set({ image_url: e.target.value })} placeholder="https://..." />
+                <input id="tpl-image" className="input" value={t.image_url} onChange={(e) => set({ image_url: e.target.value, ...(e.target.value ? { video_url: '' } : {}) })} placeholder="https://..." />
               </Field>
+            </Extra>
+
+            <Extra id="video" open={open} setOpen={setOpen} icon={Film} title="Video" summary={t.video_url ? 'Video added' : 'None. A short video of a new collection (MP4, up to 16 MB).'}>
+              {t.image_url && <p className="subtle" style={{ margin: 0 }}>This message has a photo. A message can have a photo or a video, so adding a video removes the photo.</p>}
+              <VideoPicker value={t.video_url} onChange={(url) => set({ video_url: url || '', ...(url ? { image_url: '' } : {}) })} />
+              <span className="hint">MP4, up to 16 MB (about 1–2 minutes on a phone). Meta approves the message with its video; after a change, press “Submit again”.</span>
             </Extra>
 
             <Extra id="buttons" open={open} setOpen={setOpen} icon={MousePointerClick} title="Buttons" summary={t.buttons.length ? t.buttons.map((b) => b.text || 'Button').join(' · ') : 'None. Add up to 2, like “Interested”.'}>
@@ -235,7 +243,7 @@ export default function TemplateEditor() {
         </div>
 
         <aside className="stack sticky" style={{ gap: 10 }}>
-          <PhonePreview body={t.body} values={{ ...EXAMPLES, ...Object.fromEntries(Object.entries(shopVars(settings)).filter(([, v]) => v)) }} buttons={t.buttons} imageUrl={t.image_url} businessName={settings?.businessName} caption="Example customer: Priya" />
+          <PhonePreview body={t.body} values={{ ...EXAMPLES, ...Object.fromEntries(Object.entries(shopVars(settings)).filter(([, v]) => v)) }} buttons={t.buttons} imageUrl={t.image_url} videoUrl={t.video_url} businessName={settings?.businessName} caption="Example customer: Priya" />
           <div className="te-rules">
             {rules.map((r) => (
               <span key={r.text} className={`rule ${r.ok ? 'yes' : 'no'}`}><span className="dot">{r.ok ? <Check size={12} strokeWidth={3} /> : null}</span>{r.text}</span>
