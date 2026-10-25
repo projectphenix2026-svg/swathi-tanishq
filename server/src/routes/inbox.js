@@ -30,12 +30,14 @@ router.get('/', async (req, res) => {
   res.json({ conversations: rows });
 });
 
+// unread: messages not opened yet; chats: conversations with one or more of them (the number the
+// Replies list and the menu show).
 router.get('/unread-count', async (req, res) => {
   const { rows: [r] } = await query(
-    `SELECT count(*) AS n FROM messages WHERE client_id = $1 AND direction = 'inbound' AND seen_at IS NULL`,
+    `SELECT count(*) AS n, count(DISTINCT contact_id) AS chats FROM messages WHERE client_id = $1 AND direction = 'inbound' AND seen_at IS NULL`,
     [req.clientId],
   );
-  res.json({ unread: r.n });
+  res.json({ unread: r.n, chats: r.chats });
 });
 
 router.get('/:contactId', async (req, res) => {

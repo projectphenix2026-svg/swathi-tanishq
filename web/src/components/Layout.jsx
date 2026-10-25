@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { LogOut, Menu, Plus, X } from 'lucide-react';
 import { BrandMark } from './BrandMark.jsx';
 import { api } from '../lib/api.js';
@@ -46,19 +46,24 @@ export function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
 
+  // Replies badge = chats with unread messages + new "Interested" customers: the same two numbers
+  // shown on the Chats and Interested tabs, so they always add up.
+  const refreshCounts = useCallback(() =>
+    Promise.all([api('/api/inbox/unread-count'), api('/api/leads?status=new')])
+      .then(([i, l]) => {
+        const chats = Number(i.chats ?? i.unread) || 0;
+        const leads = Number(l.counts?.new) || 0;
+        setCounts({ unread: chats, leads, replies: chats + leads });
+      })
+      .catch(() => {}), []);
   useEffect(() => {
-    let alive = true;
-    const load = () =>
-      Promise.all([api('/api/inbox/unread-count'), api('/api/leads?status=new')])
-        .then(([i, l]) => alive && setCounts({ unread: i.unread, leads: l.counts?.new || 0, replies: i.unread + (l.counts?.new || 0) }))
-        .catch(() => {});
-    load();
-    const timer = setInterval(load, 15000);
-    return () => {
-      alive = false;
-      clearInterval(timer);
-    };
-  }, []);
+    const timer = setInterval(refreshCounts, 15000);
+    return () => clearInterval(timer);
+  }, [refreshCounts]);
+  // Opening a chat marks it read, so look again whenever the page changes.
+  useEffect(() => {
+    refreshCounts();
+  }, [location.pathname, refreshCounts]);
 
   useEffect(() => setSheet(false), [location.pathname]);
 
@@ -102,7 +107,7 @@ export function Layout() {
           </span>
         </header>
         <ModeBar settings={settings} />
-        <Outlet />
+        <Outlet context={{ counts, refreshCounts }} />
       </div>
       {welcome && settings && <Welcome user={user} testMode={settings.provider.name === 'mock'} onClose={() => setWelcome(false)} />}
 

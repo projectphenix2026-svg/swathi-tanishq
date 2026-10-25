@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useOutletContext } from 'react-router-dom';
 import { Check, Flame, MessageCircle, Phone, ShoppingBag, ThumbsDown, X } from 'lucide-react';
 import { SearchBox, matches } from '../components/SearchBox.jsx';
 import { api } from '../lib/api.js';
@@ -15,6 +15,7 @@ const TABS = [
 
 export default function Leads() {
   const toast = useToast();
+  const { counts } = useOutletContext() || {};
   const [tab, setTab] = useState('');
   const [data, setData] = useState(null);
   const [q, setQ] = useState('');
@@ -48,7 +49,7 @@ export default function Leads() {
           <p>{t('Customers who tapped “Interested”. Call them today, while they’re keen.')}</p>
         </div>
       </div>
-      <div style={{ marginBottom: 16 }}><SectionTabs tabs={[{ to: '/inbox', label: t('Chats') }, { to: '/leads', label: t('Interested') }]} /></div>
+      <div style={{ marginBottom: 16 }}><SectionTabs tabs={[{ to: '/inbox', label: t('Chats'), count: counts?.unread }, { to: '/leads', label: t('Interested'), count: counts?.leads }]} /></div>
       {c.overdue > 0 && !tab && (
         <div className="alert bad" style={{ marginBottom: 12 }}>
           <Pic name="phone" size={30} />

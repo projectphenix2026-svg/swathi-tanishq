@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useOutletContext, useParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, Check, CheckCheck, Clock, ExternalLink, FlaskConical, Inbox as InboxIcon, Lock, Phone, Reply, SendHorizontal } from 'lucide-react';
 import { SearchBox, matches } from '../components/SearchBox.jsx';
 import { api } from '../lib/api.js';
@@ -14,6 +14,7 @@ const QUICK = ['Thank you! We will call you shortly.', 'Yes, the offer is valid 
 export default function Inbox() {
   const { t } = useT();
   const { contactId } = useParams();
+  const { counts } = useOutletContext() || {};
   const [list, setList] = useState(null);
   const [filter, setFilter] = useState('all');
   const [q, setQ] = useState('');
@@ -35,7 +36,7 @@ export default function Inbox() {
         <div style={{ padding: '18px 16px 12px', borderBottom: '1px solid var(--border)' }}>
           <h1 style={{ fontSize: '1.3rem' }}>{t('Replies')}</h1>
           <p className="subtle" style={{ marginBottom: 10 }}>{t('What customers wrote back, newest first.')}</p>
-          <div style={{ marginBottom: 10 }}><SectionTabs tabs={[{ to: '/inbox', label: t('Chats') }, { to: '/leads', label: t('Interested') }]} /></div>
+          <div style={{ marginBottom: 10 }}><SectionTabs tabs={[{ to: '/inbox', label: t('Chats'), count: counts?.unread }, { to: '/leads', label: t('Interested'), count: counts?.leads }]} /></div>
           <SearchBox value={q} onChange={setQ} placeholder={t('Search name, phone or message')} style={{ marginBottom: 8 }} />
           <div className="chips">
             <button className={`chip ${filter === 'all' ? 'on' : ''}`} onClick={() => setFilter('all')}>{t('All')}</button>
@@ -95,10 +96,12 @@ function Thread({ contactId, onChange }) {
   const requestId = useRef(crypto.randomUUID());
   const lastCount = useRef(0);
 
+  const { refreshCounts } = useOutletContext() || {};
   const load = useCallback(() => {
     api(`/api/inbox/${contactId}`)
       .then((r) => {
         setData(r);
+        refreshCounts?.(); // this chat is now read
         if (r.messages.length !== lastCount.current) {
           lastCount.current = r.messages.length;
           requestAnimationFrame(() => bottom.current?.scrollIntoView({ block: 'end' }));

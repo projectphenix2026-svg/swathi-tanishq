@@ -343,3 +343,19 @@ describe('Automatic birthday and anniversary wishes', () => {
     expect(kept.variables.offer).toBe('Flat 5% off');
   });
 });
+
+describe('Replies count', () => {
+  it('counts chats with unread messages, not single messages', async () => {
+    const before = (await agent.get('/api/inbox/unread-count')).body;
+    const { rows: [c] } = await query(`SELECT client_id, id FROM contacts LIMIT 1`);
+    for (const k of ['a', 'b', 'c']) {
+      await query(`INSERT INTO messages (client_id, contact_id, direction, provider, status, body, idempotency_key) VALUES ($1, $2, 'inbound', 'mock', 'received', 'hi', $3)`, [c.client_id, c.id, `in:count-${k}`]);
+    }
+    const after = (await agent.get('/api/inbox/unread-count')).body;
+    expect(after.unread - before.unread).toBe(3);
+    expect(after.chats).toBeLessThanOrEqual(before.chats + 1);
+    await agent.get(`/api/inbox/${c.id}`); // opening the chat marks it read
+    const opened = (await agent.get('/api/inbox/unread-count')).body;
+    expect(opened.chats).toBeLessThan(after.chats);
+  });
+});
