@@ -7,6 +7,7 @@ import { buildProvider, getProvider } from '../providers/index.js';
 import { applyStatus, recordInbound } from '../lib/messages.js';
 import { ensureClient } from '../db/index.js';
 import { savedMetaProvider, webhookVerifyToken } from '../lib/whatsapp-connection.js';
+import { applyTemplateStatus } from '../lib/template-approval.js';
 
 const router = express.Router();
 const adapters = {};
@@ -26,10 +27,11 @@ function handle(name) {
       console.warn(`[webhook] rejected ${name} callback: bad signature`);
       return res.status(403).send('Invalid signature');
     }
-    const { statuses, inbound } = provider.parseWebhook(req);
+    const { statuses, inbound, templates = [] } = provider.parseWebhook(req);
     const clientId = await ensureClient(config.businessName);
     for (const s of statuses) await applyStatus(s);
     for (const m of inbound) await recordInbound(clientId, { ...m, provider: name });
+    for (const t of templates) await applyTemplateStatus(t);
     // Twilio expects TwiML or an empty 200; an empty response sends no auto-reply.
     res.type('text/xml').send('<Response></Response>');
   };

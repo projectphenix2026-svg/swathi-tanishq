@@ -25,7 +25,7 @@ export function PhonePreview({ body, values, buttons = [], imageUrl, videoUrl, b
             {body ? (
               <>
                 <div className="bubble">
-                  {videoUrl ? <video src={videoUrl} muted playsInline controls preload="metadata" />
+                  {videoUrl ? <video src={videoUrl} playsInline controls preload="metadata" />
                     : imageUrl && <img src={imageUrl} alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} />}
                   <Highlighted body={body} values={values} />
                   <span className="meta">{timeOnly(new Date())}</span>

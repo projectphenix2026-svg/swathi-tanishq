@@ -741,6 +741,27 @@ a.chart-card:hover { border-color: var(--brand); }
 .tpl-result { display: flex; gap: 10px; align-items: flex-start; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); cursor: pointer; font: inherit; color: inherit; text-align: left; }
 .tpl-result:hover, .tpl-result.on { border-color: var(--brand); background: var(--brand-50); }
 .tpl-text.short { -webkit-line-clamp: 2; margin-top: 4px; }
+/* Templates: one row per template (name and wording, what it has, Meta approval, use, actions). */
+.tpl-row { display: grid; grid-template-columns: minmax(0, 2.4fr) minmax(0, 1.1fr) minmax(0, 1.2fr) minmax(0, 0.8fr) auto; gap: 16px; align-items: center;
+  padding: 12px 20px; border-top: 1px solid var(--border); cursor: pointer; }
+.tpl-row:hover { background: var(--surface-2); }
+.tpl-head { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-2); padding-block: 10px; background: var(--surface-2); border-top: none; cursor: default; }
+.tpl-row.tpl-ok { box-shadow: inset 4px 0 0 var(--ok); }
+.tpl-cell-name { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.tpl-cell-name .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.tpl-preview { font-size: 0.84rem; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tpl-has { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 0.84rem; min-width: 0; }
+.tpl-has > span { display: inline-flex; align-items: center; gap: 4px; }
+.tpl-note { display: block; font-size: 0.78rem; margin-top: 3px; }
+.tpl-used { font-size: 0.8rem; line-height: 1.4; }
+.tpl-actions { display: flex; gap: 6px; justify-content: flex-end; align-items: center; flex-wrap: wrap; }
+@media (max-width: 759px) {
+  .tpl-head { display: none; }
+  .tpl-row { grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; padding: 12px 16px; }
+  .tpl-cell-name { grid-column: 1 / -1; }
+  .tpl-used { display: none; }
+}
+
 /* Sent messages: one clear row per message (what, to whom, what happened, actions). */
 .sent-table { display: flex; flex-direction: column; }
 .sent-row { display: grid; grid-template-columns: minmax(0, 2.2fr) minmax(0, 1.1fr) minmax(0, 1.4fr) auto; gap: 16px; align-items: center;

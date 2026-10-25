@@ -8,6 +8,7 @@ import { releaseStuck } from './lib/sender.js';
 import { pollStatuses } from './lib/messages.js';
 import { runAllOccasions } from './lib/occasions.js';
 import { refreshProvider, refreshDailyLimit } from './lib/whatsapp-connection.js';
+import { syncWaitingTemplates } from './lib/template-approval.js';
 
 let setupDone = false;
 
@@ -40,6 +41,8 @@ export async function everyMinute({ send = true, occasions = true } = {}) {
   minute += 1;
   await refreshProvider().catch((err) => console.warn('[whatsapp] could not read the connection:', err.message));
   if (minute % 30 === 1) await refreshDailyLimit().catch(() => {});
+  // Templates waiting for Meta's approval: no need to press "Check status".
+  if (occasions && minute % 3 === 0) await syncWaitingTemplates().catch((err) => console.warn('[templates]', err.message));
   if (send) {
     await processDue();
     if (minute % 10 === 0) await releaseStuck();

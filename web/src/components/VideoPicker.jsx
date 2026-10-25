@@ -26,7 +26,7 @@ export function VideoPicker({ value, onChange, removable = true, changeLabel = '
 
   return (
     <div className="row wrap" style={{ gap: 12, alignItems: 'center' }}>
-      {value && <video src={value} muted playsInline controls preload="metadata" style={{ width: 160, height: 96, objectFit: 'cover', borderRadius: 10, border: '1px solid var(--border)', background: '#000' }} />}
+      {value && <video src={value} playsInline controls preload="metadata" style={{ width: 160, height: 96, objectFit: 'cover', borderRadius: 10, border: '1px solid var(--border)', background: '#000' }} />}
       <input ref={input} type="file" accept="video/mp4,video/3gpp" hidden onChange={pick} />
       <button type="button" className="btn" onClick={() => input.current?.click()} disabled={busy}>
         {busy ? <><Spinner />Uploading…</> : <><Film size={17} />{value ? changeLabel : 'Add a video'}</>}

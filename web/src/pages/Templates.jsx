@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Check, ExternalLink, Film, Phone, Plus, Reply, Trash2 } from 'lucide-react';
+import { Check, Film, Image, MousePointerClick, Pencil, Plus, Send, Trash2 } from 'lucide-react';
 import { SearchBox, matches } from '../components/SearchBox.jsx';
 import { api } from '../lib/api.js';
 import { Pic, Skeleton, Spinner, useToast } from '../components/ui.jsx';
@@ -43,6 +43,12 @@ export default function Templates() {
   useEffect(() => {
     api('/api/templates').then((r) => setList(r.templates)).catch(() => setList([]));
   }, []);
+  const anyWaiting = (list || []).some((t) => metaState(t) === 'waiting');
+  useEffect(() => {
+    if (!anyWaiting) return undefined;
+    const timer = setInterval(() => api('/api/templates').then((r) => setList(r.templates)).catch(() => {}), 30000);
+    return () => clearInterval(timer);
+  }, [anyWaiting]);
 
   // A ready-made template is saved the first time it is opened, then edited like any other.
   async function openReady(m) {
@@ -113,63 +119,65 @@ export default function Templates() {
         {canWrite && <Link to="/templates/new" className="btn sm"><Plus size={16} />New template</Link>}
       </div>
       {!canWrite && <p className="subtle" style={{ marginTop: -4, marginBottom: 12 }}>Only the store manager or owner can add or change templates.</p>}
-      {needsMeta && <p className="subtle" style={{ marginTop: -4, marginBottom: 12 }}>Only templates <b>approved by Meta</b> can be sent. Open a template and press “Submit to Meta” to ask for approval.</p>}
+      {needsMeta && <p className="subtle" style={{ marginTop: -4, marginBottom: 12 }}>Only templates <b>approved by Meta</b> can be sent. Open a template and press “Save and send to Meta”; the status updates by itself.</p>}
       {!list ? (
-        <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
-          {[0, 1, 2].map((i) => <div key={i} className="card card-pad"><Skeleton h={16} w="50%" /><Skeleton h={80} style={{ marginTop: 14 }} /></div>)}
-        </div>
+        <div className="card stack" style={{ padding: 20 }}>{[0, 1, 2].map((i) => <Skeleton key={i} h={44} />)}</div>
       ) : list.length === 0 && !canWrite ? (
         <div className="card card-pad subtle">No templates yet.</div>
       ) : (
-        <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
-          {canWrite && (
-            <Link to="/templates/new" className="card card-pad new-tpl-card">
-              <span className="new-tpl-plus"><Plus size={28} /></span>
-              <b>Create a new template</b>
-              <span className="subtle">Write your own wording. Add the customer's name, an offer and a photo, and see it on a phone as you type.</span>
-            </Link>
-          )}
-          {list.length > 0 && shown.length === 0 && (
-            <p className="subtle">No template matches. Try other words, or make a new one.</p>
-          )}
-          {shown.map((t) => {
-            const [tone, label] = needsMeta ? META_BADGE[metaState(t)] : STATUS[t.status] || ['neutral', t.status];
-            return (
-              <Link key={t.id} to={`/templates/${t.id}`} className={`card card-pad stack ${ok(t) ? 'tpl-approved' : ''}`} style={{ textDecoration: 'none', color: 'inherit', gap: 10 }}>
-                <div className="row between" style={{ gap: 8 }}>
-                  <span className="row" style={{ gap: 8, minWidth: 0 }}><Pic name={iconFor(t.name)} size={28} /><h3 style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{t.name}</h3></span>
-                  {t.video_url && <span className="badge neutral" style={{ flexShrink: 0 }}><Film size={13} />Video</span>}
-                  <span className={`badge ${tone}`} style={{ flexShrink: 0 }}>{tone === 'ok' && <Check size={13} />}{label}</span>
-                </div>
-                <div style={{ background: 'var(--wa-chat)', borderRadius: 12, padding: 10 }}>
-                  <div className="bubble" style={{ maxWidth: '100%', display: '-webkit-box', WebkitLineClamp: 5, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                    <Highlighted body={toFriendly(t.body)} />
-                  </div>
-                  {t.buttons.length > 0 && (
-                    <div className="row wrap" style={{ gap: 6, marginTop: 6 }}>
-                      {t.buttons.map((b, i) => (
-                        <span key={i} className="wa-btn" style={{ padding: '5px 10px', fontSize: '0.8rem' }}>
-                          {b.type === 'url' ? <ExternalLink size={13} /> : b.type === 'phone' ? <Phone size={13} /> : <Reply size={13} />}{b.text}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <div className="row between" style={{ gap: 8 }} onClick={(e) => asking === t.id && e.preventDefault()}>
-                  <span className="subtle">Updated {dateOnly(t.updated_at)}{t.used_in ? ` · sent ${t.used_in} time${t.used_in > 1 ? 's' : ''}` : ''}</span>
-                  {canWrite && (asking === t.id ? (
-                    <span className="row" style={{ gap: 6 }}>
-                      <span className="subtle">Delete this template?</span>
-                      <button type="button" className="btn sm" onClick={(e) => { e.preventDefault(); setAsking(null); }}>Keep</button>
-                      <button type="button" className="btn sm danger" onClick={(e) => { e.preventDefault(); removeTemplate(t); }}>Yes, delete</button>
+        <div className="card">
+          <div className="tpl-table" role="table" aria-label="Your templates">
+            <div className="tpl-row tpl-head" role="row">
+              <span role="columnheader">Template</span>
+              <span role="columnheader">Has</span>
+              <span role="columnheader">{needsMeta ? 'Meta approval' : 'Status'}</span>
+              <span role="columnheader">Used</span>
+              <span role="columnheader" />
+            </div>
+            {list.length > 0 && shown.length === 0 && <p className="subtle" style={{ padding: 20 }}>No template matches. Try other words, or make a new one.</p>}
+            {list.length === 0 && <p className="subtle" style={{ padding: 20 }}>No templates yet. Make one with “New template”, or start from a ready-made one above.</p>}
+            {shown.map((t) => {
+              const [tone, label] = needsMeta ? META_BADGE[metaState(t)] : STATUS[t.status] || ['neutral', t.status];
+              return (
+                <div key={t.id} className={`tpl-row ${ok(t) ? 'tpl-ok' : ''}`} role="row" onClick={() => navigate(`/templates/${t.id}`)}>
+                  <span className="tpl-cell-name" role="cell">
+                    <span className="row" style={{ gap: 8, minWidth: 0 }}>
+                      <Pic name={iconFor(t.name)} size={26} />
+                      <b className="ellipsis">{t.name}</b>
                     </span>
-                  ) : (
-                    <button type="button" className="btn ghost sm danger" onClick={(e) => { e.preventDefault(); setAsking(t.id); }} aria-label={`Delete ${t.name}`}><Trash2 size={15} />Delete</button>
-                  ))}
+                    <span className="tpl-preview">{toFriendly(t.body).replace(/\s*\n+\s*/g, ' ')}</span>
+                  </span>
+                  <span className="tpl-has" role="cell">
+                    {t.video_url && <span title="Video"><Film size={16} />Video</span>}
+                    {t.image_url && <span title="Photo"><Image size={16} />Photo</span>}
+                    {t.buttons.length > 0 && <span title={t.buttons.map((b) => b.text).join(', ')}><MousePointerClick size={16} />{t.buttons.length === 1 ? t.buttons[0].text : `${t.buttons.length} buttons`}</span>}
+                    {!t.video_url && !t.image_url && !t.buttons.length && <span className="subtle">Text only</span>}
+                  </span>
+                  <span role="cell">
+                    <span className={`badge ${tone}`}>{tone === 'ok' && <Check size={13} />}{label}</span>
+                    {needsMeta && metaState(t) === 'waiting' && <span className="subtle tpl-note">Updates by itself</span>}
+                    {needsMeta && metaState(t) === 'rejected' && t.provider_reason && <span className="subtle tpl-note">{t.provider_reason}</span>}
+                  </span>
+                  <span className="subtle tpl-used" role="cell">{t.used_in ? `${t.used_in} time${t.used_in > 1 ? 's' : ''}` : 'Not yet'}<br />Updated {dateOnly(t.updated_at)}</span>
+                  <span className="tpl-actions" role="cell" onClick={(e) => e.stopPropagation()}>
+                    {asking === t.id ? (
+                      <>
+                        <span className="subtle">Delete?</span>
+                        <button type="button" className="btn sm" onClick={() => setAsking(null)}>Keep</button>
+                        <button type="button" className="btn sm danger" onClick={() => removeTemplate(t)}>Yes, delete</button>
+                      </>
+                    ) : (
+                      <>
+                        {ok(t) && <Link to={`/campaigns/new?template=${t.id}`} className="btn sm primary"><Send size={14} />Use</Link>}
+                        <Link to={`/templates/${t.id}`} className="btn sm ghost"><Pencil size={14} />Edit</Link>
+                        {canWrite && <button type="button" className="btn sm ghost danger" onClick={() => setAsking(t.id)} aria-label={`Delete ${t.name}`}><Trash2 size={14} /></button>}
+                      </>
+                    )}
+                  </span>
                 </div>
-              </Link>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       )}
     </div>

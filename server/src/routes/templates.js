@@ -1,10 +1,9 @@
 import express from 'express';
 import { query } from '../db/index.js';
 import { validateTemplate, cleanButtons, extractVariables, VARIABLES } from '../lib/template.js';
-import { buildProvider, getProvider } from '../providers/index.js';
 import { requireLevel } from './auth.js';
-import { savedMetaProvider } from '../lib/whatsapp-connection.js';
 import { mediaBytes } from './media.js';
+import { metaProvider, syncTemplate } from '../lib/template-approval.js';
 
 const router = express.Router();
 const canEdit = requireLevel('manager');
@@ -105,21 +104,9 @@ router.post('/:id/submit-meta', canEdit, async (req, res) => {
 router.post('/:id/sync-meta', async (req, res) => {
   const t = await find(req.clientId, req.params.id);
   if (!t?.provider_ref) return res.status(400).json({ error: 'This template has not been submitted to Meta.' });
-  const s = await metaProvider().templateStatus(t.provider_ref);
-  if (!s) return res.status(404).json({ error: `Meta has no template named ${t.provider_ref}.` });
-  // Meta's version must carry the same kind of header as this one: a template approved with a photo
-  // cannot send a video (Meta refuses it with #132018), so it needs "Submit again" first.
-  const want = t.video_url ? 'VIDEO' : t.image_url ? 'IMAGE' : null;
-  const has = s.header === 'IMAGE' || s.header === 'VIDEO' ? s.header : null;
-  const KIND = { IMAGE: 'a photo', VIDEO: 'a video' };
-  const mismatch = s.status === 'APPROVED' && want !== has;
-  const { rows: [u] } = await query(
-    `UPDATE templates SET provider_status = $2, provider_reason = $3, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = $1 RETURNING *`,
-    [t.id, mismatch ? null : s.status, mismatch
-      ? `Meta approved this message with ${KIND[has] || 'no photo or video'}, but it now has ${KIND[want] || 'none'}. Press “Submit again”.`
-      : s.reason],
-  );
-  res.json({ template: withVars(u), mismatch });
+  const r = await syncTemplate(t);
+  if (!r) return res.status(404).json({ error: `Meta has no template named ${t.provider_ref}.` });
+  res.json({ template: withVars(r.template), mismatch: r.mismatch });
 });
 
 /** The message's photo or video bytes (from the app's own store, or its web link) for Meta's sample. */
@@ -136,11 +123,6 @@ async function photoSample(url) {
   }
 }
 
-function metaProvider() {
-  const p = getProvider();
-  if (p.name === 'meta') return p;
-  return savedMetaProvider() || buildProvider('meta');
-}
 
 function normalise(b = {}) {
   return {
