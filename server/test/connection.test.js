@@ -1,12 +1,14 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import request from 'supertest';
 import { assertConfig } from '../src/config.js';
-import { initDb, closeDb, ensureClient } from '../src/db/index.js';
+import { initDb, closeDb, ensureClient, query } from '../src/db/index.js';
 import { createApp } from '../src/app.js';
 import { createUser } from '../src/routes/auth.js';
 import { getProvider } from '../src/providers/index.js';
 import { seal, open } from '../src/lib/secretbox.js';
 import { resetConnectionCache } from '../src/lib/whatsapp-connection.js';
+import { drain } from '../src/lib/dispatch.js';
+import '../src/lib/sender.js';
 
 const realFetch = globalThis.fetch;
 let owner;
@@ -20,6 +22,7 @@ function fakeMeta({ fail } = {}) {
     const json = (status, body) => ({ ok: status < 400, status, json: async () => body });
     if (fail) return json(401, { error: { code: 190, message: 'Session has expired' } });
     if (String(url).includes('/subscribed_apps')) return json(200, { success: true });
+    if (String(url).endsWith('/555000111/messages')) return json(200, { messages: [{ id: 'wamid.TEST1' }] });
     if (String(url).includes('debug_token')) return json(200, { data: { is_valid: true, expires_at: 0 } });
     if (String(url).includes('/555000111')) return json(200, { display_phone_number: '+91 90000 33333', verified_name: 'Swathi Tanishq', quality_rating: 'GREEN', code_verification_status: 'VERIFIED', messaging_limit_tier: 'TIER_2K' });
     if (String(url).includes('/777000222')) return json(200, { name: 'Swathi Tanishq', account_review_status: 'APPROVED' });
@@ -106,6 +109,28 @@ describe('Connect WhatsApp (owner only)', () => {
     const settings = await owner.get('/api/dashboard/settings');
     expect(settings.body.provider.name).toBe('meta');
     await owner.post('/api/whatsapp/live').send({ live: false });
+    expect(getProvider().name).toBe('mock');
+  });
+
+  it('sends “Send a test to my phone” through the connected WhatsApp while still in Test mode', async () => {
+    const clientId = await ensureClient('Test Store');
+    const { rows: [t] } = await query(
+      `INSERT INTO templates (client_id, name, body, status, category, provider_ref, provider_status)
+       VALUES ($1, 'Hello', 'Hello from the shop', 'approved', 'utility', 'hello_world', 'APPROVED') RETURNING *`,
+      [clientId],
+    );
+    const calls = fakeMeta();
+    resetConnectionCache(); // rebuilt with this fake Meta
+    expect(getProvider().name).toBe('mock');
+    const res = await owner.post('/api/campaigns/test').send({ templateId: t.id, phone: '90000 44444' });
+    expect(res.status).toBe(201);
+    expect(res.body.campaign.provider).toBe('meta');
+    await drain();
+    expect(calls.some((c) => c.url.endsWith('/555000111/messages') && c.method === 'POST')).toBe(true);
+    const { rows: [m] } = await query('SELECT status, provider, provider_message_id FROM messages WHERE campaign_id = $1', [res.body.campaign.id]);
+    expect(m).toMatchObject({ status: 'sent', provider: 'meta', provider_message_id: 'wamid.TEST1' });
+    expect((await owner.get('/api/whatsapp')).body.ready.testSentAt).toBeTruthy();
+    // Normal sends stay pretend until Go live.
     expect(getProvider().name).toBe('mock');
   });
 

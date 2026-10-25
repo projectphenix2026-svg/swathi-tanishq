@@ -4,7 +4,7 @@
 //   otherwise the app keeps the provider from the environment (test mode).
 import { config } from '../config.js';
 import { query } from '../db/index.js';
-import { buildProvider, setProvider } from '../providers/index.js';
+import { buildProvider, getProvider, setProvider } from '../providers/index.js';
 import { createMetaProvider } from '../providers/meta.js';
 import { open } from './secretbox.js';
 import { TIERS } from './pacing.js';
@@ -59,6 +59,15 @@ export async function refreshProvider({ force = false } = {}) {
 /** Meta provider for template approval and webhooks: the saved connection if there is one. */
 export function savedMetaProvider() {
   return connectionProvider;
+}
+
+/**
+ * Provider for "Send a test to my phone". In Test mode it is the saved connection, so the owner
+ * can see a real message reach their own phone before Go live; otherwise the active provider.
+ */
+export function testProvider() {
+  const active = getProvider();
+  return active.name === 'mock' && connectionProvider ? connectionProvider : active;
 }
 
 /** The verify token Meta must echo when the webhook is set up (saved connection or env). */
