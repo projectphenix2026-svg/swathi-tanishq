@@ -10,6 +10,7 @@ import { shopValues } from './shop.js';
 import { cleanPrefix, makeOfferCode } from './offers.js';
 import { setRunner, kick } from './dispatch.js';
 import { retryTomorrow } from './messages.js';
+import { testProvider } from './whatsapp-connection.js';
 
 // WhatsApp errors meaning "this number cannot get WhatsApp": SMS backup is worth trying.
 export const NOT_ON_WHATSAPP = new Set(['63003', '63024', '131026']);
@@ -79,7 +80,8 @@ export async function processSendJob(messageId) {
       result = await sms.send({ to: contact.phone, text: body, dltTemplateId: template?.sms_dlt_template_id });
       if (sms.live) cost = config.sms.costPerSms;
     } else {
-      const provider = getProvider();
+      // "Send a test to my phone" uses the connected WhatsApp even in Test mode.
+      const provider = campaign?.name.startsWith('Test · ') ? testProvider() : getProvider();
       providerName = provider.name;
       const payload = { to: contact.phone, body, buttons: msg.buttons || [], imageUrl: msg.image_url, template, values, idempotencyKey: msg.idempotency_key };
       result = isReply ? await provider.sendText(payload) : await provider.send(payload);
