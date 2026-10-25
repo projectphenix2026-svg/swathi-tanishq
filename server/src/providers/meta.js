@@ -80,7 +80,7 @@ export function createMetaProvider(cfg, { fetchImpl = fetch } = {}) {
      * Business-initiated messages must use an approved template (template.provider_ref
      * holds its Meta name). Placeholders become positional {{1}}, {{2}}... in order.
      */
-    async send({ to, template, values, imageUrl }) {
+    async send({ to, template, values, imageUrl, videoUrl }) {
       if (!template?.provider_ref) {
         throw new ProviderError('This template has not been approved by Meta yet (no Meta template name).', {
           code: 132001,
@@ -88,10 +88,10 @@ export function createMetaProvider(cfg, { fetchImpl = fetch } = {}) {
       }
       const params = extractVariables(template.body).map((k) => ({ type: 'text', text: String(values?.[k] ?? '') }));
       const components = [];
-      // Messages approved with a video or photo header carry it every time (a photo can be this offer's own).
+      // Messages approved with a video or photo header carry it every time; the file can be this offer's own.
       const photo = imageUrl || template.image_url;
       if (template.video_url) {
-        components.push({ type: 'header', parameters: [{ type: 'video', video: { link: template.video_url } }] });
+        components.push({ type: 'header', parameters: [{ type: 'video', video: { link: videoUrl || template.video_url } }] });
       } else if (template.image_url && photo) {
         components.push({ type: 'header', parameters: [{ type: 'image', image: { link: photo } }] });
       }

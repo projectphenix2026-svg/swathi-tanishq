@@ -239,12 +239,17 @@ export async function queueMessages(clientId, { audience, template, variables, k
   const sql = `INSERT OR IGNORE INTO messages
       (client_id, campaign_id, occasion_id, contact_id, channel, template_id, variables, idempotency_key, buttons, image_url, status, due_at)
     SELECT c.client_id, ${p(campaignId)}, ${p(occasionId)}, c.id, ${p(channel)}, ${p(template.id)}, ${p(variables || {})},
-           ${p(keyPrefix)} || c.id || ${p(keySuffix)}, ${p(channel === 'sms' ? [] : template.buttons || [])}, ${p(channel === 'sms' ? null : variables?.image_url || template.image_url || null)}, 'queued',
+           ${p(keyPrefix)} || c.id || ${p(keySuffix)}, ${p(channel === 'sms' ? [] : template.buttons || [])}, ${p(channel === 'sms' || !template.image_url ? null : offerFile(variables?.image_url) || template.image_url)}, 'queued',
            COALESCE(${p(dueAt)}, ${NOW})
       FROM contacts c
      WHERE ${where} AND ${ELIGIBLE}${all.length ? ' AND ' + all.join(' AND ') : ''}`;
   const { rowCount } = await query(sql, params);
   return rowCount;
+}
+
+/** An offer's own photo/video link, if it is a web link (else the template's is used). */
+export function offerFile(url) {
+  return typeof url === 'string' && /^https?:\/\/\S+$/i.test(url) ? url : null;
 }
 
 /** Queues the campaign's messages; they go out when due (now, or the scheduled time). */
