@@ -21,11 +21,19 @@ import { refreshProvider } from './lib/whatsapp-connection.js';
 export function createApp() {
   const app = express();
   app.set('trust proxy', 1);
+  // API answers are personal and change all the time: no ETags, and browsers must never keep a copy.
+  // (A cached /api/auth/me left signed-in browsers on an endless spinner after a reload.)
+  app.set('etag', false);
   app.use(helmet());
   app.use(cors({ origin: config.webOrigin.split(',').map((s) => s.trim()), credentials: true }));
   // Keep the raw body: Meta signs the exact bytes it sends.
   app.use(express.json({ limit: '20mb', verify: (req, _res, buf) => { req.rawBody = buf; } }));
   app.use(cookieParser());
+
+  app.use('/api', (req, res, next) => {
+    res.set('Cache-Control', 'no-store');
+    next();
+  });
 
   app.get('/health', (req, res) => res.json({ ok: true }));
   // Use the shop's own WhatsApp account once the owner has connected it and switched it on.

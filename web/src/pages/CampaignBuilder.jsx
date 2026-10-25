@@ -16,6 +16,7 @@ import { atLeast } from '@shared/roles.js';
 import { SHOP_KEYS, shopVars } from '../lib/shop.js';
 import { CustomersStep, LeftOut } from '../components/CustomerPicker.jsx';
 import { TemplateChooser } from '../components/TemplatePicker.jsx';
+import { metaState } from '../lib/approval.js';
 
 // Send a message in three steps: pick a template, pick customers, check and send.
 const STEPS = ['Template', 'Customers', 'Check and send'];
@@ -31,6 +32,8 @@ export default function CampaignBuilder() {
   const { t } = useT();
   const salesCodes = Boolean(settings?.salesCodes);
   const smsOn = Boolean(settings?.sms?.live);
+  // With WhatsApp connected, only templates Meta approved can be sent.
+  const needsMeta = Boolean(settings?.metaTemplatesReady);
 
   const [step, setStep] = useState(0);
   const [templates, setTemplates] = useState(null);
@@ -91,7 +94,7 @@ export default function CampaignBuilder() {
   const blank = neededVars.find((v) => !String(variables[v.key] || '').trim());
 
   const stepError = [
-    !template ? 'Pick a template.' : blank ? `Fill in the ${blank.label.toLowerCase()}.` : null,
+    !template ? 'Pick a template.' : needsMeta && !isSms && metaState(template) !== 'approved' ? 'Meta has not approved this template yet. Pick an approved one.' : blank ? `Fill in the ${blank.label.toLowerCase()}.` : null,
     pick.only && !pick.ids.length ? 'Tick at least one customer.' : preview && sendCount === 0 ? (preview.atCap > 0 && preview.atCap === preview.eligible ? 'Everyone here already got this week’s messages. Try again in a few days.' : 'None of these customers can get this message.') : null,
     when.mode === 'later' && (!when.at || new Date(when.at).getTime() < Date.now()) ? 'Pick a time in the future.' : isSms && !template?.sms_body ? 'This template has no SMS version.' : sendCount >= 500 && !bigOk ? 'Tick the box to confirm this large send.' : !name.trim() ? 'Give it a name for your reports.' : null,
   ][step];
@@ -149,7 +152,7 @@ export default function CampaignBuilder() {
         <div className="stack" style={{ minWidth: 0 }}>
           {step === 0 && (
             <TemplateStep
-              t={t} templates={templates} setTemplates={setTemplates} templateId={templateId} setTemplateId={setTemplateId}
+              t={t} templates={templates} setTemplates={setTemplates} templateId={templateId} setTemplateId={setTemplateId} needsMeta={needsMeta}
               neededVars={neededVars} variables={variables} setVariables={setVariables} salesCodes={salesCodes} template={template} toast={toast}
             />
           )}
@@ -233,7 +236,7 @@ export default function CampaignBuilder() {
 }
 
 /* ---------- Step 1: Template ---------- */
-function TemplateStep({ t, templates, setTemplates, templateId, setTemplateId, neededVars, variables, setVariables, salesCodes, template, toast }) {
+function TemplateStep({ t, templates, setTemplates, templateId, setTemplateId, neededVars, variables, setVariables, salesCodes, template, toast, needsMeta }) {
   const [busyKey, setBusyKey] = useState(null);
   // Messages are offered in this person's app language; another language can be picked for one send.
   const { lang: appLang } = useT();
@@ -278,8 +281,8 @@ function TemplateStep({ t, templates, setTemplates, templateId, setTemplateId, n
   // Every template in one searchable list: the ready-made ones (in the message language) and the shop's own.
   const ready = READY_MESSAGES.map((m) => ({ m, r: readyFor(m, lang, salesCodes) }));
   const items = [
-    ...ready.map(({ m, r }) => ({ key: `ready:${m.key}`, ready: true, m, name: r.name, title: t(m.title), body: r.body, pic: m.pic })),
-    ...templates.filter((x) => !READY_NAMES.has(x.name)).map((x) => ({ key: `t:${x.id}`, id: x.id, name: x.name, body: x.body, pic: 'memo' })),
+    ...ready.map(({ m, r }) => ({ key: `ready:${m.key}`, ready: true, m, name: r.name, title: t(m.title), body: r.body, pic: m.pic, meta: needsMeta ? metaState(templates.find((x) => x.name === r.name)) : null })),
+    ...templates.filter((x) => !READY_NAMES.has(x.name)).map((x) => ({ key: `t:${x.id}`, id: x.id, name: x.name, body: x.body, pic: 'memo', meta: needsMeta ? metaState(x) : null })),
   ];
   const readyChosen = template && ready.find(({ r }) => r.name === template.name);
   const chosenKey = !template ? null : readyChosen ? `ready:${readyChosen.m.key}` : `t:${template.id}`;
@@ -416,6 +419,20 @@ function TestSend({ template, variables, previewAs, channel }) {
   });
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(null);
+  // Meta can still refuse a message after Sandesh hands it over, so watch the test for ~20 seconds
+  // and say what really happened (reached the phone, or why not).
+  async function watchTest(r) {
+    if (r.campaign.provider === 'mock') return setSent({ ...r, outcome: 'pretend' });
+    for (let i = 0; i < 8; i++) {
+      await new Promise((ok) => setTimeout(ok, 2500));
+      const d = await api(`/api/campaigns/${r.campaign.id}`).catch(() => null);
+      const rep = d?.report;
+      if (!rep) continue;
+      if (rep.failed > 0 || rep.cancelled > 0) return setSent({ ...r, outcome: 'failed', reason: rep.failureReasons?.[0]?.reason || 'Unknown reason' });
+      if (rep.delivered > 0) return setSent({ ...r, outcome: 'delivered' });
+    }
+    setSent((x) => (x?.outcome === 'checking' ? { ...x, outcome: 'unknown' } : x));
+  }
   async function go() {
     setBusy(true);
     try {
@@ -425,8 +442,9 @@ function TestSend({ template, variables, previewAs, channel }) {
         // Private window: the number just isn't remembered.
       }
       const r = await api('/api/campaigns/test', { method: 'POST', body: { templateId: template.id, variables, phone: phoneNo, asContactId: previewAs?.id, channel } });
-      setSent(r);
-      toast(`Test sent to ${r.phone}`);
+      setSent({ ...r, outcome: 'checking' });
+      toast(`Test going to ${r.phone}`);
+      watchTest(r);
     } catch (e) {
       toast(e.message, 'bad');
     } finally {
@@ -450,10 +468,29 @@ function TestSend({ template, variables, previewAs, channel }) {
           <input id="test-phone" className="input" style={{ maxWidth: 220 }} inputMode="tel" autoComplete="tel" placeholder="Your WhatsApp number" value={phoneNo} onChange={(e) => setPhoneNo(e.target.value)} aria-label="Your WhatsApp number" />
           <button className="btn" onClick={go} disabled={busy || !phoneNo.trim() || !template}>{busy ? <Spinner /> : 'Send test'}</button>
         </div>
-        {sent && <span className="subtle">Sent to {sent.phone}. Check WhatsApp on that phone.</span>}
+        {sent && <TestOutcome sent={sent} />}
       </div>
     </div>
   );
+}
+
+/** What happened to a test message, in plain words. */
+function TestOutcome({ sent }) {
+  const { outcome, phone: to, reason = '' } = sent;
+  if (outcome === 'checking') return <span className="subtle row" style={{ gap: 6 }}><Spinner size={14} />Sending to {to}… checking it reaches the phone.</span>;
+  if (outcome === 'delivered') return <span className="row" style={{ gap: 6, color: 'var(--ok)' }}><Check size={16} />Reached {to}. Check WhatsApp on that phone.</span>;
+  if (outcome === 'pretend') return <span className="subtle">Test mode: nothing really went to {to}.</span>;
+  if (outcome === 'failed') {
+    const hint = /payment|eligib/i.test(reason)
+      ? 'Add money to the WhatsApp (Messaging) account in Meta Billing Hub, then try again.'
+      : /hello world/i.test(reason)
+        ? 'Meta only allows hello_world from its test numbers. Use one of your own approved templates.'
+        : /not approved|does not exist|template/i.test(reason)
+          ? 'Check the template is approved by Meta (Templates page), then try again.'
+          : 'See Send → Sent messages for details.';
+    return <span className="row" style={{ gap: 6, color: 'var(--bad)', alignItems: 'flex-start' }}><AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 2 }} /><span><b>Did not reach {to}.</b> Meta said: {reason}. {hint}</span></span>;
+  }
+  return <span className="subtle">Handed to WhatsApp for {to}. If it does not arrive in a minute, see Send → Sent messages.</span>;
 }
 
 function exampleCode(name, prefix) {

@@ -924,7 +924,19 @@
   "Store manager": "షాప్ మేనేజర్",
   "Logins and roles": "లాగిన్‌లు, పాత్రలు",
   "Add a login": "లాగిన్ జోడించండి",
-  "Email they sign in with": "వారు సైన్ ఇన్ చేసే ఇమెయిల్"
+  "Email they sign in with": "వారు సైన్ ఇన్ చేసే ఇమెయిల్",
+  "Not sent to Meta": "Meta కు పంపలేదు",
+  "Not approved yet": "ఇంకా ఆమోదం రాలేదు",
+  "Meta has not approved this template yet, so it cannot be sent.": "Meta ఇంకా ఈ టెంప్లేట్‌ను ఆమోదించలేదు, కాబట్టి పంపలేరు.",
+  "No approved template matches yet.": "ఆమోదం పొందిన టెంప్లేట్ ఏదీ సరిపోలలేదు.",
+  "Not approved by Meta yet: cannot be sent": "Meta ఇంకా ఆమోదించలేదు: పంపలేరు",
+  "Open it on the Templates page and press “Submit to Meta”. Approval usually takes minutes to a few hours.": "టెంప్లేట్‌ల పేజీలో తెరిచి “Submit to Meta” నొక్కండి. ఆమోదానికి సాధారణంగా కొన్ని నిమిషాల నుండి కొన్ని గంటలు పడుతుంది.",
+  "Meta has not approved this template yet. Pick an approved one.": "Meta ఇంకా ఈ టెంప్లేట్‌ను ఆమోదించలేదు. ఆమోదం పొందినదాన్ని ఎంచుకోండి.",
+  "Only templates": "ఈ టెంప్లేట్‌లు మాత్రమే",
+  "can be sent. Open a template and press “Submit to Meta” to ask for approval.": "పంపగలరు. ఆమోదం కోసం టెంప్లేట్ తెరిచి “Submit to Meta” నొక్కండి.",
+  "Sandesh could not open": "Sandesh తెరుచుకోలేదు",
+  "Try again": "మళ్ళీ ప్రయత్నించండి",
+  "The server is taking too long to answer. Check your internet connection and try again.": "సర్వర్ జవాబు ఇవ్వడానికి చాలా సమయం తీసుకుంటోంది. ఇంటర్నెట్ చూసి మళ్ళీ ప్రయత్నించండి."
  },
  "hi": {
   "% read": "% ने पढ़ा",
@@ -1850,6 +1862,18 @@
   "Store manager": "दुकान प्रबंधक",
   "Logins and roles": "लॉगिन और भूमिकाएँ",
   "Add a login": "लॉगिन जोड़ें",
-  "Email they sign in with": "जिस ईमेल से वे साइन इन करते हैं"
+  "Email they sign in with": "जिस ईमेल से वे साइन इन करते हैं",
+  "Not sent to Meta": "Meta को नहीं भेजा",
+  "Not approved yet": "अभी मंज़ूरी नहीं मिली",
+  "Meta has not approved this template yet, so it cannot be sent.": "Meta ने यह टेम्पलेट अभी मंज़ूर नहीं किया, इसलिए इसे भेजा नहीं जा सकता।",
+  "No approved template matches yet.": "कोई मंज़ूर टेम्पलेट नहीं मिला।",
+  "Not approved by Meta yet: cannot be sent": "Meta की मंज़ूरी बाकी: भेजा नहीं जा सकता",
+  "Open it on the Templates page and press “Submit to Meta”. Approval usually takes minutes to a few hours.": "टेम्पलेट पेज पर खोलें और “Submit to Meta” दबाएँ। मंज़ूरी में आमतौर पर कुछ मिनट से कुछ घंटे लगते हैं।",
+  "Meta has not approved this template yet. Pick an approved one.": "Meta ने यह टेम्पलेट अभी मंज़ूर नहीं किया। कोई मंज़ूर टेम्पलेट चुनें।",
+  "Only templates": "सिर्फ़ वही टेम्पलेट",
+  "can be sent. Open a template and press “Submit to Meta” to ask for approval.": "भेजे जा सकते हैं। मंज़ूरी के लिए टेम्पलेट खोलें और “Submit to Meta” दबाएँ।",
+  "Sandesh could not open": "Sandesh नहीं खुला",
+  "Try again": "फिर से कोशिश करें",
+  "The server is taking too long to answer. Check your internet connection and try again.": "सर्वर जवाब देने में बहुत देर लगा रहा है। इंटरनेट देखें और फिर से कोशिश करें।"
  }
 }

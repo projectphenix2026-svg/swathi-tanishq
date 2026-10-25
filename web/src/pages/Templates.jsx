@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ExternalLink, Phone, Plus, Reply, Trash2 } from 'lucide-react';
+import { Check, ExternalLink, Phone, Plus, Reply, Trash2 } from 'lucide-react';
 import { SearchBox, matches } from '../components/SearchBox.jsx';
 import { api } from '../lib/api.js';
 import { Pic, Skeleton, Spinner, useToast } from '../components/ui.jsx';
@@ -12,6 +12,7 @@ import { LANGS, isReadyText, readyFor, readyIn } from '../lib/ready-lang.js';
 import { useAuth } from '../lib/auth.js';
 import { atLeast } from '@shared/roles.js';
 import { useT } from '../lib/i18n.jsx';
+import { META_BADGE, isApproved, metaState } from '../lib/approval.js';
 
 const STATUS = { approved: ['ok', 'Ready'], draft: ['neutral', 'Not finished'], rejected: ['bad', 'Needs a change'] };
 const READY_NAMES = new Set(READY_MESSAGES.flatMap((m) => LANGS.map((l) => readyIn(m, l.code).name)));
@@ -62,6 +63,14 @@ export default function Templates() {
   }
 
   const own = (list || []).filter((t) => !READY_NAMES.has(t.name));
+  // With WhatsApp connected, "approved" means approved by Meta: only those can be sent.
+  const needsMeta = Boolean(settings?.metaTemplatesReady);
+  const ok = (t) => (needsMeta ? isApproved(t) : t.status === 'approved');
+  const all = [...own, ...(list || []).filter((t) => READY_NAMES.has(t.name))];
+  const nApproved = all.filter(ok).length;
+  // Approved ones first, so the ones that can be sent are easy to find.
+  const shown = all.filter((t) => matches(q, t.name, t.body) && (show === 'all' || (show === 'approved') === ok(t)))
+    .sort((a, b) => ok(b) - ok(a));
 
   return (
     <div className="page">
@@ -76,8 +85,12 @@ export default function Templates() {
       <div className="list-tools card" style={{ marginBottom: 16 }}>
         <SearchBox value={q} onChange={setQ} placeholder="Search templates by name or words" style={{ flex: '1 1 260px' }} />
         <div className="chips">
-          {[['all', 'All'], ['approved', 'Ready'], ['waiting', 'Not ready yet']].map(([k, label]) => (
-            <button key={k} type="button" className={`chip ${show === k ? 'on' : ''}`} onClick={() => setShow(k)}>{label}</button>
+          {[
+            ['all', 'All', all.length],
+            ['approved', needsMeta ? 'Approved by Meta' : 'Ready', nApproved],
+            ['waiting', needsMeta ? 'Not approved yet' : 'Not ready yet', all.length - nApproved],
+          ].map(([k, label, n]) => (
+            <button key={k} type="button" className={`chip ${show === k ? 'on' : ''}`} onClick={() => setShow(k)}>{label}{list ? ` (${n})` : ''}</button>
           ))}
         </div>
       </div>
@@ -100,6 +113,7 @@ export default function Templates() {
         {canWrite && <Link to="/templates/new" className="btn sm"><Plus size={16} />New template</Link>}
       </div>
       {!canWrite && <p className="subtle" style={{ marginTop: -4, marginBottom: 12 }}>Only the store manager or owner can add or change templates.</p>}
+      {needsMeta && <p className="subtle" style={{ marginTop: -4, marginBottom: 12 }}>Only templates <b>approved by Meta</b> can be sent. Open a template and press “Submit to Meta” to ask for approval.</p>}
       {!list ? (
         <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
           {[0, 1, 2].map((i) => <div key={i} className="card card-pad"><Skeleton h={16} w="50%" /><Skeleton h={80} style={{ marginTop: 14 }} /></div>)}
@@ -115,16 +129,16 @@ export default function Templates() {
               <span className="subtle">Write your own wording. Add the customer's name, an offer and a photo, and see it on a phone as you type.</span>
             </Link>
           )}
-          {list.length > 0 && [...own, ...list.filter((t) => READY_NAMES.has(t.name))].filter((t) => matches(q, t.name, t.body) && (show === 'all' || (show === 'approved' ? t.status === 'approved' : t.status !== 'approved'))).length === 0 && (
+          {list.length > 0 && shown.length === 0 && (
             <p className="subtle">No template matches. Try other words, or make a new one.</p>
           )}
-          {[...own, ...list.filter((t) => READY_NAMES.has(t.name))].filter((t) => matches(q, t.name, t.body) && (show === 'all' || (show === 'approved' ? t.status === 'approved' : t.status !== 'approved'))).map((t) => {
-            const [tone, label] = STATUS[t.status] || ['neutral', t.status];
+          {shown.map((t) => {
+            const [tone, label] = needsMeta ? META_BADGE[metaState(t)] : STATUS[t.status] || ['neutral', t.status];
             return (
-              <Link key={t.id} to={`/templates/${t.id}`} className="card card-pad stack" style={{ textDecoration: 'none', color: 'inherit', gap: 10 }}>
+              <Link key={t.id} to={`/templates/${t.id}`} className={`card card-pad stack ${ok(t) ? 'tpl-approved' : ''}`} style={{ textDecoration: 'none', color: 'inherit', gap: 10 }}>
                 <div className="row between" style={{ gap: 8 }}>
                   <span className="row" style={{ gap: 8, minWidth: 0 }}><Pic name={iconFor(t.name)} size={28} /><h3 style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{t.name}</h3></span>
-                  <span className={`badge ${tone}`}>{label}</span>
+                  <span className={`badge ${tone}`} style={{ flexShrink: 0 }}>{tone === 'ok' && <Check size={13} />}{label}</span>
                 </div>
                 <div style={{ background: 'var(--wa-chat)', borderRadius: 12, padding: 10 }}>
                   <div className="bubble" style={{ maxWidth: '100%', display: '-webkit-box', WebkitLineClamp: 5, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>

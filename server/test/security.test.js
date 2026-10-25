@@ -82,3 +82,16 @@ describe('Changing your own password', () => {
     expect((await other.get('/api/auth/me')).status).toBe(401);
   });
 });
+
+describe('Browser caching', () => {
+  it('never lets a browser keep a copy of an API answer (no ETag, no-store)', async () => {
+    for (const path of ['/api/auth/me', '/api/dashboard/settings', '/api/templates']) {
+      const res = await owner.get(path);
+      expect(res.status).toBe(200);
+      expect(res.headers['cache-control']).toBe('no-store');
+      expect(res.headers.etag).toBeUndefined();
+    }
+    const signedOut = await request(app).get('/api/auth/me');
+    expect(signedOut.headers['cache-control']).toBe('no-store');
+  });
+});

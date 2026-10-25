@@ -10,7 +10,7 @@ async function all(path, onProgress) {
   let rows = [];
   let after = 0;
   for (;;) {
-    const r = await api(`/api/export/${path}?after=${after}&limit=2000`);
+    const r = await api(`/api/export/${path}?after=${after}&limit=2000`, { timeout: 120000 });
     rows = rows.concat(r.rows);
     onProgress(rows.length);
     if (!r.next) return rows;
