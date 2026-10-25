@@ -134,6 +134,38 @@ describe('Connect WhatsApp (owner only)', () => {
     expect(getProvider().name).toBe('mock');
   });
 
+  it('refuses a test with a template changed after Meta approved it (photo added)', async () => {
+    const clientId = await ensureClient('Test Store');
+    const { rows: [t] } = await query(
+      `INSERT INTO templates (client_id, name, body, status, category, provider_ref, provider_status, image_url)
+       VALUES ($1, 'Changed', 'Hello again', 'approved', 'marketing', 'changed', NULL, 'https://x/p.jpg') RETURNING *`,
+      [clientId],
+    );
+    fakeMeta();
+    resetConnectionCache();
+    const res = await owner.post('/api/campaigns/test').send({ templateId: t.id, phone: '90000 44444' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/changed after Meta approved/);
+  });
+
+  it('sends a reply to someone who wrote in on the real WhatsApp for real, even in Test mode', async () => {
+    const clientId = await ensureClient('Test Store');
+    const { rows: [c] } = await query(
+      `INSERT INTO contacts (client_id, name, phone, whatsapp_opt_in) VALUES ($1, 'Real Chat', '+919000055555', 1) RETURNING *`, [clientId]);
+    await query(
+      `INSERT INTO messages (client_id, contact_id, direction, provider, status, body, idempotency_key) VALUES ($1, $2, 'inbound', 'meta', 'received', 'Hi', 'in:test-real-1')`,
+      [clientId, c.id]);
+    const calls = fakeMeta();
+    resetConnectionCache();
+    expect(getProvider().name).toBe('mock');
+    const res = await owner.post(`/api/inbox/${c.id}/reply`).send({ body: 'Thank you!' });
+    expect(res.status).toBeLessThan(300);
+    await drain();
+    expect(calls.some((x) => x.url.endsWith('/555000111/messages') && x.method === 'POST')).toBe(true);
+    const { rows: [m] } = await query(`SELECT provider, status FROM messages WHERE contact_id = $1 AND direction = 'outbound'`, [c.id]);
+    expect(m).toMatchObject({ provider: 'meta', status: 'sent' });
+  });
+
   it('disconnects and goes back to test mode', async () => {
     await owner.post('/api/whatsapp/live').send({ live: true });
     const res = await owner.delete('/api/whatsapp');

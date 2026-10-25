@@ -273,6 +273,7 @@ function ImportReview({ preview, onBack, onDone, onRemap }) {
         const r = await api('/api/customers/import/commit', {
           method: 'POST',
           body: { rows: toSave.slice(i, i + 500), optIn: { confirmed: optIn || smsOptIn ? confirmed : true, value: optIn, sms: smsOptIn }, updateExisting, source, tags: tags.split(','), defaultCity },
+          timeout: 120000, // 500 customers at a time can take a while
         });
         total.created += r.created;
         total.updated += r.updated;

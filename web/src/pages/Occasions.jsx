@@ -12,6 +12,7 @@ import { useT } from '../lib/i18n.jsx';
 import { shopVars } from '../lib/shop.js';
 import { atLeast } from '@shared/roles.js';
 import { TemplateChooser } from '../components/TemplatePicker.jsx';
+import { metaState } from '../lib/approval.js';
 import { CustomersStep } from '../components/CustomerPicker.jsx';
 import { WishPeople } from '../components/WishPeople.jsx';
 
@@ -331,6 +332,8 @@ function audienceToPick(a = {}) {
 }
 
 function OccasionEditor({ initial, templates, setTemplates, businessName, shop, smsOn, today, onClose, onSaved }) {
+  // With WhatsApp connected, only templates Meta approved can be sent.
+  const needsMeta = Boolean(useAuth().settings?.metaTemplatesReady);
   const toast = useToast();
   const { t } = useT();
   const isNew = !initial.id;
@@ -375,8 +378,8 @@ function OccasionEditor({ initial, templates, setTemplates, businessName, shop, 
   const wishNames = new Set(Object.values(READY_WISHES).map((w) => w.name));
   const wishes = Object.entries(READY_WISHES).sort(([a], [b]) => (a === kind ? -1 : b === kind ? 1 : 0));
   const items = [
-    ...wishes.map(([k, w]) => ({ key: `wish:${k}`, ready: true, wish: w, name: w.name, title: w.name.replace(/^\W+\s*/u, ''), body: w.body, pic: w.pic })),
-    ...templates.filter((x) => !wishNames.has(x.name)).map((x) => ({ key: `t:${x.id}`, id: x.id, name: x.name, body: x.body, pic: 'memo' })),
+    ...wishes.map(([k, w]) => ({ key: `wish:${k}`, ready: true, wish: w, name: w.name, title: w.name.replace(/^\W+\s*/u, ''), body: w.body, pic: w.pic, meta: needsMeta ? metaState(templates.find((x) => x.name === w.name)) : null })),
+    ...templates.filter((x) => !wishNames.has(x.name)).map((x) => ({ key: `t:${x.id}`, id: x.id, name: x.name, body: x.body, pic: 'memo', meta: needsMeta ? metaState(x) : null })),
   ];
   const wishKey = template && Object.keys(READY_WISHES).find((k) => READY_WISHES[k].name === template.name);
   const chosenKey = !template ? null : wishKey ? `wish:${wishKey}` : `t:${template.id}`;
@@ -413,7 +416,7 @@ function OccasionEditor({ initial, templates, setTemplates, businessName, shop, 
   const blank = needed.find((v) => !String(o.variables[v.key] || '').trim());
   const error = {
     Event: !o.name.trim() ? 'Give the event a name.' : null,
-    Template: !o.template_id ? 'Pick a template.' : blank ? `Fill in the ${blank.label.toLowerCase()}.` : null,
+    Template: !o.template_id ? 'Pick a template.' : needsMeta && template && metaState(template) !== 'approved' ? 'Meta has not approved this template yet. Pick an approved one.' : blank ? `Fill in the ${blank.label.toLowerCase()}.` : null,
     Customers: pick.only && !pick.ids.length ? 'Tick at least one customer.' : null,
     When: kind === 'festival' && !o.festival_date ? 'Pick the date.' : !o.days_before.length ? 'Pick when to send.' : null,
   }[stepName];

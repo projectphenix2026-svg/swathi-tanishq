@@ -70,6 +70,8 @@ export const config = {
   occasionCheckMinutes: Number(env.OCCASION_CHECK_MINUTES ?? 15),
   // Outbox: messages sent per run, and (Node only) seconds between runs. Cloudflare runs once a minute.
   sendBatchSize: Number(env.SEND_BATCH_SIZE || 20),
+  // Messages handed to WhatsApp at the same time within a run.
+  sendConcurrency: Number(env.SEND_CONCURRENCY || 3),
   dispatchSeconds: Number(env.DISPATCH_SECONDS ?? 5),
 };
 

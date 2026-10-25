@@ -25,7 +25,7 @@ export function setBackground(fn) {
  * Sends up to `limit` due messages, `concurrency` at a time. Returns how many it handled.
  * Kept small per run so a Cloudflare invocation stays within its CPU budget.
  */
-export async function processDue({ limit = config.sendBatchSize, concurrency = 3 } = {}) {
+export async function processDue({ limit = config.sendBatchSize, concurrency = config.sendConcurrency } = {}) {
   if (!runner) throw new Error('No sender registered');
   const due = `direction = 'outbound' AND status IN ('queued', 'retrying') AND due_at <= ${NOW}`;
   const p = await pace();

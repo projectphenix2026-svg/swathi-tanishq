@@ -36,14 +36,18 @@ export default function App() {
 
   const loadSettings = useCallback(() => api('/api/dashboard/settings').then(setSettings).catch(() => {}), []);
 
-  useEffect(() => {
+  // Not signed in -> login page; no answer from the server -> a message with Try again.
+  const [startError, setStartError] = useState(null);
+  const checkLogin = useCallback(() => {
+    setStartError(null);
     api('/api/auth/me')
       .then((r) => {
         setUser(r.user);
         loadSettings();
       })
-      .catch(() => setUser(null));
+      .catch((e) => (e.status === 401 || e.status === 403 ? setUser(null) : setStartError(e.message)));
   }, [loadSettings]);
+  useEffect(() => checkLogin(), [checkLogin]);
 
   useEffect(() => {
     setUnauthorizedHandler(() => {
@@ -76,7 +80,17 @@ export default function App() {
   );
 
   if (user === undefined) {
-    return <div style={{ display: 'grid', placeItems: 'center', height: '100%' }}><Spinner size={28} /></div>;
+    return (
+      <div style={{ display: 'grid', placeItems: 'center', height: '100%', padding: 16 }}>
+        {startError ? (
+          <div className="card card-pad stack" style={{ maxWidth: 380, gap: 12, textAlign: 'center' }}>
+            <b>Sandesh could not open</b>
+            <span className="subtle">{startError}</span>
+            <button className="btn primary" onClick={checkLogin}>Try again</button>
+          </div>
+        ) : <Spinner size={28} />}
+      </div>
+    );
   }
 
   return (

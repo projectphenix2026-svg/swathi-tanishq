@@ -178,9 +178,11 @@ function Thread({ contactId, onChange }) {
                     ))}
                   </span>
                 )}
-                <span className={`meta ${m.status === 'read' ? 'read' : m.status === 'failed' ? 'failed' : ''}`}>
+                <span className={`meta ${m.provider === 'mock' ? '' : m.status === 'read' ? 'read' : m.status === 'failed' ? 'failed' : ''}`}>
                   {timeOnly(m.created_at)}
-                  {m.direction === 'outbound' && <Tick status={m.status} />}
+                  {m.direction === 'outbound' && (m.provider === 'mock'
+                    ? <span className="pretend" title="Sent while Sandesh was in Test mode: it did not reach the customer">Test mode: not sent</span>
+                    : <Tick status={m.status} />)}
                 </span>
                 {m.status === 'failed' && m.error_message && <span className="meta failed" style={{ justifyContent: 'flex-start' }}>{m.error_message}</span>}
               </div>

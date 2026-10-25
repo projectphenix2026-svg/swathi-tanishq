@@ -14,8 +14,13 @@ export function setUnauthorizedHandler(fn) {
   onUnauthorized = fn;
 }
 
-export async function api(path, { method = 'GET', body, form } = {}) {
-  const init = { method, credentials: 'include', headers: {} };
+// A request that has not answered by then is given up, so no screen waits forever.
+const TIMEOUT_MS = 25000;
+const SLOW = 'The server is taking too long to answer. Check your internet connection and try again.';
+
+export async function api(path, { method = 'GET', body, form, timeout = TIMEOUT_MS } = {}) {
+  // Never answered from the browser's cache: the data is personal and changes all the time.
+  const init = { method, credentials: 'include', headers: {}, cache: 'no-store', signal: AbortSignal.timeout(timeout) };
   if (form) init.body = form;
   else if (body !== undefined) {
     init.headers['Content-Type'] = 'application/json';
@@ -24,7 +29,8 @@ export async function api(path, { method = 'GET', body, form } = {}) {
   let res;
   try {
     res = await fetch(`${BASE}${path}`, init);
-  } catch {
+  } catch (e) {
+    if (e?.name === 'TimeoutError') throw new ApiError(SLOW, 0);
     throw new ApiError('Cannot reach the server. Check your internet connection and try again.', 0);
   }
   const data = await res.json().catch(() => ({}));
@@ -39,8 +45,9 @@ export const fileUrl = (path) => `${BASE}${path}`;
 export async function apiText(path, body) {
   let res;
   try {
-    res = await fetch(`${BASE}${path}`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-  } catch {
+    res = await fetch(`${BASE}${path}`, { method: 'POST', credentials: 'include', cache: 'no-store', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(TIMEOUT_MS) });
+  } catch (e) {
+    if (e?.name === 'TimeoutError') throw new ApiError(SLOW, 0);
     throw new ApiError('Cannot reach the server. Check your internet connection and try again.', 0);
   }
   if (!res.ok) {

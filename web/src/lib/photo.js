@@ -34,6 +34,6 @@ export async function shrinkPhoto(file, max = 1200) {
 
 export async function uploadPhoto(file) {
   const dataUrl = await shrinkPhoto(file);
-  const r = await api('/api/media', { method: 'POST', body: { dataUrl } });
+  const r = await api('/api/media', { method: 'POST', body: { dataUrl }, timeout: 120000 }); // photos can be slow on mobile data
   return r.url;
 }

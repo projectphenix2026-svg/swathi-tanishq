@@ -10,6 +10,15 @@ export function createMetaProvider(cfg, { fetchImpl = fetch } = {}) {
   const { accessToken, phoneNumberId, appSecret, graphVersion, wabaId } = cfg;
   const url = `https://graph.facebook.com/${graphVersion}/${phoneNumberId}/messages`;
 
+  /** Meta's template with this name and language, if it was submitted before: { id, status }. */
+  async function findTemplate(name, language) {
+    const res = await fetchImpl(`https://graph.facebook.com/${graphVersion}/${wabaId}/message_templates?name=${encodeURIComponent(name)}&fields=id,name,language,status`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }).catch(() => null);
+    const data = (await res?.json().catch(() => ({}))) || {};
+    return (data.data || []).find((x) => x.name === name && x.language === language) || null;
+  }
+
   async function post(payload) {
     let res;
     try {
@@ -124,12 +133,15 @@ export function createMetaProvider(cfg, { fetchImpl = fetch } = {}) {
             : { type: 'QUICK_REPLY', text: b.text },
       );
       if (buttons.length) components.push({ type: 'BUTTONS', buttons });
-      const res = await fetchImpl(`https://graph.facebook.com/${graphVersion}/${wabaId}/message_templates`, {
+      // Submitted before (e.g. a photo was added later): edit Meta's template, which keeps its name.
+      const language = template.language || 'en';
+      const existing = await findTemplate(name, language);
+      const res = await fetchImpl(`https://graph.facebook.com/${graphVersion}/${existing ? existing.id : `${wabaId}/message_templates`}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        body: JSON.stringify(existing ? { components } : {
           name,
-          language: template.language || 'en',
+          language,
           category: template.category === 'utility' ? 'UTILITY' : 'MARKETING',
           components,
         }),
@@ -139,7 +151,7 @@ export function createMetaProvider(cfg, { fetchImpl = fetch } = {}) {
         const e = data.error || {};
         throw new ProviderError(e.error_user_msg || e.message || 'Meta rejected the template.', { code: e.code, status: res.status });
       }
-      return { name, status: data.status || 'PENDING', id: data.id };
+      return { name, status: data.status || 'PENDING', id: data.id || existing?.id };
     },
 
     /** Latest approval status for a submitted template. */

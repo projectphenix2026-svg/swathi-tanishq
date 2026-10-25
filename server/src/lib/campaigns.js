@@ -56,10 +56,13 @@ export const bodyFor = (template, channel) => (channel === 'sms' ? template?.sms
 const CUSTOMER_KEYS = { name: 'name', full_name: 'name', city: 'city', last_purchase: 'last_purchase', interests: 'interests' };
 const GENERATED = new Set(['offer_code', 'days_left']);
 
+// "Send a test to my phone" messages never count as offers a customer got.
+const NOT_A_TEST = `NOT EXISTS (SELECT 1 FROM campaigns tc WHERE tc.id = mm.campaign_id AND tc.name LIKE 'Test · %')`;
+
 /** SQL: how many WhatsApp offers customer `c` got in the last 7 days (what the weekly limit counts). */
 export function offersThisWeekSql() {
   return `(SELECT count(*) FROM messages mm JOIN templates tt ON tt.id = mm.template_id
-            WHERE mm.contact_id = c.id AND mm.channel = 'whatsapp' AND tt.category = 'marketing'
+            WHERE mm.contact_id = c.id AND mm.channel = 'whatsapp' AND tt.category = 'marketing' AND ${NOT_A_TEST}
               AND mm.status IN ('queued', 'retrying', 'sending', 'sent', 'delivered', 'read')
               AND mm.created_at > ${ago('7 days')})`;
 }
@@ -68,7 +71,7 @@ export function offersThisWeekSql() {
 export function lastOfferSql() {
   return `(SELECT COALESCE(cc.name, tt.name) || '|' || mm.created_at FROM messages mm
              JOIN templates tt ON tt.id = mm.template_id LEFT JOIN campaigns cc ON cc.id = mm.campaign_id
-            WHERE mm.contact_id = c.id AND mm.channel = 'whatsapp' AND tt.category = 'marketing'
+            WHERE mm.contact_id = c.id AND mm.channel = 'whatsapp' AND tt.category = 'marketing' AND ${NOT_A_TEST}
               AND mm.status IN ('queued', 'retrying', 'sending', 'sent', 'delivered', 'read')
             ORDER BY mm.created_at DESC LIMIT 1)`;
 }

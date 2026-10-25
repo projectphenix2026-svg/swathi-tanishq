@@ -46,8 +46,8 @@ export function CustomersStep({ t, filters, setFilters, pick, setPick, templateI
       <div className="row between wrap" style={{ gap: 8 }}>
         <h2>{t(title)}</h2>
         <span className="row" style={{ gap: 6 }}>
-          <button className="btn ghost sm" onClick={() => setPick({ only: false, ids: [] })}>Tick all</button>
-          <button className="btn ghost sm" onClick={() => setPick({ only: true, ids: [] })}>Untick all</button>
+          <button className="btn ghost sm" onClick={() => setPick({ only: false, ids: [] })}>Select all</button>
+          <button className="btn ghost sm" onClick={() => setPick({ only: true, ids: [] })}>Clear all</button>
         </span>
       </div>
 
@@ -88,6 +88,12 @@ export function CustomersStep({ t, filters, setFilters, pick, setPick, templateI
       </div>
 
       <div className="pick-list">
+        {list && list.customers.some((c) => !c.reason) && (
+          <label className="pick-row pick-all">
+            <input type="checkbox" checked={!pick.only && pick.ids.length === 0} onChange={(e) => setPick(e.target.checked ? { only: false, ids: [] } : { only: true, ids: [] })} />
+            <b>Select all who can get it{preview ? ` (${num(preview.sendable + (pick.only ? 0 : pick.ids.length))})` : ''}</b>
+          </label>
+        )}
         {!list ? (
           <div style={{ padding: 16 }}><Spinner /></div>
         ) : list.customers.length === 0 ? (
@@ -104,7 +110,7 @@ export function CustomersStep({ t, filters, setFilters, pick, setPick, templateI
                   <b>{c.name || phone(c.phone)}</b>
                   <span className="subtle"> · {[c.city, c.interests || c.last_purchase].filter(Boolean).join(' · ') || phone(c.phone)}</span>
                 </span>
-                {!can && <span className="tag-warn">{c.reason === 'cap' ? `Already got ${plural(c.offers, 'message')} this week` : REASON[c.reason]}</span>}
+                {!can && <span className="tag-warn" title={c.reason === 'cap' ? 'Weekly limit, so customers are not flooded with offers. The owner can change it in Settings → Message rules.' : undefined}>{c.reason === 'cap' ? `Already got ${plural(c.offers, 'offer')} this week` : REASON[c.reason]}</span>}
               </label>
             );
           })

@@ -45,7 +45,7 @@ router.get('/:contactId', async (req, res) => {
   ]);
   if (!contact) return res.status(404).json({ error: 'Customer not found.' });
   const { rows: messages } = await query(
-    `SELECT m.id, m.direction, m.body, m.buttons, m.image_url, m.status, m.error_message, m.created_at, m.sent_at,
+    `SELECT m.id, m.direction, m.body, m.buttons, m.image_url, m.status, m.error_message, m.provider, m.created_at, m.sent_at,
             m.delivered_at, m.read_at, cp.name AS campaign_name, u.name AS sent_by_name
        FROM messages m LEFT JOIN campaigns cp ON cp.id = m.campaign_id LEFT JOIN users u ON u.id = m.sent_by
       WHERE m.contact_id = $1 ORDER BY m.created_at, m.id`,
