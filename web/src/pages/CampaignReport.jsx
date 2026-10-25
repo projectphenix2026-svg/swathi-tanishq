@@ -98,7 +98,7 @@ export default function CampaignReport() {
   const { campaign: c, report: r } = data;
   return (
     <div className="page">
-      <Link to="/campaigns" className="back"><ArrowLeft size={16} />Sent messages</Link>
+      <Link to="/campaigns" className="back"><ArrowLeft size={16} />Campaigns</Link>
       <div className="page-head">
         <div>
           <div className="row wrap" style={{ gap: 10 }}>

@@ -936,7 +936,9 @@
   "can be sent. Open a template and press “Submit to Meta” to ask for approval.": "పంపగలరు. ఆమోదం కోసం టెంప్లేట్ తెరిచి “Submit to Meta” నొక్కండి.",
   "Sandesh could not open": "Sandesh తెరుచుకోలేదు",
   "Try again": "మళ్ళీ ప్రయత్నించండి",
-  "The server is taking too long to answer. Check your internet connection and try again.": "సర్వర్ జవాబు ఇవ్వడానికి చాలా సమయం తీసుకుంటోంది. ఇంటర్నెట్ చూసి మళ్ళీ ప్రయత్నించండి."
+  "The server is taking too long to answer. Check your internet connection and try again.": "సర్వర్ జవాబు ఇవ్వడానికి చాలా సమయం తీసుకుంటోంది. ఇంటర్నెట్ చూసి మళ్ళీ ప్రయత్నించండి.",
+  "Campaigns": "క్యాంపెయిన్‌లు",
+  "All campaigns": "అన్ని క్యాంపెయిన్‌లు"
  },
  "hi": {
   "% read": "% ने पढ़ा",
@@ -1874,6 +1876,8 @@
   "can be sent. Open a template and press “Submit to Meta” to ask for approval.": "भेजे जा सकते हैं। मंज़ूरी के लिए टेम्पलेट खोलें और “Submit to Meta” दबाएँ।",
   "Sandesh could not open": "Sandesh नहीं खुला",
   "Try again": "फिर से कोशिश करें",
-  "The server is taking too long to answer. Check your internet connection and try again.": "सर्वर जवाब देने में बहुत देर लगा रहा है। इंटरनेट देखें और फिर से कोशिश करें।"
+  "The server is taking too long to answer. Check your internet connection and try again.": "सर्वर जवाब देने में बहुत देर लगा रहा है। इंटरनेट देखें और फिर से कोशिश करें।",
+  "Campaigns": "कैंपेन",
+  "All campaigns": "सभी कैंपेन"
  }
 }

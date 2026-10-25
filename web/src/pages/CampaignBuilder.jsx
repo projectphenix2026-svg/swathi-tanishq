@@ -135,7 +135,7 @@ export default function CampaignBuilder() {
     <div className="page send-page">
       <div className="page-head compact">
         <div>
-          <Link to="/campaigns" className="back"><ArrowLeft size={16} />{t('Sent messages')}</Link>
+          <Link to="/campaigns" className="back"><ArrowLeft size={16} />{t('Campaigns')}</Link>
           <h1>{t('Send a message')}</h1>
         </div>
       </div>
@@ -435,7 +435,7 @@ function ReviewStep({ t, name, setName, template, when, setWhen, channel, setCha
           </Alert>
         )}
         {preview && !atLeast(settings?.role, 'owner') && sendCount >= preview.approvalThreshold && (
-          <Alert tone="info" icon={ShieldCheck}>This goes to {num(sendCount)} customers, so the owner approves it first. It waits under Sent messages as “Waiting for owner’s OK”.</Alert>
+          <Alert tone="info" icon={ShieldCheck}>This goes to {num(sendCount)} customers, so the owner approves it first. It waits under Campaigns as “Waiting for owner’s OK”.</Alert>
         )}
         {sendCount >= 500 && (
           <label className="check alert warn" style={{ cursor: 'pointer' }}>
@@ -529,10 +529,10 @@ function TestOutcome({ sent }) {
         ? 'Meta only allows hello_world from its test numbers. Use one of your own approved templates.'
         : /not approved|does not exist|template/i.test(reason)
           ? 'Check the template is approved by Meta (Templates page), then try again.'
-          : 'See Send → Sent messages for details.';
+          : 'See Campaigns for details.';
     return <span className="row" style={{ gap: 6, color: 'var(--bad)', alignItems: 'flex-start' }}><AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 2 }} /><span><b>Did not reach {to}.</b> Meta said: {reason}. {hint}</span></span>;
   }
-  return <span className="subtle">Handed to WhatsApp for {to}. If it does not arrive in a minute, see Send → Sent messages.</span>;
+  return <span className="subtle">Handed to WhatsApp for {to}. If it does not arrive in a minute, see Campaigns.</span>;
 }
 
 function exampleCode(name, prefix) {

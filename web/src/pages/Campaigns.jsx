@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import { AlertCircle, Check, CheckCheck, Clock, Plus, Send, XCircle } from 'lucide-react';
 import { SearchBox, matches } from '../components/SearchBox.jsx';
+import { SortTh, useSort } from '../components/SortHead.jsx';
 import { api } from '../lib/api.js';
 import { CampaignStatus, Empty, Pic, Skeleton, Spinner, useToast } from '../components/ui.jsx';
 import { iconFor } from '../lib/ready.js';
@@ -23,11 +24,11 @@ export function Funnel({ total, sent, delivered, read, failed }) {
   );
 }
 
-/** Sent messages and Spending sit side by side as two tabs. */
+/** Campaigns and Spending sit side by side as two tabs. */
 export function SentTabs() {
   return (
-    <nav className="tabs" aria-label="Sent messages" style={{ maxWidth: 420 }}>
-      <NavLink end to="/campaigns" className={({ isActive }) => `tab ${isActive ? 'on' : ''}`}>Messages</NavLink>
+    <nav className="tabs" aria-label="Campaigns" style={{ maxWidth: 420 }}>
+      <NavLink end to="/campaigns" className={({ isActive }) => `tab ${isActive ? 'on' : ''}`}>Campaigns</NavLink>
       <NavLink to="/spending" className={({ isActive }) => `tab ${isActive ? 'on' : ''}`}>Spending</NavLink>
     </nav>
   );
@@ -61,7 +62,13 @@ export default function Campaigns() {
   useEffect(() => {
     load();
   }, []);
-  const shown = (list || []).filter((c) => keep(c, q, show, period));
+  // Newest first unless a heading is clicked.
+  const { sorted: shown, sort, toggle } = useSort((list || []).filter((c) => keep(c, q, show, period)), {
+    name: (c) => c.name.replace(/^Test · /, '').toLowerCase(),
+    when: (c) => Date.parse(c.started_at || c.scheduled_at || c.created_at),
+    to: (c) => Number(c.total || 0),
+    read: (c) => (Number(c.total) ? Number(c.read) / Number(c.total) : -1),
+  });
 
   // "Trying again" or still queued: stop what has not gone out yet.
   async function cancelWaiting(c) {
@@ -83,7 +90,7 @@ export default function Campaigns() {
     <div className="page">
       <div className="page-head">
         <div>
-          <h1>Sent messages</h1>
+          <h1>Campaigns</h1>
           <p>Everything you sent, and how many customers got it and read it.</p>
         </div>
         {canSend && <Link to="/campaigns/new" className="btn primary"><Plus size={18} />Send a message</Link>}
@@ -109,11 +116,14 @@ export default function Campaigns() {
               {PERIODS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
             </select>
           </div>
-          <div className="sent-table" role="table" aria-label="Sent messages">
+          <div className="sent-table" role="table" aria-label="Campaigns">
             <div className="sent-row sent-head" role="row">
-              <span role="columnheader">Message</span>
-              <span role="columnheader">Sent to</span>
-              <span role="columnheader">What happened</span>
+              <span role="columnheader" className="row" style={{ gap: 14 }}>
+                <SortTh as="span" label="Message" k="name" sort={sort} toggle={toggle} />
+                <SortTh as="span" label="When" k="when" sort={sort} toggle={toggle} />
+              </span>
+              <SortTh as="span" label="Sent to" k="to" sort={sort} toggle={toggle} />
+              <SortTh as="span" label="What happened" k="read" sort={sort} toggle={toggle} />
               <span role="columnheader" className="sent-actions-h" />
             </div>
             {shown.length === 0 && <p className="subtle" style={{ padding: 20 }}>Nothing matches. Try other words or another period.</p>}

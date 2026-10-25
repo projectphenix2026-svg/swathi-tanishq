@@ -741,6 +741,15 @@ a.chart-card:hover { border-color: var(--brand); }
 .tpl-result { display: flex; gap: 10px; align-items: flex-start; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); cursor: pointer; font: inherit; color: inherit; text-align: left; }
 .tpl-result:hover, .tpl-result.on { border-color: var(--brand); background: var(--brand-50); }
 .tpl-text.short { -webkit-line-clamp: 2; margin-top: 4px; }
+/* Sortable column headings. */
+.sort-btn { background: none; border: none; padding: 0; font: inherit; color: inherit; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; text-transform: inherit; letter-spacing: inherit; }
+.sort-btn svg { opacity: 0.45; }
+.sort-btn.on, .sort-btn:hover { color: var(--brand); }
+.sort-btn.on svg { opacity: 1; }
+.lead-table td { vertical-align: middle; }
+.lead-reply { font-weight: 600; }
+.lead-table .lead-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+
 /* Home: business numbers for a period. */
 .ins-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
 .ins-grid h3 { font-size: 1rem; margin-bottom: 4px; }
@@ -767,6 +776,8 @@ tr.ticked td { background: var(--brand-50); }
 .sd-main .subtle { font-size: 0.85rem; }
 .sd-gift { font-size: 0.85rem; }
 .sd-soon { display: flex; flex-direction: column; gap: 6px; }
+.sd-names { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 4px; }
+.sd-names .chip { cursor: default; }
 .sd-who { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 10px; background: var(--ok-soft); flex-wrap: wrap; }
 .sd-step { font-size: 1rem; margin: 6px 0 -4px; }
 .sd-test { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border: 1px dashed var(--border); border-radius: 10px; }
