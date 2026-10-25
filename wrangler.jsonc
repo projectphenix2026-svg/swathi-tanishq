@@ -31,7 +31,11 @@
     "PUBLIC_BASE_URL": "https://swathi-tanishq.pages.dev",
     "SMS_MODE": "preview",
     "OCCASION_CHECK_MINUTES": "15",
-    "STATUS_POLL_SECONDS": "0"
+    "STATUS_POLL_SECONDS": "0",
+    // Workers Paid plan: about 150 messages a minute (~9,000 an hour), 10 handed to WhatsApp at a time.
+    // On the free plan keep 20 / 3: each run has only ~10 ms of CPU and D1 writes are capped daily.
+    "SEND_BATCH_SIZE": "150",
+    "SEND_CONCURRENCY": "10"
   },
   "observability": { "enabled": true },
   // Pull-request branches deploy with `wrangler preview`, which requires this block.
