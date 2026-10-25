@@ -194,6 +194,33 @@ describe('API flow', () => {
     expect(provider.outbox.some((m) => m.body?.includes('5% off'))).toBe(false);
   });
 
+  it('cancels messages still waiting (e.g. trying again tomorrow), even after the offer shows Done', async () => {
+    const res = await agent.post('/api/campaigns').send({ name: 'Cancel waiting', templateId, audience: { mode: 'filter', cities: ['warangal'] }, variables: { offer: '3% off' }, expectedCount: 1 });
+    const id = res.body.campaign.id;
+    await drain();
+    // Meta's per-person limit put it back in the queue for tomorrow; the offer itself looks finished.
+    await query(`UPDATE messages SET status = 'retrying', error_code = '131049' WHERE campaign_id = $1`, [id]);
+    await query(`UPDATE campaigns SET status = 'completed' WHERE id = $1`, [id]);
+    const list = (await agent.get('/api/campaigns')).body.campaigns.find((c) => c.id === id);
+    expect(list).toMatchObject({ pending: 1, retrying: 1 });
+    const cancel = await agent.post(`/api/campaigns/${id}/cancel`);
+    expect(cancel.status).toBe(200);
+    expect(cancel.body.cancelled).toBe(1);
+    const { rows: [m] } = await query('SELECT status, error_message FROM messages WHERE campaign_id = $1', [id]);
+    expect(m.status).toBe('cancelled');
+    expect(m.error_message).toMatch(/^Cancelled by /);
+    expect((await agent.post(`/api/campaigns/${id}/cancel`)).status).toBe(409);
+  });
+
+  it('cancels one waiting message of an offer', async () => {
+    const res = await agent.post('/api/campaigns').send({ name: 'Cancel one', templateId, audience: { mode: 'filter', cities: ['warangal'] }, variables: { offer: '4% off' }, expectedCount: 1 });
+    const id = res.body.campaign.id;
+    await drain();
+    const { rows: [m] } = await query(`UPDATE messages SET status = 'retrying' WHERE campaign_id = $1 RETURNING id`, [id]);
+    expect((await agent.post(`/api/campaigns/${id}/messages/${m.id}/cancel`)).status).toBe(200);
+    expect((await agent.post(`/api/campaigns/${id}/messages/${m.id}/cancel`)).status).toBe(409);
+  });
+
   it('deletes a customer: gone from lists, chats and call list, but offer totals stay', async () => {
     const add = await agent.post('/api/customers').send({ city: 'Hyderabad', name: 'Delete Me', phone: '90000 22222', whatsapp_opt_in: true, last_purchase: 'ring' });
     const id = add.body.customer.id;

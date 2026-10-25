@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink } from 'react-router-dom';
-import { Plus, Send } from 'lucide-react';
+import { AlertCircle, Check, CheckCheck, Clock, Plus, Send, XCircle } from 'lucide-react';
 import { SearchBox, matches } from '../components/SearchBox.jsx';
 import { api } from '../lib/api.js';
-import { CampaignStatus, Empty, Pic, Skeleton } from '../components/ui.jsx';
+import { CampaignStatus, Empty, Pic, Skeleton, Spinner, useToast } from '../components/ui.jsx';
 import { iconFor } from '../lib/ready.js';
 import { useAuth } from '../lib/auth.js';
 import { atLeast } from '@shared/roles.js';
@@ -33,13 +33,14 @@ export function SentTabs() {
   );
 }
 
-const SHOW = [['all', 'All'], ['scheduled', 'Scheduled'], ['done', 'Sent'], ['test', 'Tests']];
+const SHOW = [['all', 'All'], ['waiting', 'Waiting'], ['scheduled', 'Scheduled'], ['done', 'Sent'], ['test', 'Tests']];
 const PERIODS = [['all', 'Any time'], ['7', 'Last 7 days'], ['30', 'Last 30 days'], ['90', 'Last 3 months']];
 function keep(c, q, show, period) {
-  if (!matches(q, c.name, c.template_name)) return false;
+  if (!matches(q, c.name, c.template_name, c.first_name, c.first_phone, c.first_body)) return false;
   const isTest = c.name.startsWith('Test · ');
   if (show === 'test' && !isTest) return false;
   if (show === 'scheduled' && c.status !== 'scheduled') return false;
+  if (show === 'waiting' && !(Number(c.pending) > 0)) return false;
   if (show === 'done' && (isTest || c.status === 'scheduled')) return false;
   if (period !== 'all' && Date.parse(c.started_at || c.created_at) < Date.now() - Number(period) * 86400e3) return false;
   return true;
@@ -54,9 +55,29 @@ export default function Campaigns() {
   const [q, setQ] = useState('');
   const [show, setShow] = useState('all');
   const [period, setPeriod] = useState('all');
+  const toast = useToast();
+  const [cancelling, setCancelling] = useState(null);
+  const load = () => api('/api/campaigns').then((r) => setList(r.campaigns)).catch(() => setList([]));
   useEffect(() => {
-    api('/api/campaigns').then((r) => setList(r.campaigns)).catch(() => setList([]));
+    load();
   }, []);
+  const shown = (list || []).filter((c) => keep(c, q, show, period));
+
+  // "Trying again" or still queued: stop what has not gone out yet.
+  async function cancelWaiting(c) {
+    const what = Number(c.total) === 1 ? `the message to ${c.first_name || phone(c.first_phone)}` : `${plural(c.pending, 'message')} still waiting`;
+    if (!confirm(`Cancel ${what}? Messages already delivered stay delivered.`)) return;
+    setCancelling(c.id);
+    try {
+      const r = await api(`/api/campaigns/${c.id}/cancel`, { method: 'POST' });
+      toast(`Cancelled. ${plural(r.cancelled, 'message')} will not be sent.`);
+      await load();
+    } catch (e) {
+      toast(e.message, 'bad');
+    } finally {
+      setCancelling(null);
+    }
+  }
 
   return (
     <div className="page">
@@ -80,7 +101,7 @@ export default function Campaigns() {
       ) : (
         <div className="card">
           <div className="list-tools">
-            <SearchBox value={q} onChange={setQ} placeholder="Search by message or template" style={{ flex: '1 1 220px' }} />
+            <SearchBox value={q} onChange={setQ} placeholder="Search by message, customer or number" style={{ flex: '1 1 220px' }} />
             <div className="chips">
               {SHOW.map(([k, label]) => <button key={k} type="button" className={`chip ${show === k ? 'on' : ''}`} onClick={() => setShow(k)}>{label}</button>)}
             </div>
@@ -88,43 +109,73 @@ export default function Campaigns() {
               {PERIODS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
             </select>
           </div>
-          <div className="card-head legend">
-            <span><i style={{ background: 'var(--read)' }} />Read</span>
-            <span><i style={{ background: 'var(--wa)' }} />Reached phone</span>
-            <span><i style={{ background: 'var(--text-3)', opacity: 0.45 }} />Sent</span>
-            <span><i style={{ background: 'var(--bad)' }} />Couldn’t reach</span>
+          <div className="sent-table" role="table" aria-label="Sent messages">
+            <div className="sent-row sent-head" role="row">
+              <span role="columnheader">Message</span>
+              <span role="columnheader">Sent to</span>
+              <span role="columnheader">What happened</span>
+              <span role="columnheader" className="sent-actions-h" />
+            </div>
+            {shown.length === 0 && <p className="subtle" style={{ padding: 20 }}>Nothing matches. Try other words or another period.</p>}
+            {shown.map((c) => (
+              <Link key={c.id} to={`/campaigns/${c.id}`} className="sent-row" role="row">
+                <span className="sent-msg" role="cell">
+                  <span className="row" style={{ gap: 8, minWidth: 0 }}>
+                    <Pic name={iconFor(c.template_name || c.name)} size={26} />
+                    <b className="ellipsis">{c.name.replace(/^Test · /, '')}</b>
+                    {c.name.startsWith('Test · ') && <span className="badge neutral">Test</span>}
+                    {c.provider === 'mock' && <span className="badge warn">Test mode</span>}
+                  </span>
+                  {c.first_body && <span className="sent-body">{toFriendly(c.first_body).replace(/\s*\n+\s*/g, ' ')}</span>}
+                  <span className="subtle sent-when">{c.status === 'scheduled' ? `Goes out ${dateTime(c.scheduled_at)}` : dateTime(c.started_at || c.created_at)}</span>
+                </span>
+                <span className="sent-to" role="cell">
+                  {Number(c.total) === 1 && c.first_phone ? (
+                    <><b>{c.first_name || phone(c.first_phone)}</b>{c.first_name && <span className="subtle num">{phone(c.first_phone)}</span>}</>
+                  ) : (
+                    <b className="num">{plural(c.total, 'customer')}</b>
+                  )}
+                </span>
+                <span className="sent-result" role="cell"><Outcome c={c} /></span>
+                <span className="sent-actions" role="cell">
+                  {canSend && Number(c.pending) > 0 && c.status !== 'pending_approval' && (
+                    <button type="button" className="btn sm danger ghost" disabled={cancelling === c.id}
+                      onClick={(e) => { e.preventDefault(); cancelWaiting(c); }}>
+                      {cancelling === c.id ? <Spinner /> : <><XCircle size={15} />Cancel{Number(c.total) > 1 ? ` ${num(c.pending)} waiting` : ''}</>}
+                    </button>
+                  )}
+                </span>
+              </Link>
+            ))}
           </div>
-          {list.filter((c) => keep(c, q, show, period)).length === 0 && <p className="subtle" style={{ padding: 20 }}>Nothing matches. Try other words or another period.</p>}
-          {list.filter((c) => keep(c, q, show, period)).map((c) => (
-            <Link key={c.id} to={`/campaigns/${c.id}`} className="list-item" style={{ textDecoration: 'none', color: 'inherit', flexWrap: 'wrap' }}>
-              <div style={{ flex: '1 1 260px', minWidth: 0 }}>
-                <div className="row" style={{ gap: 8 }}>
-                  <Pic name={iconFor(c.template_name || c.name)} size={26} /><b style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</b>
-                  <CampaignStatus status={c.status} />
-                  {c.name.startsWith('Test · ') && <span className="badge neutral">Test to my phone</span>}
-                  {c.provider === 'mock' && <span className="badge warn">Test mode: not really sent</span>}
-                </div>
-                <div className="subtle">
-                  {c.status === 'scheduled' ? `Goes out ${dateTime(c.scheduled_at)}` : dateTime(c.started_at || c.created_at)} · {c.template_name}
-                </div>
-                {Number(c.total) === 1 && c.first_phone && (
-                  <div className="sent-to"><b>To {c.first_name || phone(c.first_phone)}</b>{c.first_name && <span className="subtle num"> · {phone(c.first_phone)}</span>}</div>
-                )}
-                {c.first_body && <div className="sent-body">{toFriendly(c.first_body).replace(/\s*\n+\s*/g, ' ')}</div>}
-              </div>
-              <div style={{ flex: '1 1 220px' }} className="stack-sm">
-                <Funnel total={c.total} sent={c.sent} delivered={c.delivered} read={c.read} failed={c.failed} />
-                <div className="subtle num">
-                  {Number(c.total) === 1
-                    ? (c.failed ? 'Couldn’t reach the phone' : c.read ? 'Read' : c.delivered ? 'Reached the phone' : c.pending ? 'Waiting to go out' : 'Sent')
-                    : `${plural(c.total, 'customer')} · ${pct(c.read, c.total)}% read${c.failed ? ` · ${num(c.failed)} couldn’t be reached` : ''}${c.pending ? ` · ${num(c.pending)} waiting` : ''}`}
-                </div>
-                {c.failed > 0 && c.last_error && <div className="sent-error">Meta said: {c.last_error}</div>}
-              </div>
-            </Link>
-          ))}
         </div>
       )}
     </div>
   );
+}
+
+/** What happened, in words with the matching tick: the main state first, then the rest. */
+function Outcome({ c }) {
+  const total = Number(c.total) || 0;
+  const read = Number(c.read) || 0;
+  const delivered = Number(c.delivered) || 0;
+  const failed = Number(c.failed) || 0;
+  const pending = Number(c.pending) || 0;
+  if (c.status === 'scheduled') return <span className="out wait"><Clock size={15} />Scheduled</span>;
+  if (c.status === 'pending_approval') return <span className="out wait"><Clock size={15} />Waiting for the owner’s OK</span>;
+  if (total === 1) {
+    if (failed) return <span className="out bad" title={c.last_error || ''}><AlertCircle size={15} /><span>Couldn’t reach<small>{c.last_error}</small></span></span>;
+    if (pending) return <span className="out wait"><Clock size={15} /><span>{c.retrying ? 'Trying again tomorrow' : 'Waiting to go out'}{c.retrying && <small>Meta limits how many offers one person gets from all businesses in a day.</small>}</span></span>;
+    if (read) return <span className="out read"><CheckCheck size={15} />Read</span>;
+    if (delivered) return <span className="out ok"><CheckCheck size={15} />Reached the phone</span>;
+    if (c.status === 'cancelled') return <span className="out muted"><XCircle size={15} />Cancelled</span>;
+    return <span className="out muted"><Check size={15} />Sent</span>;
+  }
+  const parts = [
+    read && <span key="r" className="out read"><CheckCheck size={14} />{num(read)} read</span>,
+    delivered - read > 0 && <span key="d" className="out ok"><CheckCheck size={14} />{num(delivered - read)} reached</span>,
+    pending && <span key="w" className="out wait"><Clock size={14} />{num(pending)} waiting</span>,
+    failed && <span key="f" className="out bad" title={c.last_error || ''}><AlertCircle size={14} />{num(failed)} couldn’t reach</span>,
+  ].filter(Boolean);
+  return parts.length ? <span className="out-list">{parts}</span> : <span className="out muted"><Check size={14} />{plural(total, 'message')} sent</span>;
 }

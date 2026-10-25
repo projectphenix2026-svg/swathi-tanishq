@@ -66,17 +66,29 @@ export default function CampaignReport() {
   }
 
   async function cancel({ ask = true } = {}) {
-    if (ask && !confirm('Stop this offer? Messages already sent cannot be taken back.')) return;
+    if (ask && !confirm('Stop everything that has not gone out yet? Messages already delivered stay delivered.')) return;
     setCancelling(true);
     try {
       const r = await api(`/api/campaigns/${id}/cancel`, { method: 'POST' });
-      toast(ask ? `Stopped. ${plural(r.cancelled, 'message')} will not be sent.` : 'Undone. Nothing was sent.');
+      toast(ask ? `Cancelled. ${plural(r.cancelled, 'message')} will not be sent.` : 'Undone. Nothing was sent.');
       if (!ask) setUndone(true);
       load();
     } catch (e) {
       toast(e.message, 'bad');
     } finally {
       setCancelling(false);
+    }
+  }
+
+  // Cancel one customer's message that has not gone out yet ("Trying again" or waiting).
+  async function cancelOne(m) {
+    if (!confirm(`Cancel the message to ${m.name || phone(m.phone)}? It will not be sent.`)) return;
+    try {
+      await api(`/api/campaigns/${id}/messages/${m.id}/cancel`, { method: 'POST' });
+      toast('Cancelled. It will not be sent.');
+      load();
+    } catch (e) {
+      toast(e.message, 'bad');
     }
   }
 
@@ -103,8 +115,10 @@ export default function CampaignReport() {
           {c.status === 'pending_approval' && atLeast(settings?.role, 'owner') && (
             <button className="btn wa" onClick={approve} disabled={approving}>{approving ? <Spinner /> : <><ShieldCheck size={18} />Approve and send</>}</button>
           )}
-          {['scheduled', 'sending', 'pending_approval'].includes(c.status) && (
+          {['scheduled', 'sending', 'pending_approval'].includes(c.status) ? (
             <button className="btn danger" onClick={() => cancel()} disabled={cancelling}>{cancelling ? <Spinner /> : <><XCircle size={18} />{c.status === 'sending' ? 'Stop sending' : 'Stop'}</>}</button>
+          ) : r.pending > 0 && atLeast(settings?.role, 'manager') && (
+            <button className="btn danger" onClick={() => cancel()} disabled={cancelling}>{cancelling ? <Spinner /> : <><XCircle size={18} />Cancel {plural(r.pending, 'waiting message')}</>}</button>
           )}
         </div>
       </div>
@@ -194,7 +208,7 @@ export default function CampaignReport() {
           ) : (
             <div className="table-wrap">
               <table className="table">
-                <thead><tr><th>Customer</th><th>Status</th><th className="hide-mobile">Sent</th><th className="hide-mobile">Read</th></tr></thead>
+                <thead><tr><th>Customer</th><th>Status</th><th className="hide-mobile">Sent</th><th className="hide-mobile">Read</th><th aria-label="Actions" /></tr></thead>
                 <tbody>
                   {messages.filter((m) => matches(q, m.name, m.phone, m.offer_code)).map((m) => (
                     <tr key={m.id}>
@@ -205,6 +219,11 @@ export default function CampaignReport() {
                       </td>
                       <td className="hide-mobile subtle">{dateTime(m.sent_at)}</td>
                       <td className="hide-mobile subtle">{dateTime(m.read_at)}</td>
+                      <td style={{ textAlign: 'right' }}>
+                        {['queued', 'retrying'].includes(m.status) && atLeast(settings?.role, 'manager') && (
+                          <button className="btn sm ghost danger" onClick={() => cancelOne(m)}><XCircle size={15} />Cancel</button>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
