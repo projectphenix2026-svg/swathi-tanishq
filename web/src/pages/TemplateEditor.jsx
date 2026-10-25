@@ -361,9 +361,10 @@ function MetaFields({ t, onChange, canSubmit }) {
         {t.provider_ref && <> Name at Meta: <code>{t.provider_ref}</code>.</>}
       </p>
       {status === 'REJECTED' && t.provider_reason && <Alert tone="bad">Reason: {t.provider_reason}. Edit the wording and submit again.</Alert>}
+      {!status && t.provider_ref && t.provider_reason && <Alert tone="warn">{t.provider_reason}</Alert>}
       <div className="row wrap" style={{ gap: 8 }}>
-        <button className="btn" disabled={busy || !canSubmit} onClick={() => go('submit-meta', () => 'Sent to Meta for approval')}>{busy ? <Spinner /> : status ? 'Submit again' : 'Submit to Meta'}</button>
-        {t.provider_ref && <button className="btn ghost" disabled={busy} onClick={() => go('sync-meta', (u) => `Meta says: ${u.provider_status?.toLowerCase()}`)}><RefreshCw size={16} />Check status</button>}
+        <button className="btn" disabled={busy || !canSubmit} onClick={() => go('submit-meta', (u) => (u.provider_ref && u.provider_ref !== t.provider_ref && t.provider_ref ? `Sent to Meta as a new version (${u.provider_ref}). Approval usually takes minutes.` : 'Sent to Meta for approval'))}>{busy ? <Spinner /> : status || t.provider_ref ? 'Submit again' : 'Submit to Meta'}</button>
+        {t.provider_ref && <button className="btn ghost" disabled={busy} onClick={() => go('sync-meta', (u) => (u.provider_status ? `Meta says: ${u.provider_status.toLowerCase()}` : u.provider_reason || 'Not approved for this version yet.'))}><RefreshCw size={16} />Check status</button>}
       </div>
       {!canSubmit && <span className="subtle">Connect WhatsApp in Settings first.</span>}
     </>

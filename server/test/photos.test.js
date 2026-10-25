@@ -92,6 +92,28 @@ describe('Meta approval with a photo', () => {
     expect(calls.some((c) => c.url.endsWith('/2/message_templates') && c.init.method === 'POST')).toBe(false);
   });
 
+  it('if Meta refuses to edit an approved template, sends it as a new version (name_2)', async () => {
+    const calls = [];
+    const fetchImpl = async (url, init = {}) => {
+      calls.push({ url: String(url), init });
+      const json = (status, body) => ({ ok: status < 400, status, json: async () => body });
+      if (String(url).includes('debug_token')) return json(200, { data: { app_id: '999' } });
+      if (String(url).includes('/999/uploads')) return json(200, { id: 'upload:v' });
+      if (String(url).endsWith('/upload:v')) return json(200, { h: 'H' });
+      if (String(url).includes('message_templates?name=dhanteras&')) return json(200, { data: [{ id: 'tpl-1', name: 'dhanteras', language: 'en', status: 'APPROVED' }] });
+      if (String(url).includes('message_templates?name=')) return json(200, { data: [] });
+      if (String(url).endsWith('/tpl-1')) return json(400, { error: { code: 100, message: 'Approved templates can be edited once per day.' } });
+      if (String(url).endsWith('/2/message_templates')) return json(200, { id: 'tpl-2', status: 'PENDING' });
+      return json(200, {});
+    };
+    const meta = createMetaProvider({ accessToken: 'EAA-x', phoneNumberId: '1', wabaId: '2', graphVersion: 'v25.0' }, { fetchImpl });
+    const r = await meta.submitTemplate({ name: 'Dhanteras', body: 'Hi {{name}}.', video_url: 'https://x/v.mp4', buttons: [], language: 'en' }, { name: 'Priya' }, { sample: { mime: 'video/mp4', bytes: new Uint8Array([1]) } });
+    expect(r).toMatchObject({ name: 'dhanteras_2', status: 'PENDING', id: 'tpl-2' });
+    const created = JSON.parse(calls.find((c) => c.url.endsWith('/2/message_templates')).init.body);
+    expect(created).toMatchObject({ name: 'dhanteras_2', language: 'en', category: 'MARKETING' });
+    expect(created.components[0].format).toBe('VIDEO');
+  });
+
   it('sends the photo as the header when the message has one', async () => {
     let sent;
     const meta = createMetaProvider({ accessToken: 'x', phoneNumberId: '1', graphVersion: 'v25.0' }, {

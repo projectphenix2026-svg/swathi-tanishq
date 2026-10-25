@@ -15,7 +15,7 @@ let owner;
 let manager;
 
 // Fake Meta Graph API: answers like Meta for good details, or with an error.
-function fakeMeta({ fail } = {}) {
+function fakeMeta({ fail, refuseTemplates } = {}) {
   const calls = [];
   globalThis.fetch = async (url, init = {}) => {
     calls.push({ url: String(url), method: init.method || 'GET' });
@@ -23,6 +23,12 @@ function fakeMeta({ fail } = {}) {
     if (fail) return json(401, { error: { code: 190, message: 'Session has expired' } });
     if (String(url).includes('/subscribed_apps')) return json(200, { success: true });
     if (String(url).endsWith('/555000111/messages')) return json(200, { messages: [{ id: 'wamid.TEST1' }] });
+    if (refuseTemplates && String(url).endsWith('/message_templates') && init.method === 'POST') {
+      return json(400, { error: { code: 100, message: 'Invalid parameter', error_user_msg: 'The video header sample could not be read.' } });
+    }
+    if (String(url).includes('message_templates?name=photo_tpl')) {
+      return json(200, { data: [{ name: 'photo_tpl', language: 'en', status: 'APPROVED', components: [{ type: 'HEADER', format: 'IMAGE' }, { type: 'BODY', text: 'Hi' }] }] });
+    }
     if (String(url).includes('debug_token')) return json(200, { data: { is_valid: true, expires_at: 0 } });
     if (String(url).includes('/555000111')) return json(200, { display_phone_number: '+91 90000 33333', verified_name: 'Swathi Tanishq', quality_rating: 'GREEN', code_verification_status: 'VERIFIED', messaging_limit_tier: 'TIER_2K' });
     if (String(url).includes('/777000222')) return json(200, { name: 'Swathi Tanishq', account_review_status: 'APPROVED' });
@@ -164,6 +170,31 @@ describe('Connect WhatsApp (owner only)', () => {
     expect(calls.some((x) => x.url.endsWith('/555000111/messages') && x.method === 'POST')).toBe(true);
     const { rows: [m] } = await query(`SELECT provider, status FROM messages WHERE contact_id = $1 AND direction = 'outbound'`, [c.id]);
     expect(m).toMatchObject({ provider: 'meta', status: 'sent' });
+  });
+
+  it('shows Meta’s own reason when a template is refused (not “something went wrong”)', async () => {
+    const clientId = await ensureClient('Test Store');
+    const { rows: [t] } = await query(
+      `INSERT INTO templates (client_id, name, body, status, category) VALUES ($1, 'Refused one', 'Hello there', 'approved', 'marketing') RETURNING *`, [clientId]);
+    fakeMeta({ refuseTemplates: true });
+    resetConnectionCache();
+    const res = await owner.post(`/api/templates/${t.id}/submit-meta`);
+    expect(res.status).toBe(502);
+    expect(res.body.error).toBe('Meta said: The video header sample could not be read.');
+  });
+
+  it('Check status notices when Meta approved a photo version but the template now has a video', async () => {
+    const clientId = await ensureClient('Test Store');
+    const { rows: [t] } = await query(
+      `INSERT INTO templates (client_id, name, body, status, category, provider_ref, provider_status, video_url)
+       VALUES ($1, 'Photo tpl', 'Hi there', 'approved', 'marketing', 'photo_tpl', NULL, 'https://x/v.mp4') RETURNING *`, [clientId]);
+    fakeMeta();
+    resetConnectionCache();
+    const res = await owner.post(`/api/templates/${t.id}/sync-meta`);
+    expect(res.status).toBe(200);
+    expect(res.body.mismatch).toBe(true);
+    expect(res.body.template.provider_status).toBeNull();
+    expect(res.body.template.provider_reason).toMatch(/with a photo, but it now has a video/);
   });
 
   it('disconnects and goes back to test mode', async () => {
