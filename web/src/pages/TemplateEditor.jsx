@@ -227,6 +227,11 @@ export default function TemplateEditor() {
                 <textarea ref={textRef} id="tpl-body" className="te-text" rows={11} value={shown} onChange={(e) => set({ body: fromFriendly(e.target.value) })} placeholder="Hi [Customer name], ..." />
               </div>
               <span className="hint">Details in [brackets] are filled in for each customer. Select words, then B or I, to make them stand out.</span>
+              {longForWhatsApp(t) && (
+                <Alert tone="warn">{t.image_url || t.video_url
+                  ? 'Under a photo or video, WhatsApp shows only about the first 3 lines; the rest is behind “Read more” (big brands too). Put the offer and the date in the first 2–3 lines. The buttons always show in full.'
+                  : 'Long message: WhatsApp may hide the end behind “Read more”. Put the offer and the date near the top. The buttons always show in full.'}</Alert>
+              )}
             </Field>
           </div>
 
@@ -460,4 +465,16 @@ function MetaFields({ t, onChange, canSubmit }) {
       {!canSubmit && <span className="subtle">Connect WhatsApp in Settings first.</span>}
     </>
   );
+}
+
+/**
+ * Roughly when WhatsApp folds a message behind "Read more": counted in phone lines (about 32
+ * characters each, blank lines included). Under a photo or video only about 3 lines show (seen on
+ * a Mia by Tanishq video offer); plain text folds much later.
+ */
+function longForWhatsApp(t) {
+  const text = render(t.body || '', EXAMPLES).text || '';
+  const lines = text.split('\n').reduce((n, line) => n + Math.max(1, Math.ceil(line.length / 32)), 0);
+  const media = Boolean(t.image_url || t.video_url);
+  return media ? lines > 3 : lines > 16;
 }
