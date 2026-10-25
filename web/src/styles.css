@@ -741,6 +741,24 @@ a.chart-card:hover { border-color: var(--brand); }
 .tpl-result { display: flex; gap: 10px; align-items: flex-start; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); cursor: pointer; font: inherit; color: inherit; text-align: left; }
 .tpl-result:hover, .tpl-result.on { border-color: var(--brand); background: var(--brand-50); }
 .tpl-text.short { -webkit-line-clamp: 2; margin-top: 4px; }
+/* Special days: one line per automatic wish (switch, what and when, who, gift, change). */
+.sd-card { padding: 0; overflow: hidden; }
+.sd-head { padding: 10px 16px; font-weight: 600; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+.sd-row { display: grid; grid-template-columns: 48px minmax(0, 1fr) minmax(0, 180px) auto; gap: 14px; align-items: center; padding: 12px 16px; border-top: 1px solid var(--border); }
+.sd-head + .sd-row { border-top: none; }
+.sd-row.off .sd-main > b { color: var(--text-2); }
+.sd-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.sd-main .subtle { font-size: 0.85rem; }
+.sd-gift { font-size: 0.85rem; }
+.sd-soon { display: flex; flex-direction: column; gap: 6px; }
+.sd-who { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 10px; background: var(--ok-soft); flex-wrap: wrap; }
+.sd-step { font-size: 1rem; margin: 6px 0 -4px; }
+.sd-test { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border: 1px dashed var(--border); border-radius: 10px; }
+@media (max-width: 759px) {
+  .sd-row { grid-template-columns: 48px minmax(0, 1fr) auto; }
+  .sd-gift { display: none; }
+}
+
 /* Templates: one row per template (name and wording, what it has, Meta approval, use, actions). */
 .tpl-row { display: grid; grid-template-columns: minmax(0, 2.4fr) minmax(0, 1.1fr) minmax(0, 1.2fr) minmax(0, 0.8fr) auto; gap: 16px; align-items: center;
   padding: 12px 20px; border-top: 1px solid var(--border); cursor: pointer; }
