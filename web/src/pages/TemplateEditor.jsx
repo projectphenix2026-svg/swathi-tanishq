@@ -12,7 +12,7 @@ import { VideoPicker } from '../components/VideoPicker.jsx';
 import { shopVars } from '../lib/shop.js';
 import { atLeast } from '@shared/roles.js';
 import { detailLabel, fromFriendly, toFriendly } from '../lib/friendly.js';
-import { readyFor } from '../lib/ready-lang.js';
+import { LANGS, readyFor } from '../lib/ready-lang.js';
 import { useT } from '../lib/i18n.jsx';
 
 // The template editor: one message box with a small toolbar (bold, slanted, add a detail),
@@ -212,9 +212,17 @@ export default function TemplateEditor() {
           )}
 
           <div className="card card-pad stack" style={{ gap: 12 }}>
-            <Field label="Template name" hint="Only staff see this.">
-              <input id="tpl-name" className="input" value={t.name} onChange={(e) => set({ name: e.target.value })} placeholder="e.g. Diwali offer for past buyers" />
-            </Field>
+            <div className="form-grid two">
+              <Field label="Template name" hint="Only staff see this.">
+                <input id="tpl-name" className="input" value={t.name} onChange={(e) => set({ name: e.target.value })} placeholder="e.g. Diwali offer for past buyers" />
+              </Field>
+              <Field label="Language" hint="The language the message is written in. Meta checks it, and Campaigns shows it under that language.">
+                <select id="tpl-lang" className="select" value={t.language || 'en'} onChange={(e) => set({ language: e.target.value })}>
+                  {LANGS.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
+                  {t.language && !LANGS.some((l) => l.code === t.language) && <option value={t.language}>{t.language}</option>}
+                </select>
+              </Field>
+            </div>
             <Field label="Message" error={tried ? errors.find((e) => /message|personal detail|1,024/i.test(e)) : null}>
               <div className="te-box">
                 <div className="te-toolbar">
@@ -304,9 +312,6 @@ export default function TemplateEditor() {
                       <option value="approved">Ready to send</option>
                       <option value="draft">Draft (cannot be sent)</option>
                     </select>
-                  </Field>
-                  <Field label="Language code" hint="en for English; en_US for Meta’s sample templates.">
-                    <input className="input" value={t.language || 'en'} onChange={(e) => set({ language: e.target.value })} />
                   </Field>
                   <Field label="Approved template ID" hint="Meta: the approved template’s name. Twilio: the Content SID (HX…).">
                     <input className="input" value={t.provider_ref} onChange={(e) => set({ provider_ref: e.target.value })} placeholder="e.g. past_buyers_offer" />

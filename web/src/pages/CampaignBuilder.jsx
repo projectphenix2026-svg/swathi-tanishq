@@ -10,7 +10,7 @@ import { PhotoPicker } from '../components/PhotoPicker.jsx';
 import { VideoPicker } from '../components/VideoPicker.jsx';
 import { ago, dateTime, inr, num, phone, plural } from '../lib/format.js';
 import { READY_MESSAGES } from '../lib/ready.js';
-import { LANGS, isReadyText, readyFor, readyIn } from '../lib/ready-lang.js';
+import { LANGS, isReadyText, langOf, readyFor, readyIn } from '../lib/ready-lang.js';
 import { toFriendly } from '../lib/friendly.js';
 import { useT } from '../lib/i18n.jsx';
 import { atLeast } from '@shared/roles.js';
@@ -284,7 +284,8 @@ function TemplateStep({ t, templates, setTemplates, templateId, setTemplateId, n
   const ready = READY_MESSAGES.map((m) => ({ m, r: readyFor(m, lang, salesCodes) }));
   const items = [
     ...ready.map(({ m, r }) => ({ key: `ready:${m.key}`, ready: true, m, name: r.name, title: t(m.title), body: r.body, pic: m.pic, meta: needsMeta ? metaState(templates.find((x) => x.name === r.name)) : null })),
-    ...templates.filter((x) => !READY_NAMES.has(x.name)).map((x) => ({ key: `t:${x.id}`, id: x.id, name: x.name, body: x.body, pic: 'memo', meta: needsMeta ? metaState(x) : null })),
+    // The shop's own templates in the chosen language (and the one already picked, whatever its language).
+    ...templates.filter((x) => !READY_NAMES.has(x.name) && (langOf(x) === lang || x.id === template?.id)).map((x) => ({ key: `t:${x.id}`, id: x.id, name: x.name, body: x.body, pic: 'memo', meta: needsMeta ? metaState(x) : null })),
   ];
   const readyChosen = template && ready.find(({ r }) => r.name === template.name);
   const chosenKey = !template ? null : readyChosen ? `ready:${readyChosen.m.key}` : `t:${template.id}`;

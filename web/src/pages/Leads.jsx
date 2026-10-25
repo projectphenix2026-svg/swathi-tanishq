@@ -106,28 +106,6 @@ export default function Leads() {
           <button className="btn sm" onClick={() => setWaiting(true)}>Show them</button>
         </div>
       )}
-      <div className="card list-tools" style={{ marginBottom: 12 }}>
-        <SearchBox value={q} onChange={setQ} placeholder={t('Search name, phone, city or message')} style={{ flex: '1 1 220px' }} />
-        <div className="chips">
-          {TABS.map((x) => (
-            <button key={x.key} className={`chip ${tab === x.key ? 'on' : ''}`} onClick={() => { setTab(x.key); setData(null); setSel(new Set()); }}>
-              {t(x.label)} <span className="n">{num(x.key === 'all' ? Object.entries(c).filter(([k]) => k !== 'overdue').reduce((n, [, v]) => n + Number(v || 0), 0) : x.key ? c[x.key] || 0 : (c.new || 0) + (c.called || 0))}</span>
-            </button>
-          ))}
-        </div>
-        <select className="select sm" value={offer} onChange={(e) => setOffer(e.target.value)} aria-label="Offer">
-          <option value="">All offers</option>
-          {offers.map((o) => <option key={o} value={o}>{o}</option>)}
-        </select>
-        <select className="select sm" value={city} onChange={(e) => setCity(e.target.value)} aria-label="City">
-          <option value="">All cities</option>
-          {cities.map((o) => <option key={o} value={o}>{o}</option>)}
-        </select>
-        <label className="row tick" style={{ gap: 6, fontSize: '0.88rem' }}>
-          <input type="checkbox" checked={waiting} onChange={(e) => setWaiting(e.target.checked)} />Waiting more than a day
-        </label>
-        {filtered && <button className="btn ghost sm" onClick={() => { setQ(''); setOffer(''); setCity(''); setWaiting(false); }}><X size={14} />Clear filters</button>}
-      </div>
       <SelectBar count={sel.size} onClear={() => setSel(new Set())}>
         <button className="btn sm primary" onClick={() => bulk('called')}><Check size={15} />Called</button>
         <button className="btn sm" onClick={() => bulk('won')}><ShoppingBag size={15} />Bought</button>
@@ -135,6 +113,28 @@ export default function Leads() {
         <button className="btn sm" onClick={downloadCalls}><Download size={15} />Download call list</button>
       </SelectBar>
       <div className="card">
+        <div className="list-tools">
+          <SearchBox value={q} onChange={setQ} placeholder={t('Search name, phone, city or message')} style={{ flex: '1 1 220px' }} />
+          <div className="chips">
+            {TABS.map((x) => (
+              <button key={x.key} className={`chip ${tab === x.key ? 'on' : ''}`} onClick={() => { setTab(x.key); setData(null); setSel(new Set()); }}>
+                {t(x.label)} <span className="n">{num(x.key === 'all' ? Object.entries(c).filter(([k]) => k !== 'overdue').reduce((n, [, v]) => n + Number(v || 0), 0) : x.key ? c[x.key] || 0 : (c.new || 0) + (c.called || 0))}</span>
+              </button>
+            ))}
+          </div>
+          <select className="select" value={offer} onChange={(e) => setOffer(e.target.value)} aria-label="Offer">
+            <option value="">All offers</option>
+            {offers.map((o) => <option key={o} value={o}>{o}</option>)}
+          </select>
+          <select className="select" value={city} onChange={(e) => setCity(e.target.value)} aria-label="City">
+            <option value="">All cities</option>
+            {cities.map((o) => <option key={o} value={o}>{o}</option>)}
+          </select>
+          <label className="row tick" style={{ gap: 6, fontSize: '0.88rem' }}>
+            <input type="checkbox" checked={waiting} onChange={(e) => setWaiting(e.target.checked)} />Waiting more than a day
+          </label>
+          {filtered && <button className="btn ghost sm" onClick={() => { setQ(''); setOffer(''); setCity(''); setWaiting(false); }}><X size={14} />Clear filters</button>}
+        </div>
         {!data ? (
           <div className="stack" style={{ padding: 20 }}>{[0, 1, 2].map((i) => <Skeleton key={i} h={44} />)}</div>
         ) : leads.length === 0 ? (

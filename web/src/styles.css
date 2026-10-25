@@ -147,11 +147,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
 @media (min-width: 900px) {
   .sidebar { display: flex; }
   .topbar, .bottom-nav { display: none; }
-  .page { padding: 32px 36px 48px; }
+  .page { padding: 20px 28px 28px; }
 }
 
 /* ---------- Page header ---------- */
-.page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 22px; flex-wrap: wrap; }
+.page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 14px; flex-wrap: wrap; }
 .page-head p { margin-top: 4px; color: var(--text-2); }
 .back { display: inline-flex; align-items: center; gap: 4px; color: var(--text-2); font-size: 0.88rem; margin-bottom: 10px; }
 
@@ -261,6 +261,14 @@ table.table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
 .table tr:last-child td { border-bottom: none; }
 .table tr.clickable { cursor: pointer; }
 .table tr.clickable:hover td { background: var(--surface-2); }
+/* The main column takes the spare width; its one-line preview is cut with "…" instead of wrapping. */
+.table .cell-main { width: 100%; max-width: 0; }
+.table .cell-main .ellipsis { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.table .cell-main b.ellipsis { display: inline-block; max-width: 100%; vertical-align: middle; }
+.table .cell-sub { font-size: 0.84rem; margin-top: 2px; }
+.table .cell-actions { white-space: nowrap; text-align: right; }
+.table .cell-actions > * + * { margin-left: 6px; }
+.table .nowrap { white-space: nowrap; }
 .list-item { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--border); }
 .list-item:last-child { border-bottom: none; }
 .hide-mobile { display: none; }
@@ -927,7 +935,7 @@ a.sent-row:hover { background: var(--surface-2); text-decoration: none; }
 .search-clear:hover { background: var(--surface-2); color: var(--text); }
 .search-clear svg { position: static; transform: none; }
 
-.page > .tabs { margin-bottom: 16px; }
+.page > .tabs { margin-bottom: 12px; }
 .spending-page { display: flex; flex-direction: column; gap: 16px; }
 .spending-page > .tabs, .spending-page > .page-head { margin-bottom: 0; }
 

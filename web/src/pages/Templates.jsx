@@ -8,7 +8,7 @@ import { Highlighted } from '../components/PhonePreview.jsx';
 import { dateOnly } from '../lib/format.js';
 import { toFriendly } from '../lib/friendly.js';
 import { READY_MESSAGES, iconFor } from '../lib/ready.js';
-import { LANGS, isReadyText, readyFor, readyIn } from '../lib/ready-lang.js';
+import { LANGS, isReadyText, langLabel, readyFor, readyIn } from '../lib/ready-lang.js';
 import { useAuth } from '../lib/auth.js';
 import { atLeast } from '@shared/roles.js';
 import { useT } from '../lib/i18n.jsx';
@@ -140,19 +140,6 @@ export default function Templates() {
         {canWrite && <Link to="/templates/new" className="btn primary"><Plus size={18} />New template</Link>}
       </div>
 
-      <div className="list-tools card" style={{ marginBottom: 16 }}>
-        <SearchBox value={q} onChange={setQ} placeholder="Search templates by name or words" style={{ flex: '1 1 260px' }} />
-        <div className="chips">
-          {[
-            ['all', 'All', all.length],
-            ['approved', needsMeta ? 'Approved by Meta' : 'Ready', nApproved],
-            ['waiting', needsMeta ? 'Not approved yet' : 'Not ready yet', all.length - nApproved],
-          ].map(([k, label, n]) => (
-            <button key={k} type="button" className={`chip ${show === k ? 'on' : ''}`} onClick={() => setShow(k)}>{label}{list ? ` (${n})` : ''}</button>
-          ))}
-        </div>
-      </div>
-
       {canWrite && !q && show === 'all' && <div className="card card-pad stack" style={{ gap: 12 }}>
         <h2>Ready-made</h2>
         <div className="ready-grid">
@@ -195,60 +182,77 @@ export default function Templates() {
           </SelectBar>
         )}
         <div className="card">
-          <div className={`tpl-table ${canWrite ? 'with-tick' : ''}`} role="table" aria-label="Your templates">
-            <div className="tpl-row tpl-head" role="row">
-              {canWrite && <span role="columnheader" className="tick"><input type="checkbox" aria-label="Select all shown" checked={allTicked(sel, shown.map((x) => x.id))} onChange={(e) => setSel(e.target.checked ? new Set(shown.map((x) => x.id)) : new Set())} /></span>}
-              <SortTh as="span" label="Template" k="name" sort={sort} toggle={toggle} />
-              <span role="columnheader">Has</span>
-              <SortTh as="span" label={needsMeta ? 'Meta approval' : 'Status'} k="meta" sort={sort} toggle={toggle} />
-              <SortTh as="span" label="Used" k="used" sort={sort} toggle={toggle} />
-              <span role="columnheader" />
+          <div className="list-tools">
+            <SearchBox value={q} onChange={setQ} placeholder="Search templates by name or words" style={{ flex: '1 1 260px' }} />
+            <div className="chips">
+              {[
+                ['all', 'All', all.length],
+                ['approved', needsMeta ? 'Approved by Meta' : 'Ready', nApproved],
+                ['waiting', needsMeta ? 'Not approved yet' : 'Not ready yet', all.length - nApproved],
+              ].map(([k, label, n]) => (
+                <button key={k} type="button" className={`chip ${show === k ? 'on' : ''}`} onClick={() => setShow(k)}>{label}{list ? ` (${n})` : ''}</button>
+              ))}
             </div>
-            {list.length > 0 && shown.length === 0 && <p className="subtle" style={{ padding: 20 }}>No template matches. Try other words, or make a new one.</p>}
-            {list.length === 0 && <p className="subtle" style={{ padding: 20 }}>No templates yet. Make one with “New template”, or start from a ready-made one above.</p>}
-            {shown.map((t) => {
-              const [tone, label] = needsMeta ? META_BADGE[metaState(t)] : STATUS[t.status] || ['neutral', t.status];
-              return (
-                <div key={t.id} className={`tpl-row ${ok(t) ? 'tpl-ok' : ''} ${sel.has(t.id) ? 'ticked' : ''}`} role="row" onClick={() => navigate(`/templates/${t.id}`)}>
-                  {canWrite && <span role="cell" className="tick" onClick={(e) => e.stopPropagation()}><input type="checkbox" aria-label={`Select ${t.name}`} checked={sel.has(t.id)} onChange={() => setSel((s) => toggleIn(s, t.id))} /></span>}
-                  <span className="tpl-cell-name" role="cell">
-                    <span className="row" style={{ gap: 8, minWidth: 0 }}>
-                      <Pic name={iconFor(t.name)} size={26} />
-                      <b className="ellipsis">{t.name}</b>
-                    </span>
-                    <span className="tpl-preview">{toFriendly(t.body).replace(/\s*\n+\s*/g, ' ')}</span>
-                  </span>
-                  <span className="tpl-has" role="cell">
-                    {t.video_url && <span title="Video"><Film size={16} />Video</span>}
-                    {t.image_url && <span title="Photo"><Image size={16} />Photo</span>}
-                    {t.buttons.length > 0 && <span title={t.buttons.map((b) => b.text).join(', ')}><MousePointerClick size={16} />{t.buttons.length === 1 ? t.buttons[0].text : `${t.buttons.length} buttons`}</span>}
-                    {!t.video_url && !t.image_url && !t.buttons.length && <span className="subtle">Text only</span>}
-                  </span>
-                  <span role="cell">
-                    <span className={`badge ${tone}`}>{tone === 'ok' && <Check size={13} />}{label}</span>
-                    {needsMeta && metaState(t) === 'waiting' && <span className="subtle tpl-note">Updates by itself</span>}
-                    {needsMeta && metaState(t) === 'rejected' && t.provider_reason && <span className="subtle tpl-note">{t.provider_reason}</span>}
-                  </span>
-                  <span className="subtle tpl-used" role="cell">{t.used_in ? `${t.used_in} time${t.used_in > 1 ? 's' : ''}` : 'Not yet'}<br />Updated {dateOnly(t.updated_at)}</span>
-                  <span className="tpl-actions" role="cell" onClick={(e) => e.stopPropagation()}>
-                    {asking === t.id ? (
-                      <>
-                        <span className="subtle">Delete?</span>
-                        <button type="button" className="btn sm" onClick={() => setAsking(null)}>Keep</button>
-                        <button type="button" className="btn sm danger" onClick={() => removeTemplate(t)}>Yes, delete</button>
-                      </>
-                    ) : (
-                      <>
-                        {ok(t) && <Link to={`/campaigns/new?template=${t.id}`} className="btn sm primary"><Send size={14} />Use</Link>}
-                        <Link to={`/templates/${t.id}`} className="btn sm ghost"><Pencil size={14} />Edit</Link>
-                        {canWrite && <button type="button" className="btn sm ghost danger" onClick={() => setAsking(t.id)} aria-label={`Delete ${t.name}`}><Trash2 size={14} /></button>}
-                      </>
-                    )}
-                  </span>
-                </div>
-              );
-            })}
           </div>
+          {list.length > 0 && shown.length === 0 && <p className="subtle" style={{ padding: 20 }}>No template matches. Try other words, or make a new one.</p>}
+          {list.length === 0 && <p className="subtle" style={{ padding: 20 }}>No templates yet. Make one with “New template”, or start from a ready-made one above.</p>}
+          {shown.length > 0 && (
+            <div className="table-wrap">
+              <table className="table">
+                <thead>
+                  <tr>
+                    {canWrite && <th className="tick-col"><input type="checkbox" aria-label="Select all shown" checked={allTicked(sel, shown.map((x) => x.id))} onChange={(e) => setSel(e.target.checked ? new Set(shown.map((x) => x.id)) : new Set())} /></th>}
+                    <SortTh label="Template" k="name" sort={sort} toggle={toggle} />
+                    <th>Has</th>
+                    <SortTh label={needsMeta ? 'Meta approval' : 'Status'} k="meta" sort={sort} toggle={toggle} />
+                    <SortTh label="Used" k="used" sort={sort} toggle={toggle} />
+                    <th aria-label="Actions" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {shown.map((t) => {
+                    const [tone, label] = needsMeta ? META_BADGE[metaState(t)] : STATUS[t.status] || ['neutral', t.status];
+                    return (
+                      <tr key={t.id} className={`clickable ${ok(t) ? 'row-ok' : ''} ${sel.has(t.id) ? 'ticked' : ''}`} onClick={() => navigate(`/templates/${t.id}`)}>
+                        {canWrite && <td className="tick-col" onClick={(e) => e.stopPropagation()}><input type="checkbox" aria-label={`Select ${t.name}`} checked={sel.has(t.id)} onChange={() => setSel((x) => toggleIn(x, t.id))} /></td>}
+                        <td className="cell-main">
+                          <span className="row" style={{ gap: 8, minWidth: 0 }}><Pic name={iconFor(t.name)} size={26} /><b className="ellipsis">{t.name}</b>{!READY_NAMES.has(t.name) && <span className="badge neutral">{langLabel(t)}</span>}</span>
+                          <div className="cell-sub ellipsis">{toFriendly(t.body).replace(/\s*\n+\s*/g, ' ')}</div>
+                        </td>
+                        <td><div className="tpl-has">
+                          {t.video_url && <span title="Video"><Film size={16} />Video</span>}
+                          {t.image_url && <span title="Photo"><Image size={16} />Photo</span>}
+                          {t.buttons.length > 0 && <span title={t.buttons.map((x) => x.text).join(', ')}><MousePointerClick size={16} />{t.buttons.length === 1 ? t.buttons[0].text : `${t.buttons.length} buttons`}</span>}
+                          {!t.video_url && !t.image_url && !t.buttons.length && <span className="subtle">Text only</span>}
+                        </div></td>
+                        <td>
+                          <span className={`badge ${tone}`}>{tone === 'ok' && <Check size={13} />}{label}</span>
+                          {needsMeta && metaState(t) === 'waiting' && <div className="subtle cell-sub">Updates by itself</div>}
+                          {needsMeta && metaState(t) === 'rejected' && t.provider_reason && <div className="subtle cell-sub">{t.provider_reason}</div>}
+                        </td>
+                        <td className="subtle nowrap">{t.used_in ? `${t.used_in} time${t.used_in > 1 ? 's' : ''}` : 'Not yet'}<div className="cell-sub">Updated {dateOnly(t.updated_at)}</div></td>
+                        <td className="cell-actions" onClick={(e) => e.stopPropagation()}>
+                          {asking === t.id ? (
+                            <>
+                              <span className="subtle">Delete?</span>
+                              <button type="button" className="btn sm" onClick={() => setAsking(null)}>Keep</button>
+                              <button type="button" className="btn sm danger" onClick={() => removeTemplate(t)}>Yes, delete</button>
+                            </>
+                          ) : (
+                            <>
+                              {ok(t) && <Link to={`/campaigns/new?template=${t.id}`} className="btn sm primary"><Send size={14} />Use</Link>}
+                              <Link to={`/templates/${t.id}`} className="btn sm ghost"><Pencil size={14} />Edit</Link>
+                              {canWrite && <button type="button" className="btn sm ghost danger" onClick={() => setAsking(t.id)} aria-label={`Delete ${t.name}`}><Trash2 size={14} /></button>}
+                            </>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
         </>
       )}

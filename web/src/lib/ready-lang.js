@@ -8,6 +8,13 @@ export const LANGS = [
   { code: 'hi', label: 'हिन्दी' },
 ];
 
+/** A template's language as one of LANGS ('en_US' counts as English). */
+export const langOf = (t) => {
+  const code = String(t?.language || 'en').split(/[_-]/)[0];
+  return LANGS.some((l) => l.code === code) ? code : 'en';
+};
+export const langLabel = (t) => LANGS.find((l) => l.code === langOf(t)).label;
+
 export const BUTTONS = {
   en: [{ type: 'quick_reply', text: 'Interested' }, { type: 'quick_reply', text: 'Not now' }],
   te: [{ type: 'quick_reply', text: 'ఆసక్తి ఉంది' }, { type: 'quick_reply', text: 'ఇప్పుడు కాదు' }],
