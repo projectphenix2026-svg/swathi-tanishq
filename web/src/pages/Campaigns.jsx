@@ -7,7 +7,8 @@ import { CampaignStatus, Empty, Pic, Skeleton } from '../components/ui.jsx';
 import { iconFor } from '../lib/ready.js';
 import { useAuth } from '../lib/auth.js';
 import { atLeast } from '@shared/roles.js';
-import { dateTime, num, pct } from '../lib/format.js';
+import { dateTime, num, pct, phone, plural } from '../lib/format.js';
+import { toFriendly } from '../lib/friendly.js';
 
 export function Funnel({ total, sent, delivered, read, failed }) {
   const t = total || 1;
@@ -106,12 +107,19 @@ export default function Campaigns() {
                 <div className="subtle">
                   {c.status === 'scheduled' ? `Goes out ${dateTime(c.scheduled_at)}` : dateTime(c.started_at || c.created_at)} · {c.template_name}
                 </div>
+                {Number(c.total) === 1 && c.first_phone && (
+                  <div className="sent-to"><b>To {c.first_name || phone(c.first_phone)}</b>{c.first_name && <span className="subtle num"> · {phone(c.first_phone)}</span>}</div>
+                )}
+                {c.first_body && <div className="sent-body">{toFriendly(c.first_body).replace(/\s*\n+\s*/g, ' ')}</div>}
               </div>
               <div style={{ flex: '1 1 220px' }} className="stack-sm">
                 <Funnel total={c.total} sent={c.sent} delivered={c.delivered} read={c.read} failed={c.failed} />
                 <div className="subtle num">
-                  {num(c.total)} customers · {pct(c.read, c.total)}% read{c.failed ? ` · ${num(c.failed)} couldn’t be reached` : ''}{c.pending ? ` · ${num(c.pending)} waiting` : ''}
+                  {Number(c.total) === 1
+                    ? (c.failed ? 'Couldn’t reach the phone' : c.read ? 'Read' : c.delivered ? 'Reached the phone' : c.pending ? 'Waiting to go out' : 'Sent')
+                    : `${plural(c.total, 'customer')} · ${pct(c.read, c.total)}% read${c.failed ? ` · ${num(c.failed)} couldn’t be reached` : ''}${c.pending ? ` · ${num(c.pending)} waiting` : ''}`}
                 </div>
+                {c.failed > 0 && c.last_error && <div className="sent-error">Meta said: {c.last_error}</div>}
               </div>
             </Link>
           ))}

@@ -67,9 +67,29 @@ describe('Meta approval with a photo', () => {
     const meta = createMetaProvider({ accessToken: 'EAA-x', phoneNumberId: '1', wabaId: '2', graphVersion: 'v25.0' }, { fetchImpl });
     const r = await meta.submitTemplate({ name: 'Photo offer', body: 'Hi {{name}}, see our new designs.', image_url: photoUrl, buttons: [] }, { name: 'Priya' }, { sample: { mime: 'image/jpeg', bytes: new Uint8Array([1, 2, 3]) } });
     expect(r.status).toBe('PENDING');
-    const submit = JSON.parse(calls.find((c) => c.url.includes('/message_templates')).init.body);
+    const submit = JSON.parse(calls.find((c) => c.url.includes('/message_templates') && c.init.method === 'POST').init.body);
     expect(submit.components[0]).toEqual({ type: 'HEADER', format: 'IMAGE', example: { header_handle: ['HANDLE-1'] } });
     expect(calls.find((c) => c.url.endsWith('/upload:abc')).init.headers.file_offset).toBe('0');
+  });
+
+  it('“Submit again” edits Meta’s existing template (same name) instead of making a new one', async () => {
+    const calls = [];
+    const fetchImpl = async (url, init = {}) => {
+      calls.push({ url: String(url), init });
+      const json = (body) => ({ ok: true, status: 200, json: async () => body });
+      if (String(url).includes('debug_token')) return json({ data: { app_id: '999' } });
+      if (String(url).includes('/999/uploads')) return json({ id: 'upload:abc' });
+      if (String(url).endsWith('/upload:abc')) return json({ h: 'HANDLE-1' });
+      if (String(url).includes('/message_templates?name=')) return json({ data: [{ id: 'tpl-77', name: 'dhanteras', language: 'en', status: 'APPROVED' }] });
+      if (String(url).endsWith('/tpl-77')) return json({ success: true });
+      return json({});
+    };
+    const meta = createMetaProvider({ accessToken: 'EAA-x', phoneNumberId: '1', wabaId: '2', graphVersion: 'v25.0' }, { fetchImpl });
+    const r = await meta.submitTemplate({ name: 'Dhanteras', body: 'Hi {{name}}.', image_url: photoUrl, buttons: [], language: 'en' }, { name: 'Priya' }, { sample: { mime: 'image/jpeg', bytes: new Uint8Array([1]) } });
+    expect(r).toMatchObject({ name: 'dhanteras', status: 'PENDING', id: 'tpl-77' });
+    const edit = calls.find((c) => c.url.endsWith('/tpl-77'));
+    expect(JSON.parse(edit.init.body).components[0].format).toBe('IMAGE');
+    expect(calls.some((c) => c.url.endsWith('/2/message_templates') && c.init.method === 'POST')).toBe(false);
   });
 
   it('sends the photo as the header when the message has one', async () => {

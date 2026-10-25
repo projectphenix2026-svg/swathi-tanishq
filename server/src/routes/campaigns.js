@@ -25,7 +25,11 @@ router.get('/', async (req, res) => {
             count(m.id) FILTER (WHERE m.status IN ('delivered', 'read')) AS delivered,
             count(m.id) FILTER (WHERE m.status = 'read') AS read,
             count(m.id) FILTER (WHERE m.status = 'failed') AS failed,
-            count(m.id) FILTER (WHERE m.status IN ('queued', 'retrying', 'sending')) AS pending
+            count(m.id) FILTER (WHERE m.status IN ('queued', 'retrying', 'sending')) AS pending,
+            (SELECT ct.name FROM messages m1 JOIN contacts ct ON ct.id = m1.contact_id WHERE m1.campaign_id = c.id ORDER BY m1.id LIMIT 1) AS first_name,
+            (SELECT ct.phone FROM messages m1 JOIN contacts ct ON ct.id = m1.contact_id WHERE m1.campaign_id = c.id ORDER BY m1.id LIMIT 1) AS first_phone,
+            (SELECT m1.body FROM messages m1 WHERE m1.campaign_id = c.id AND m1.body IS NOT NULL ORDER BY m1.id LIMIT 1) AS first_body,
+            (SELECT m1.error_message FROM messages m1 WHERE m1.campaign_id = c.id AND m1.status = 'failed' AND m1.error_message IS NOT NULL ORDER BY m1.id DESC LIMIT 1) AS last_error
        FROM campaigns c JOIN templates t ON t.id = c.template_id
        LEFT JOIN messages m ON m.campaign_id = c.id
       WHERE c.client_id = $1 AND c.name NOT LIKE 'Order ready ·%' AND c.name NOT LIKE 'Repair ready ·%'
@@ -89,8 +93,12 @@ async function sendableTemplate(clientId, templateId, channel = 'whatsapp', prov
   }
   const missingConfig = provider.missingConfig();
   if (missingConfig.length) return { error: `Sending is not set up yet. Missing: ${missingConfig.join(', ')}.` };
-  if (provider.name === 'meta' && (!t.provider_ref || (t.provider_status && t.provider_status !== 'APPROVED'))) {
-    return { error: 'WhatsApp (Meta) has not approved this message yet. Submit it from the template page and check back.' };
+  // Only Meta's approved version can be sent: an edit after approval (wording, buttons, adding a
+  // photo) clears provider_status, and sending it anyway fails at Meta (e.g. #132018 for a photo).
+  if (provider.name === 'meta' && (!t.provider_ref || t.provider_status !== 'APPROVED')) {
+    return { error: t.provider_ref && !t.provider_status
+      ? 'This template changed after Meta approved it (for example a photo was added). Open it on the Templates page and press “Submit again”.'
+      : 'WhatsApp (Meta) has not approved this message yet. Submit it from the template page and check back.' };
   }
   return { t };
 }

@@ -45,9 +45,10 @@ export function phone(e164) {
 }
 
 export function initials(name, fallback = '#') {
-  const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
-  if (!parts.length) return fallback;
-  return (parts[0][0] + (parts[1]?.[0] || '')).toUpperCase();
+  // First letter (or digit) of the first two words; emoji and symbols are skipped.
+  const letters = String(name || '').trim().split(/\s+/).map((w) => w.match(/[\p{L}\p{N}]/u)?.[0]).filter(Boolean);
+  if (!letters.length) return fallback;
+  return (letters[0] + (letters[1] || '')).toUpperCase();
 }
 
 const PALETTE = [

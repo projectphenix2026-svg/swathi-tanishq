@@ -80,8 +80,10 @@ export async function processSendJob(messageId) {
       result = await sms.send({ to: contact.phone, text: body, dltTemplateId: template?.sms_dlt_template_id });
       if (sms.live) cost = config.sms.costPerSms;
     } else {
-      // "Send a test to my phone" uses the connected WhatsApp even in Test mode.
-      const provider = campaign?.name.startsWith('Test · ') ? testProvider() : getProvider();
+      // "Send a test to my phone", and a reply to someone who wrote in on the real WhatsApp, use the
+      // connected WhatsApp even in Test mode (a pretend reply to a real customer helps nobody).
+      const real = campaign?.name.startsWith('Test · ') || (isReply && (await wroteInOnWhatsApp(contact.id)));
+      const provider = real ? testProvider() : getProvider();
       providerName = provider.name;
       const payload = { to: contact.phone, body, buttons: msg.buttons || [], imageUrl: msg.image_url, template, values, idempotencyKey: msg.idempotency_key };
       result = isReply ? await provider.sendText(payload) : await provider.send(payload);
@@ -111,6 +113,16 @@ export async function processSendJob(messageId) {
   return { sent: true };
 }
 setRunner(processSendJob);
+
+/** True when the customer wrote in on the real WhatsApp in the last 24 hours (the free reply window). */
+async function wroteInOnWhatsApp(contactId) {
+  const { rows: [r] } = await query(
+    `SELECT 1 AS yes FROM messages WHERE contact_id = $1 AND direction = 'inbound' AND provider = 'meta'
+        AND created_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-24 hours') LIMIT 1`,
+    [contactId],
+  );
+  return Boolean(r);
+}
 
 /** Saves a unique offer code on the message; a clash with an existing code just picks another. */
 async function reserveCode(msg, contact, prefix) {

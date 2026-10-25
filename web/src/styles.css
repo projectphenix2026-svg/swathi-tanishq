@@ -734,6 +734,13 @@ a.chart-card:hover { border-color: var(--brand); }
 .tpl-result { display: flex; gap: 10px; align-items: flex-start; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); cursor: pointer; font: inherit; color: inherit; text-align: left; }
 .tpl-result:hover, .tpl-result.on { border-color: var(--brand); background: var(--brand-50); }
 .tpl-text.short { -webkit-line-clamp: 2; margin-top: 4px; }
+/* Sent messages list: who it went to, the message, and why it failed. */
+.sent-to { margin-top: 4px; font-size: 0.88rem; }
+.sent-body { margin-top: 4px; font-size: 0.85rem; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.sent-error { font-size: 0.82rem; color: var(--bad); }
+.pretend { font-size: 0.72rem; color: var(--warn); font-weight: 600; }
+.pick-all { background: var(--surface-2); border-bottom: 1px solid var(--border); }
+
 /* Approval by Meta: approved templates stand out; others can be seen but not picked. */
 .tpl-approved { border-color: color-mix(in srgb, var(--ok) 45%, var(--border)); box-shadow: inset 4px 0 0 var(--ok); }
 .tpl-result:disabled { cursor: not-allowed; opacity: 0.6; background: var(--surface-2); }
