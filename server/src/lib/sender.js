@@ -45,14 +45,17 @@ export async function processSendJob(messageId) {
     await query(`UPDATE campaigns SET status = 'sending', started_at = COALESCE(started_at, ${NOW}) WHERE id = $1 AND status = 'scheduled'`, [campaign.id]);
   }
 
-  // Personalise now: customer details, campaign values and a unique offer code.
+  // Personalise now: customer details, campaign values and a unique offer code. A test to a staff
+  // phone is filled in as the customer it was previewed as.
+  const person = (msg.variables?.as_contact_id
+    && (await query('SELECT * FROM contacts WHERE id = $1 AND client_id = $2', [msg.variables.as_contact_id, msg.client_id])).rows[0]) || contact;
   let values = msg.template_values;
   let body = msg.body;
   if (msg.channel === 'sms' && template && !body) {
     // Bulk SMS: personalise the SMS version the same way (name, offer, sales code...).
-    values = valuesFor(contact, { ...(msg.variables || {}), ...(await shopValues(msg.client_id)) });
+    values = valuesFor(person, { ...(msg.variables || {}), ...(await shopValues(msg.client_id)) });
     if (extractVariables(template.sms_body || '').includes('offer_code')) {
-      values.offer_code = await reserveCode(msg, contact, cleanPrefix(msg.variables?.code_prefix, 'OFFER'));
+      values.offer_code = await reserveCode(msg, person, cleanPrefix(msg.variables?.code_prefix, 'OFFER'));
     }
     const { text, missing } = render(template.sms_body || '', values);
     if (!text || missing.length) return skip(msg, missing.length ? `Missing details: ${missing.map((k) => LABEL[k] || k).join(', ')}` : 'This message has no SMS version');
@@ -60,10 +63,10 @@ export async function processSendJob(messageId) {
     await query(`UPDATE messages SET body = $2, template_values = $3 WHERE id = $1`, [msg.id, body, values]);
   }
   if (msg.channel === 'whatsapp' && template && !body) {
-    values = valuesFor(contact, { ...(msg.variables || {}), ...(await shopValues(msg.client_id)) });
+    values = valuesFor(person, { ...(msg.variables || {}), ...(await shopValues(msg.client_id)) });
     if (extractVariables(template.body).includes('offer_code')) {
       const prefix = cleanPrefix(msg.variables?.code_prefix, CODE_PREFIX[occasion?.kind] || 'OFFER');
-      values.offer_code = await reserveCode(msg, contact, prefix);
+      values.offer_code = await reserveCode(msg, person, prefix);
     }
     const { text, missing } = render(template.body, values);
     if (missing.length) return skip(msg, `Missing details: ${missing.map((k) => LABEL[k] || k).join(', ')}`);
