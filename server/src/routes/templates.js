@@ -107,11 +107,19 @@ router.post('/:id/sync-meta', async (req, res) => {
   if (!t?.provider_ref) return res.status(400).json({ error: 'This template has not been submitted to Meta.' });
   const s = await metaProvider().templateStatus(t.provider_ref);
   if (!s) return res.status(404).json({ error: `Meta has no template named ${t.provider_ref}.` });
+  // Meta's version must carry the same kind of header as this one: a template approved with a photo
+  // cannot send a video (Meta refuses it with #132018), so it needs "Submit again" first.
+  const want = t.video_url ? 'VIDEO' : t.image_url ? 'IMAGE' : null;
+  const has = s.header === 'IMAGE' || s.header === 'VIDEO' ? s.header : null;
+  const KIND = { IMAGE: 'a photo', VIDEO: 'a video' };
+  const mismatch = s.status === 'APPROVED' && want !== has;
   const { rows: [u] } = await query(
     `UPDATE templates SET provider_status = $2, provider_reason = $3, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = $1 RETURNING *`,
-    [t.id, s.status, s.reason],
+    [t.id, mismatch ? null : s.status, mismatch
+      ? `Meta approved this message with ${KIND[has] || 'no photo or video'}, but it now has ${KIND[want] || 'none'}. Press “Submit again”.`
+      : s.reason],
   );
-  res.json({ template: withVars(u) });
+  res.json({ template: withVars(u), mismatch });
 });
 
 /** The message's photo or video bytes (from the app's own store, or its web link) for Meta's sample. */

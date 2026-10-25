@@ -17,6 +17,7 @@ import whatsappRoutes from './routes/whatsapp.js';
 import exportRoutes from './routes/export.js';
 import { upload as mediaUpload, serve as mediaServe } from './routes/media.js';
 import { refreshProvider } from './lib/whatsapp-connection.js';
+import { ProviderError } from './providers/errors.js';
 
 export function createApp() {
   const app = express();
@@ -60,9 +61,11 @@ export function createApp() {
 
   // Express 5 passes errors from async handlers here.
   app.use((err, req, res, _next) => {
-    const status = err.status || err.statusCode || 500;
+    // A refusal from WhatsApp (Meta), Twilio or the SMS gateway: show their reason, not a generic error.
+    const fromProvider = err instanceof ProviderError;
+    const status = err.status || err.statusCode || (fromProvider ? 502 : 500);
     if (status >= 500) console.error(err);
-    const message = err.expose || status < 500 ? err.message : 'Something went wrong on our side. Please try again.';
+    const message = err.expose || fromProvider || status < 500 ? err.message : 'Something went wrong on our side. Please try again.';
     res.status(status).json({ error: err.code === 'LIMIT_FILE_SIZE' ? 'That file is too large (15 MB limit).' : message });
   });
   return app;

@@ -19,6 +19,14 @@ export function createMetaProvider(cfg, { fetchImpl = fetch } = {}) {
     return (data.data || []).find((x) => x.name === name && x.language === language) || null;
   }
 
+  /** The first of name_2 ... name_20 not used yet at Meta (for a new version of a template). */
+  async function freeName(name, language) {
+    for (let n = 2; n <= 20; n++) {
+      if (!(await findTemplate(`${name}_${n}`, language))) return `${name}_${n}`;
+    }
+    return null;
+  }
+
   async function post(payload) {
     let res;
     try {
@@ -52,14 +60,14 @@ export function createMetaProvider(cfg, { fetchImpl = fetch } = {}) {
     const start = await fetchImpl(
       `https://graph.facebook.com/${graphVersion}/${appId}/uploads?file_name=${mime.startsWith('video/') ? 'offer.mp4' : 'offer.jpg'}&file_length=${bytes.length}&file_type=${encodeURIComponent(mime)}`,
       { method: 'POST', headers: { Authorization: `Bearer ${accessToken}` } },
-    ).then((r) => r.json());
-    if (!start?.id) throw new ProviderError(start?.error?.message || 'Meta did not accept the sample photo.');
+    ).then((r) => r.json()).catch(() => ({}));
+    if (!start?.id) throw new ProviderError(`Meta said: ${start?.error?.message || 'the sample photo or video was not accepted.'}`);
     const done = await fetchImpl(`https://graph.facebook.com/${graphVersion}/${start.id}`, {
       method: 'POST',
       headers: { Authorization: `OAuth ${accessToken}`, file_offset: '0' },
       body: bytes,
-    }).then((r) => r.json());
-    if (!done?.h) throw new ProviderError(done?.error?.message || 'Meta did not accept the sample photo.');
+    }).then((r) => r.json()).catch(() => ({}));
+    if (!done?.h) throw new ProviderError(`Meta said: ${done?.error?.message || 'the sample photo or video was not accepted.'}`);
     return done.h;
   }
 
@@ -136,35 +144,51 @@ export function createMetaProvider(cfg, { fetchImpl = fetch } = {}) {
             : { type: 'QUICK_REPLY', text: b.text },
       );
       if (buttons.length) components.push({ type: 'BUTTONS', buttons });
-      // Submitted before (e.g. a photo was added later): edit Meta's template, which keeps its name.
       const language = template.language || 'en';
-      const existing = await findTemplate(name, language);
-      const res = await fetchImpl(`https://graph.facebook.com/${graphVersion}/${existing ? existing.id : `${wabaId}/message_templates`}`, {
+      const category = template.category === 'utility' ? 'UTILITY' : 'MARKETING';
+      const send = (path, body) => fetchImpl(`https://graph.facebook.com/${graphVersion}/${path}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(existing ? { components } : {
-          name,
-          language,
-          category: template.category === 'utility' ? 'UTILITY' : 'MARKETING',
-          components,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
+        body: JSON.stringify(body),
+      }).then(async (res) => ({ res, data: await res.json().catch(() => ({})) }));
+      const refusal = ({ res, data }) => {
         const e = data.error || {};
-        throw new ProviderError(e.error_user_msg || e.message || 'Meta rejected the template.', { code: e.code, status: res.status });
+        return new ProviderError(`Meta said: ${e.error_user_msg || e.message || 'the template was not accepted.'}`, { code: e.code, status: res.status });
+      };
+
+      // Submitted before (e.g. a photo was added later): edit Meta's template, which keeps its name.
+      const existing = await findTemplate(name, language);
+      if (existing) {
+        const edited = await send(existing.id, { components });
+        if (edited.res.ok) return { name, status: edited.data.status || 'PENDING', id: existing.id };
+        // Meta refused the edit (e.g. an approved template can change only once a day): send this
+        // version as a new template, dhanteras_2, dhanteras_3..., which Meta reviews like any other.
+        const fresh = await freeName(name, language);
+        if (!fresh) throw refusal(edited);
+        const created = await send(`${wabaId}/message_templates`, { name: fresh, language, category, components });
+        if (!created.res.ok) throw refusal(created);
+        return { name: fresh, status: created.data.status || 'PENDING', id: created.data.id };
       }
-      return { name, status: data.status || 'PENDING', id: data.id || existing?.id };
+      const created = await send(`${wabaId}/message_templates`, { name, language, category, components });
+      if (!created.res.ok) throw refusal(created);
+      return { name, status: created.data.status || 'PENDING', id: created.data.id };
     },
 
     /** Latest approval status for a submitted template. */
     async templateStatus(name) {
       if (!wabaId) return null;
-      const url = `https://graph.facebook.com/${graphVersion}/${wabaId}/message_templates?name=${encodeURIComponent(name)}&fields=name,status,rejected_reason,language`;
+      const url = `https://graph.facebook.com/${graphVersion}/${wabaId}/message_templates?name=${encodeURIComponent(name)}&fields=name,status,rejected_reason,language,components`;
       const res = await fetchImpl(url, { headers: { Authorization: `Bearer ${accessToken}` } });
       const data = await res.json().catch(() => ({}));
       const t = (data.data || []).find((x) => x.name === name);
-      return t ? { status: t.status, reason: t.rejected_reason && t.rejected_reason !== 'NONE' ? t.rejected_reason : null } : null;
+      if (!t) return null;
+      const header = (t.components || []).find((c) => c.type === 'HEADER');
+      return {
+        status: t.status,
+        reason: t.rejected_reason && t.rejected_reason !== 'NONE' ? t.rejected_reason : null,
+        // IMAGE, VIDEO, TEXT... or null: what kind of header Meta's version has.
+        header: header?.format || null,
+      };
     },
 
     /** X-Hub-Signature-256 is an HMAC of the raw body with the app secret. */
