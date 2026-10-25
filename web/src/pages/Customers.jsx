@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Ban, Download, Search, Send, Tag, Trash2, UserPlus, Users } from 'lucide-react';
 import { SelectBar, allTicked, toggleIn } from '../components/SelectBar.jsx';
 import { downloadCsv } from '../lib/csv.js';
@@ -16,12 +16,16 @@ const FILTERS = [
   { key: 'opted_in', label: 'Can receive WhatsApp', count: 'opted_in' },
   { key: 'no_opt_in', label: 'Not agreed yet', count: 'no_opt_in' },
   { key: 'opted_out', label: 'Said STOP', count: 'opted_out' },
+  { key: 'no_birthday', label: 'No birthday saved', count: 'no_birthday' },
+  { key: 'sleeping', label: 'Not reading (90 days)', count: 'sleeping' },
 ];
 const PAGE = 50;
 
 export default function Customers() {
   const [summary, setSummary] = useState(null);
-  const [filter, setFilter] = useState('all');
+  // Home links straight to a filter (?filter=no_birthday or ?filter=sleeping).
+  const [urlParams] = useSearchParams();
+  const [filter, setFilter] = useState(() => (FILTERS.some((f) => f.key === urlParams.get('filter')) ? urlParams.get('filter') : 'all'));
   const [q, setQ] = useState('');
   const [data, setData] = useState(null);
   const [page, setPage] = useState(0);

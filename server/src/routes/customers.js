@@ -1,5 +1,5 @@
 import express from 'express';
-import { query, batch, NOW } from '../db/index.js';
+import { query, batch, NOW, ago } from '../db/index.js';
 import { normalizePhone } from '../lib/phone.js';
 import { parseDate, sheetsCsvUrl, ImportError } from '../lib/import-basics.js';
 import { requireLevel } from './auth.js';
@@ -21,6 +21,10 @@ const DATES_SQL = `(SELECT json_group_array(json_object('kind', d.kind, 'label',
 // Deleted customers keep their row (so past offer totals and sales stay right) with all personal
 // details removed and the phone replaced by deleted:<id>; lists and counts leave them out.
 export const NOT_DELETED = "phone NOT LIKE 'deleted:%'";
+// Got offers in the last 90 days but read none of them (Home: "Not reading").
+const SLEEPING = `EXISTS (SELECT 1 FROM messages mm WHERE mm.contact_id = c.id AND mm.direction = 'outbound' AND mm.status IN ('sent', 'delivered', 'read') AND mm.created_at > ${ago('90 days')})
+    AND NOT EXISTS (SELECT 1 FROM messages mr WHERE mr.contact_id = c.id AND mr.direction = 'outbound' AND mr.status = 'read' AND mr.created_at > ${ago('90 days')})
+    AND opted_out_at IS NULL`;
 
 router.get('/', async (req, res) => {
   const { q = '', filter = 'all', sort = 'recent' } = req.query;
@@ -42,13 +46,15 @@ router.get('/', async (req, res) => {
   if (filter === 'no_opt_in') where.push('whatsapp_opt_in = 0 AND opted_out_at IS NULL');
   if (filter === 'opted_out') where.push('opted_out_at IS NOT NULL');
   if (filter === 'sms') where.push('sms_opt_in = 1 AND opted_out_at IS NULL');
+  if (filter === 'no_birthday') where.push('birthday IS NULL AND opted_out_at IS NULL');
+  if (filter === 'sleeping') where.push(SLEEPING);
   const w = where.join(' AND ');
   const { rows } = await query(
     `SELECT *, ${DATES_SQL}${req.query.offers ? `, ${offersThisWeekSql()} AS offers_this_week, ${lastOfferSql()} AS last_offer` : ''}
        FROM contacts c WHERE ${w} ORDER BY ${SORTS[sort] || SORTS.recent}, id DESC LIMIT ${limit} OFFSET ${offset}`,
     params,
   );
-  const { rows: [{ total }] } = await query(`SELECT count(*) AS total FROM contacts WHERE ${w}`, params);
+  const { rows: [{ total }] } = await query(`SELECT count(*) AS total FROM contacts c WHERE ${w}`, params);
   res.json({ customers: rows, total });
 });
 
@@ -57,8 +63,10 @@ router.get('/summary', async (req, res) => {
     `SELECT count(*) AS total,
             count(*) FILTER (WHERE whatsapp_opt_in = 1 AND opted_out_at IS NULL) AS opted_in,
             count(*) FILTER (WHERE whatsapp_opt_in = 0 AND opted_out_at IS NULL) AS no_opt_in,
-            count(*) FILTER (WHERE opted_out_at IS NOT NULL) AS opted_out
-       FROM contacts WHERE client_id = $1 AND ${NOT_DELETED}`,
+            count(*) FILTER (WHERE opted_out_at IS NOT NULL) AS opted_out,
+            count(*) FILTER (WHERE birthday IS NULL AND opted_out_at IS NULL) AS no_birthday,
+            count(*) FILTER (WHERE ${SLEEPING}) AS sleeping
+       FROM contacts c WHERE client_id = $1 AND ${NOT_DELETED}`,
     [req.clientId],
   );
   const { rows: cities } = await query(
