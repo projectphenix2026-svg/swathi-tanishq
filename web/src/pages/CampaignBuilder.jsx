@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { AlertTriangle, ArrowLeft, ArrowRight, CalendarClock, Check, ChevronLeft, ChevronRight, Pencil, Plus, Search, Send, ShieldCheck, X, Zap } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ArrowRight, CalendarClock, Check, ChevronLeft, ChevronRight, ExternalLink, Pencil, Phone, Plus, Reply, Search, Send, ShieldCheck, X, Zap } from 'lucide-react';
 import { VARIABLES, extractVariables, render, valuesFor } from '@shared/template.js';
 import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.js';
@@ -347,6 +347,28 @@ function TemplateStep({ t, templates, setTemplates, templateId, setTemplateId, n
           <Link to={`/templates/${template.id}`} className="btn ghost sm"><Pencil size={15} />Open the template</Link>
         </div>
       ))}
+      {template && (
+        <div className="card card-pad row wrap" style={{ gap: 12, alignItems: 'center' }}>
+          <div className="stack-sm" style={{ flex: '1 1 260px', minWidth: 0 }}>
+            <b>Buttons on this message</b>
+            {template.buttons?.length ? (
+              <div className="row wrap" style={{ gap: 6 }}>
+                {template.buttons.map((b, i) => (
+                  <span key={i} className="wa-btn" style={{ padding: '5px 10px', fontSize: '0.85rem' }}>
+                    {b.type === 'url' ? <ExternalLink size={13} /> : b.type === 'phone' ? <Phone size={13} /> : <Reply size={13} />}{b.text}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+            <span className="subtle">
+              {template.buttons?.length
+                ? 'Customers tap these to answer. Button words are part of Meta’s approval: change them in the template, then press “Submit again”.'
+                : 'None. Buttons like “Interested”, “Call the shop” or “See the collection” get far more replies. Add them in the template, then submit it to Meta.'}
+            </span>
+          </div>
+          <Link to={`/templates/${template.id}#buttons`} className="btn ghost sm"><Pencil size={15} />{template.buttons?.length ? 'Edit buttons' : 'Add buttons'}</Link>
+        </div>
+      )}
       {template && !salesCodes && usesCode && (
         <Alert tone="info">This template has a sales code in it. Sales codes are off in Settings, so pick a ready-made template or edit the wording to remove it.</Alert>
       )}

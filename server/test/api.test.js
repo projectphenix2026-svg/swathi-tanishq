@@ -173,6 +173,9 @@ describe('API flow', () => {
     expect(res.body.phone).toBe('+91 90000 11111');
     await drain();
     expect(provider.outbox.at(-1)).toMatchObject({ to: '+919000011111', body: 'Hi Priya, pieces to pair with your gold chain are in. 10% off this week.' });
+    // The test phone keeps its own name (it is not renamed after the customer it was previewed as).
+    const { rows: [tp] } = await query("SELECT name FROM contacts WHERE phone = '+919000011111'");
+    expect(tp.name).toMatch(/^Test phone/);
     const after = await agent.post('/api/campaigns/preview').send({ audience: { mode: 'all' }, templateId, variables: { offer: '10% off' } });
     expect(after.body.eligible).toBe(before.body.eligible);
     expect((await agent.post('/api/campaigns/test').send({ templateId, phone: '123' })).status).toBe(400);

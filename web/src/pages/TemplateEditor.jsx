@@ -42,7 +42,8 @@ export default function TemplateEditor() {
   const [t, setT] = useState(id ? null : { name: '', body: '', buttons: [], image_url: '', video_url: '', status: 'approved', provider_ref: '', category: 'marketing', sms_body: '', sms_dlt_template_id: '' });
   const [busy, setBusy] = useState(false);
   const [tried, setTried] = useState(false);
-  const [open, setOpen] = useState(null); // which extra row is open
+  // Which extra row is open; a link like /templates/5#buttons opens that one.
+  const [open, setOpen] = useState(() => window.location.hash.slice(1) || null);
   const [askDelete, setAskDelete] = useState(false);
 
   useEffect(() => {

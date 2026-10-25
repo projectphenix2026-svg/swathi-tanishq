@@ -740,7 +740,8 @@ a.chart-card:hover { border-color: var(--brand); }
 .sent-body { margin-top: 4px; font-size: 0.85rem; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 .sent-error { font-size: 0.82rem; color: var(--bad); }
 .pretend { font-size: 0.72rem; color: var(--warn); font-weight: 600; }
-.pick-all { background: var(--surface-2); border-bottom: 1px solid var(--border); }
+.pick-all { background: var(--surface-2); border-bottom: 1px solid var(--border); grid-template-columns: 20px minmax(0, 1fr); }
+.pick-all > b { white-space: normal; }
 
 /* Approval by Meta: approved templates stand out; others can be seen but not picked. */
 .tpl-approved { border-color: color-mix(in srgb, var(--ok) 45%, var(--border)); box-shadow: inset 4px 0 0 var(--ok); }

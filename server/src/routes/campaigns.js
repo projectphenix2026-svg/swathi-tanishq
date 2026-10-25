@@ -104,7 +104,8 @@ async function sendableTemplate(clientId, templateId, channel = 'whatsapp', prov
 }
 
 // "Send a test to my phone": the message as one customer would get it, to a staff phone.
-// The phone is saved once as a customer tagged test-phone, which normal sends leave out.
+// The phone is saved once as a customer tagged test-phone (named "Test phone", never renamed), which
+// normal sends leave out. The message itself is filled in with the chosen customer's details.
 // Before Go live it still goes out through the connected WhatsApp, so the check is real.
 router.post('/test', canEdit, async (req, res) => {
   const b = req.body || {};
@@ -126,26 +127,28 @@ router.post('/test', canEdit, async (req, res) => {
       `INSERT INTO contacts (client_id, name, phone, city, birthday, anniversary, last_purchase, interests, tags,
                              whatsapp_opt_in, opt_in_at, opt_in_source, sms_opt_in)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 1, ${NOW}, 'staff test phone', 1)
-       ON CONFLICT (client_id, phone) DO UPDATE SET name = excluded.name, city = excluded.city, birthday = excluded.birthday,
+       ON CONFLICT (client_id, phone) DO UPDATE SET city = excluded.city, birthday = excluded.birthday,
          anniversary = excluded.anniversary, last_purchase = excluded.last_purchase, interests = excluded.interests,
          whatsapp_opt_in = 1, sms_opt_in = 1, opted_out_at = NULL
        RETURNING *`,
-      [req.clientId, d.name || req.user.name, ph.e164, d.city ?? null, d.birthday ?? null, d.anniversary ?? null,
+      [req.clientId, `Test phone (${req.user.name})`, ph.e164, d.city ?? null, d.birthday ?? null, d.anniversary ?? null,
         d.last_purchase ?? null, d.interests ?? null, JSON.stringify([TEST_PHONE_TAG])],
     ));
   } else if (!(channel === 'sms' ? existing.sms_opt_in : existing.whatsapp_opt_in) || existing.opted_out_at) {
     return res.status(400).json({ error: `${ph.display} is saved as a customer who has not agreed to ${channel === 'sms' ? 'SMS' : 'WhatsApp'} messages. Use another number.` });
   }
   const audience = { mode: 'selected', contactIds: [contact.id] };
+  // as_contact_id: the sender fills the message in with this customer's name and details.
+  const testVars = { ...(b.variables || {}), ...(as ? { as_contact_id: as.id } : {}) };
   const { rows: [campaign] } = await query(
     `INSERT INTO campaigns (client_id, name, template_id, audience, variables, status, started_at, cost_per_message, provider,
                             created_by, expected_count, approved_by, approved_at, channel)
      VALUES ($1, $2, $3, $4, $5, 'sending', ${NOW}, $6, $7, $8, 1, $8, ${NOW}, $9) RETURNING *`,
-    [req.clientId, `Test · ${t.name}`, t.id, JSON.stringify(audience), JSON.stringify(b.variables || {}),
+    [req.clientId, `Test · ${t.name}`, t.id, JSON.stringify(audience), JSON.stringify(testVars),
       channel === 'sms' ? config.sms.costPerSms : config.costPerMessage, provider.name, req.user.id, channel],
   );
   const queued = await queueMessages(req.clientId, {
-    audience, template: t, variables: b.variables || {}, keyPrefix: `campaign:${campaign.id}:contact:`, campaignId: campaign.id, ignoreCap: true, channel,
+    audience, template: t, variables: testVars, keyPrefix: `campaign:${campaign.id}:contact:`, campaignId: campaign.id, ignoreCap: true, channel,
   });
   if (!queued) {
     await query(`UPDATE campaigns SET status = 'cancelled', completed_at = ${NOW} WHERE id = $1`, [campaign.id]);
