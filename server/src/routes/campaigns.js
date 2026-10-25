@@ -29,7 +29,8 @@ router.get('/', async (req, res) => {
             (SELECT ct.name FROM messages m1 JOIN contacts ct ON ct.id = m1.contact_id WHERE m1.campaign_id = c.id ORDER BY m1.id LIMIT 1) AS first_name,
             (SELECT ct.phone FROM messages m1 JOIN contacts ct ON ct.id = m1.contact_id WHERE m1.campaign_id = c.id ORDER BY m1.id LIMIT 1) AS first_phone,
             (SELECT m1.body FROM messages m1 WHERE m1.campaign_id = c.id AND m1.body IS NOT NULL ORDER BY m1.id LIMIT 1) AS first_body,
-            (SELECT m1.error_message FROM messages m1 WHERE m1.campaign_id = c.id AND m1.status = 'failed' AND m1.error_message IS NOT NULL ORDER BY m1.id DESC LIMIT 1) AS last_error
+            (SELECT m1.error_message FROM messages m1 WHERE m1.campaign_id = c.id AND m1.status = 'failed' AND m1.error_message IS NOT NULL ORDER BY m1.id DESC LIMIT 1) AS last_error,
+            count(m.id) FILTER (WHERE m.status IN ('queued', 'retrying') AND m.error_code IS NOT NULL) AS retrying
        FROM campaigns c JOIN templates t ON t.id = c.template_id
        LEFT JOIN messages m ON m.campaign_id = c.id
       WHERE c.client_id = $1 AND c.name NOT LIKE 'Order ready ·%' AND c.name NOT LIKE 'Repair ready ·%'
@@ -249,19 +250,34 @@ router.get('/:id/messages', async (req, res) => {
 });
 
 // Scheduled sends can be cancelled until they start; a running send stops the rest.
-router.post('/:id/cancel', async (req, res) => {
-  const { rows: [c] } = await query(
+// Stop an offer: nothing more goes out. Also works after it shows "Done" when some messages are
+// still waiting (e.g. "Trying again tomorrow" after Meta's per-person limit).
+router.post('/:id/cancel', canEdit, async (req, res) => {
+  const { rows: [found] } = await query('SELECT * FROM campaigns WHERE id = $1 AND client_id = $2', [req.params.id, req.clientId]);
+  if (!found) return res.status(404).json({ error: 'Campaign not found.' });
+  const { rows: [stopped] } = await query(
     `UPDATE campaigns SET status = 'cancelled', completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-      WHERE id = $1 AND client_id = $2 AND status IN ('scheduled', 'sending', 'pending_approval') RETURNING *`,
-    [req.params.id, req.clientId],
+      WHERE id = $1 AND status IN ('scheduled', 'sending', 'pending_approval') RETURNING *`,
+    [found.id],
   );
-  if (!c) return res.status(409).json({ error: 'This campaign has already finished.' });
   const { rowCount } = await query(
-    `UPDATE messages SET status = 'cancelled', error_message = 'Campaign was cancelled'
+    `UPDATE messages SET status = 'cancelled', error_message = $2
       WHERE campaign_id = $1 AND status IN ('queued', 'retrying')`,
-    [c.id],
+    [found.id, `Cancelled by ${req.user.name}`],
   );
-  res.json({ campaign: c, cancelled: rowCount ?? 0 });
+  if (!stopped && !rowCount) return res.status(409).json({ error: 'Nothing is waiting to go out: this offer has already finished.' });
+  res.json({ campaign: stopped || found, cancelled: rowCount ?? 0 });
+});
+
+// Cancel one waiting message (one customer) of an offer.
+router.post('/:id/messages/:messageId/cancel', canEdit, async (req, res) => {
+  const { rowCount } = await query(
+    `UPDATE messages SET status = 'cancelled', error_message = $4
+      WHERE id = $1 AND campaign_id = $2 AND client_id = $3 AND status IN ('queued', 'retrying')`,
+    [req.params.messageId, req.params.id, req.clientId, `Cancelled by ${req.user.name}`],
+  );
+  if (!rowCount) return res.status(409).json({ error: 'This message is no longer waiting: it was already sent or stopped.' });
+  res.json({ cancelled: 1 });
 });
 
 export default router;
