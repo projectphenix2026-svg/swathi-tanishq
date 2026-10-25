@@ -161,21 +161,21 @@ function Outcome({ c }) {
   const delivered = Number(c.delivered) || 0;
   const failed = Number(c.failed) || 0;
   const pending = Number(c.pending) || 0;
-  if (c.status === 'scheduled') return <span className="out wait"><Clock size={15} />Scheduled</span>;
-  if (c.status === 'pending_approval') return <span className="out wait"><Clock size={15} />Waiting for the owner’s OK</span>;
+  if (c.status === 'scheduled') return <span className="outcome wait"><Clock size={15} />Scheduled</span>;
+  if (c.status === 'pending_approval') return <span className="outcome wait"><Clock size={15} />Waiting for the owner’s OK</span>;
   if (total === 1) {
-    if (failed) return <span className="out bad" title={c.last_error || ''}><AlertCircle size={15} /><span>Couldn’t reach<small>{c.last_error}</small></span></span>;
-    if (pending) return <span className="out wait"><Clock size={15} /><span>{c.retrying ? 'Trying again tomorrow' : 'Waiting to go out'}{c.retrying && <small>Meta limits how many offers one person gets from all businesses in a day.</small>}</span></span>;
-    if (read) return <span className="out read"><CheckCheck size={15} />Read</span>;
-    if (delivered) return <span className="out ok"><CheckCheck size={15} />Reached the phone</span>;
-    if (c.status === 'cancelled') return <span className="out muted"><XCircle size={15} />Cancelled</span>;
-    return <span className="out muted"><Check size={15} />Sent</span>;
+    if (failed) return <span className="outcome bad" title={c.last_error || ''}><AlertCircle size={15} /><span>Couldn’t reach<small>{c.last_error}</small></span></span>;
+    if (pending) return <span className="outcome wait"><Clock size={15} /><span>{c.retrying ? 'Trying again tomorrow' : 'Waiting to go out'}{c.retrying && <small>Meta limits how many offers one person gets from all businesses in a day.</small>}</span></span>;
+    if (read) return <span className="outcome read"><CheckCheck size={15} />Read</span>;
+    if (delivered) return <span className="outcome ok"><CheckCheck size={15} />Reached the phone</span>;
+    if (c.status === 'cancelled') return <span className="outcome muted"><XCircle size={15} />Cancelled</span>;
+    return <span className="outcome muted"><Check size={15} />Sent</span>;
   }
   const parts = [
-    read && <span key="r" className="out read"><CheckCheck size={14} />{num(read)} read</span>,
-    delivered - read > 0 && <span key="d" className="out ok"><CheckCheck size={14} />{num(delivered - read)} reached</span>,
-    pending && <span key="w" className="out wait"><Clock size={14} />{num(pending)} waiting</span>,
-    failed && <span key="f" className="out bad" title={c.last_error || ''}><AlertCircle size={14} />{num(failed)} couldn’t reach</span>,
+    read && <span key="r" className="outcome read"><CheckCheck size={14} />{num(read)} read</span>,
+    delivered - read > 0 && <span key="d" className="outcome ok"><CheckCheck size={14} />{num(delivered - read)} reached</span>,
+    pending && <span key="w" className="outcome wait"><Clock size={14} />{num(pending)} waiting</span>,
+    failed && <span key="f" className="outcome bad" title={c.last_error || ''}><AlertCircle size={14} />{num(failed)} couldn’t reach</span>,
   ].filter(Boolean);
-  return parts.length ? <span className="out-list">{parts}</span> : <span className="out muted"><Check size={14} />{plural(total, 'message')} sent</span>;
+  return parts.length ? <span className="outcome-list">{parts}</span> : <span className="outcome muted"><Check size={14} />{plural(total, 'message')} sent</span>;
 }

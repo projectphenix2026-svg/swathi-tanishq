@@ -808,15 +808,16 @@ a.sent-row:hover { background: var(--surface-2); text-decoration: none; }
 .sent-msg .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .sent-when { font-size: 0.8rem; }
 .sent-actions { display: flex; justify-content: flex-end; min-width: 0; }
-.out { display: inline-flex; align-items: flex-start; gap: 6px; font-size: 0.9rem; font-weight: 600; }
-.out small { display: block; font-weight: 400; font-size: 0.78rem; color: var(--text-2); margin-top: 2px; }
-.out svg { flex-shrink: 0; margin-top: 2px; }
-.out.read { color: var(--read); }
-.out.ok { color: var(--ok); }
-.out.wait { color: var(--warn); }
-.out.bad { color: var(--bad); }
-.out.muted { color: var(--text-2); }
-.out-list { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+/* Sent messages status (named 'outcome': the chat's own bubbles use .msg.out). */
+.outcome { display: inline-flex; align-items: flex-start; gap: 6px; font-size: 0.9rem; font-weight: 600; }
+.outcome small { display: block; font-weight: 400; font-size: 0.78rem; color: var(--text-2); margin-top: 2px; }
+.outcome svg { flex-shrink: 0; margin-top: 2px; }
+.outcome.read { color: var(--read); }
+.outcome.ok { color: var(--ok); }
+.outcome.wait { color: var(--warn); }
+.outcome.bad { color: var(--bad); }
+.outcome.muted { color: var(--text-2); }
+.outcome-list { display: flex; flex-wrap: wrap; gap: 4px 12px; }
 @media (max-width: 759px) {
   .sent-head { display: none; }
   .sent-row { grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; padding: 14px 16px; }
