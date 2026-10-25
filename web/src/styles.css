@@ -333,7 +333,8 @@ code, .code { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; f
 }
 .wa-day { align-self: center; background: color-mix(in srgb, var(--surface) 85%, transparent); color: var(--text-2); font-size: 0.7rem; padding: 3px 10px; border-radius: 8px; margin-bottom: 4px; }
 .bubble { max-width: 88%; background: var(--surface); border-radius: 10px; border-top-left-radius: 2px; padding: 7px 9px 6px; box-shadow: 0 1px 1px rgba(0, 0, 0, 0.08); font-size: 0.88rem; line-height: 1.42; white-space: pre-wrap; word-wrap: break-word; }
-.bubble img { width: 100%; border-radius: 8px; margin-bottom: 6px; display: block; max-height: 180px; object-fit: cover; }
+.bubble img, .bubble video { width: 100%; border-radius: 8px; margin-bottom: 6px; display: block; max-height: 180px; object-fit: cover; }
+.bubble video { background: #000; }
 .bubble .meta { display: block; text-align: right; font-size: 0.66rem; color: var(--text-3); margin-top: 2px; }
 .bubble .var { background: var(--gold-soft); color: var(--text); border-radius: 4px; padding: 0 2px; box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--gold) 50%, transparent); }
 .bubble .var.missing { background: var(--bad-soft); color: var(--bad); box-shadow: none; }

@@ -101,3 +101,58 @@ describe('Meta approval with a photo', () => {
     expect(sent.template.components[0]).toEqual({ type: 'header', parameters: [{ type: 'image', image: { link: 'https://x/offer.jpg' } }] });
   });
 });
+
+describe('Offer videos', () => {
+  // A few bytes are enough: the app checks the type and size, WhatsApp plays the file.
+  const MP4 = Buffer.from([0, 0, 0, 24, 102, 116, 121, 112, 109, 112, 52, 50, 0, 0, 0, 0]);
+
+  it('stores an MP4 in the file store and serves it publicly', async () => {
+    const res = await owner.post('/api/media/video').set('Content-Type', 'video/mp4').send(MP4);
+    expect(res.status).toBe(201);
+    expect(res.body.url).toMatch(/\/media\/[0-9a-f]{32}$/);
+    const got = await request(createApp()).get(`/media/${res.body.id}`).buffer(true).parse((r, cb) => { const b = []; r.on('data', (d) => b.push(d)); r.on('end', () => cb(null, Buffer.concat(b))); });
+    expect(got.status).toBe(200);
+    expect(got.headers['content-type']).toBe('video/mp4');
+    expect(Buffer.compare(got.body, MP4)).toBe(0);
+  });
+
+  it('refuses other files, empty ones and ones over 16 MB', async () => {
+    expect((await owner.post('/api/media/video').set('Content-Type', 'video/quicktime').send(MP4)).status).toBe(400);
+    expect((await owner.post('/api/media/video').set('Content-Type', 'video/mp4').send(Buffer.alloc(0))).status).toBe(400);
+    const big = await owner.post('/api/media/video').set('Content-Type', 'video/mp4').send(Buffer.alloc(16 * 1024 * 1024 + 2048));
+    expect([400, 413]).toContain(big.status);
+  });
+
+  it('a template has a photo or a video, not both; adding a video resets Meta approval', async () => {
+    const both = await owner.post('/api/templates').send({ name: 'Both', body: 'Hi {{name}}, new designs.', image_url: 'https://x/a.jpg', video_url: 'https://x/a.mp4' });
+    expect(both.status).toBe(400);
+    expect(both.body.error).toMatch(/photo or a video/);
+    const t = (await owner.post('/api/templates').send({ name: 'Video later', body: 'Hi {{name}}, new designs.' })).body.template;
+    const { query } = await import('../src/db/index.js');
+    await query("UPDATE templates SET provider_ref = 'video_later', provider_status = 'APPROVED' WHERE id = $1", [t.id]);
+    const put = await owner.put(`/api/templates/${t.id}`).send({ ...t, video_url: 'https://x/v.mp4' });
+    expect(put.body).toMatchObject({ approvalReset: true, template: { video_url: 'https://x/v.mp4', provider_status: null } });
+  });
+
+  it('asks Meta for a video header with a sample, and sends the video as the header', async () => {
+    const calls = [];
+    const fetchImpl = async (url, init = {}) => {
+      calls.push({ url: String(url), init });
+      const json = (body) => ({ ok: true, status: 200, json: async () => body });
+      if (String(url).includes('debug_token')) return json({ data: { app_id: '999' } });
+      if (String(url).includes('/999/uploads')) return json({ id: 'upload:vid' });
+      if (String(url).endsWith('/upload:vid')) return json({ h: 'HANDLE-V' });
+      if (String(url).includes('/message_templates?name=')) return json({ data: [] });
+      if (String(url).includes('/message_templates')) return json({ id: 't9', status: 'PENDING' });
+      return json({ messages: [{ id: 'wamid.v' }] });
+    };
+    const meta = createMetaProvider({ accessToken: 'EAA-x', phoneNumberId: '1', wabaId: '2', graphVersion: 'v25.0' }, { fetchImpl });
+    await meta.submitTemplate({ name: 'Video offer', body: 'Hi {{name}}, watch our new collection.', video_url: 'https://x/v.mp4', buttons: [] }, { name: 'Priya' }, { sample: { mime: 'video/mp4', bytes: new Uint8Array([1, 2]) } });
+    expect(calls.find((c) => c.url.includes('/999/uploads')).url).toMatch(/file_name=offer\.mp4.*file_type=video%2Fmp4/);
+    const submit = JSON.parse(calls.find((c) => c.url.endsWith('/2/message_templates')).init.body);
+    expect(submit.components[0]).toEqual({ type: 'HEADER', format: 'VIDEO', example: { header_handle: ['HANDLE-V'] } });
+    await meta.send({ to: '+919000070001', template: { provider_ref: 'video_offer', body: 'Hi {{name}}.', video_url: 'https://x/v.mp4' }, values: { name: 'Priya' } });
+    const sent = JSON.parse(calls.at(-1).init.body);
+    expect(sent.template.components[0]).toEqual({ type: 'header', parameters: [{ type: 'video', video: { link: 'https://x/v.mp4' } }] });
+  });
+});

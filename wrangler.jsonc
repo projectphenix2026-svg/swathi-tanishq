@@ -21,6 +21,8 @@
       "database_id": "785862c3-52ab-4f85-b926-18fe75a23381"
     }
   ],
+  // Offer videos (up to 16 MB, too big for D1): server/src/lib/blobs.js via cloudflare/worker.js.
+  "kv_namespaces": [{ "binding": "MEDIA", "id": "c72332a9fc1f441daa4cc8b7245b68c8" }],
   "triggers": { "crons": ["* * * * *"] },
   "vars": {
     "NODE_ENV": "production",

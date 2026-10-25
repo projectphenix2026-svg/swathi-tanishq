@@ -188,7 +188,7 @@ export default function CampaignBuilder() {
               {isSms ? (
                 <SmsPreview text={template.sms_body} values={values} live={smsOn} />
               ) : (
-                <PhonePreview body={template.body} values={values} buttons={template.buttons} imageUrl={template.image_url} businessName={settings?.businessName} />
+                <PhonePreview body={template.body} values={values} buttons={template.buttons} imageUrl={template.image_url} videoUrl={template.video_url} businessName={settings?.businessName} />
               )}
               {rendered?.missing.some((k) => !SHOP_KEYS.includes(k)) && (
                 <span className="subtle" style={{ color: 'var(--warn)' }}>
@@ -202,7 +202,7 @@ export default function CampaignBuilder() {
               )}
             </>
           ) : (
-            <PhonePreview body={template?.body} buttons={template?.buttons} imageUrl={template?.image_url} businessName={settings?.businessName} caption={template ? 'No customer to show yet' : 'Pick a template to see it here'} />
+            <PhonePreview body={template?.body} buttons={template?.buttons} imageUrl={template?.image_url} videoUrl={template?.video_url} businessName={settings?.businessName} caption={template ? 'No customer to show yet' : 'Pick a template to see it here'} />
           )}
         </aside>
       </div>
@@ -324,10 +324,10 @@ function TemplateStep({ t, templates, setTemplates, templateId, setTemplateId, n
       {template && (
         <div className="card card-pad row wrap" style={{ gap: 12, alignItems: 'center' }}>
           <div style={{ flex: '1 1 220px', minWidth: 0 }}>
-            <b>Photo</b>
-            <div className="subtle">{template.image_url ? 'Shown at the top of the message.' : 'Optional: a jewellery photo at the top of the message.'}</div>
+            <b>{template.video_url ? 'Video' : 'Photo'}</b>
+            <div className="subtle">{template.video_url ? 'This message plays its video at the top. Change it on the template page.' : template.image_url ? 'Shown at the top of the message.' : 'Optional: a jewellery photo at the top of the message.'}</div>
           </div>
-          <PhotoPicker value={template.image_url || ''} onChange={setPhoto} removable />
+          {!template.video_url && <PhotoPicker value={template.image_url || ''} onChange={setPhoto} removable />}
           <Link to={`/templates/${template.id}`} className="btn ghost sm"><Pencil size={15} />Edit wording</Link>
         </div>
       )}

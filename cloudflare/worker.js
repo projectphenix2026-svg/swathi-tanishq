@@ -11,6 +11,7 @@ import { initDb, ensureClient } from '../server/src/db/index.js';
 import { createApp } from '../server/src/app.js';
 import { setup, everyMinute } from '../server/src/runtime.js';
 import { setBackground } from '../server/src/lib/dispatch.js';
+import { setBlobStore } from '../server/src/lib/blobs.js';
 
 // Database work cannot run at start-up on Workers, so it happens on the first request or cron.
 let ready = null;
@@ -27,6 +28,18 @@ function ensureReady() {
     });
   }
   return ready;
+}
+
+// Videos (too big for D1) live in the MEDIA KV namespace; a value can be up to 25 MB.
+if (env.MEDIA) {
+  setBlobStore({
+    name: 'kv',
+    put: (key, bytes, mime) => env.MEDIA.put(key, bytes, { metadata: { mime } }),
+    async get(key) {
+      const { value, metadata } = await env.MEDIA.getWithMetadata(key, 'arrayBuffer');
+      return value ? { bytes: new Uint8Array(value), mime: metadata?.mime } : null;
+    },
+  });
 }
 
 // Background sends after a launch or reply finish after the response is returned.

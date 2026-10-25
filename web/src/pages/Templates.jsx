@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Check, ExternalLink, Phone, Plus, Reply, Trash2 } from 'lucide-react';
+import { Check, ExternalLink, Film, Phone, Plus, Reply, Trash2 } from 'lucide-react';
 import { SearchBox, matches } from '../components/SearchBox.jsx';
 import { api } from '../lib/api.js';
 import { Pic, Skeleton, Spinner, useToast } from '../components/ui.jsx';
@@ -138,6 +138,7 @@ export default function Templates() {
               <Link key={t.id} to={`/templates/${t.id}`} className={`card card-pad stack ${ok(t) ? 'tpl-approved' : ''}`} style={{ textDecoration: 'none', color: 'inherit', gap: 10 }}>
                 <div className="row between" style={{ gap: 8 }}>
                   <span className="row" style={{ gap: 8, minWidth: 0 }}><Pic name={iconFor(t.name)} size={28} /><h3 style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{t.name}</h3></span>
+                  {t.video_url && <span className="badge neutral" style={{ flexShrink: 0 }}><Film size={13} />Video</span>}
                   <span className={`badge ${tone}`} style={{ flexShrink: 0 }}>{tone === 'ok' && <Check size={13} />}{label}</span>
                 </div>
                 <div style={{ background: 'var(--wa-chat)', borderRadius: 12, padding: 10 }}>
