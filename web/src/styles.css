@@ -343,8 +343,14 @@ code, .code { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; f
 @media (prefers-color-scheme: dark) { .wa-btn { color: #53bdeb; } }
 
 /* ---------- Chat (inbox) ---------- */
-.inbox { display: grid; height: calc(100vh - 140px); min-height: 480px; overflow: hidden; }
-@media (min-width: 900px) { .inbox { grid-template-columns: 340px 1fr; height: 100vh; } }
+/* The chat fills exactly the space left under the top bar and the Test/Live bar (and above the
+   phone menu), so the page itself never scrolls and the reply box is always in view. */
+.main:has(> .inbox) { height: calc(100dvh - var(--nav-h) - env(safe-area-inset-bottom)); overflow: hidden; }
+.inbox { display: grid; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+@media (min-width: 900px) {
+  .main:has(> .inbox) { height: 100dvh; }
+  .inbox { grid-template-columns: 340px 1fr; }
+}
 .no-scrollbar { scrollbar-width: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .convo-list { border-right: 1px solid var(--border); overflow-y: auto; background: var(--surface); }
