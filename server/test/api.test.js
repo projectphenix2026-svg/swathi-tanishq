@@ -359,3 +359,38 @@ describe('Replies count', () => {
     expect(opened.chats).toBeLessThan(after.chats);
   });
 });
+
+describe('Bulk actions on ticked rows', () => {
+  it('adds and removes a group, marks not agreed, and deletes several customers', async () => {
+    const ids = [];
+    for (const n of [1, 2, 3]) {
+      const r = await agent.post('/api/customers').send({ name: `Bulk ${n}`, phone: `90000 5550${n}`, city: 'Warangal', whatsapp_opt_in: true });
+      ids.push(r.body.customer.id);
+    }
+    expect((await agent.post('/api/customers/bulk').send({ action: 'tag', ids, tag: 'Bridal 2026' })).body.done).toBe(3);
+    let { rows } = await query('SELECT tags FROM contacts WHERE id = $1', [ids[0]]);
+    expect([].concat(typeof rows[0].tags === 'string' ? JSON.parse(rows[0].tags) : rows[0].tags)).toContain('bridal-2026');
+    await agent.post('/api/customers/bulk').send({ action: 'untag', ids: [ids[0]], tag: 'bridal-2026' });
+    ({ rows } = await query('SELECT tags FROM contacts WHERE id = $1', [ids[0]]));
+    expect([].concat(typeof rows[0].tags === 'string' ? JSON.parse(rows[0].tags) : rows[0].tags)).not.toContain('bridal-2026');
+    await agent.post('/api/customers/bulk').send({ action: 'no-consent', ids: [ids[1]] });
+    ({ rows } = await query('SELECT whatsapp_opt_in FROM contacts WHERE id = $1', [ids[1]]));
+    expect(rows[0].whatsapp_opt_in).toBeFalsy();
+    expect((await agent.post('/api/customers/bulk').send({ action: 'delete', ids })).body.done).toBe(3);
+    ({ rows } = await query("SELECT count(*) AS n FROM contacts WHERE id IN ($1, $2, $3) AND phone LIKE 'deleted:%'", ids));
+    expect(rows[0].n).toBe(3);
+    expect((await agent.post('/api/customers/bulk').send({ action: 'explode', ids })).status).toBe(400);
+  });
+
+  it('marks several interested customers and several chats read at once', async () => {
+    const { rows: [c] } = await query(`SELECT id, client_id FROM contacts WHERE phone NOT LIKE 'deleted:%' LIMIT 1`);
+    const { rows: [l] } = await query(`INSERT INTO leads (client_id, contact_id, status, reason) VALUES ($1, $2, 'new', 'Interested') RETURNING id`, [c.client_id, c.id]);
+    expect((await agent.post('/api/leads/bulk').send({ ids: [l.id], status: 'called' })).body.done).toBe(1);
+    const { rows: [after] } = await query('SELECT status FROM leads WHERE id = $1', [l.id]);
+    expect(after.status).toBe('called');
+    await query(`INSERT INTO messages (client_id, contact_id, direction, provider, status, body, idempotency_key) VALUES ($1, $2, 'inbound', 'mock', 'received', 'hi', 'in:bulk-read-1')`, [c.client_id, c.id]);
+    expect((await agent.post('/api/inbox/read').send({ contactIds: [c.id] })).body.done).toBeGreaterThan(0);
+    const { rows: [u] } = await query(`SELECT count(*) AS n FROM messages WHERE contact_id = $1 AND direction = 'inbound' AND seen_at IS NULL`, [c.id]);
+    expect(u.n).toBe(0);
+  });
+});

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Download, Search, Trash2, UserPlus, Users } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Ban, Download, Search, Send, Tag, Trash2, UserPlus, Users } from 'lucide-react';
+import { SelectBar, allTicked, toggleIn } from '../components/SelectBar.jsx';
+import { downloadCsv } from '../lib/csv.js';
 import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.js';
 import { atLeast } from '@shared/roles.js';
@@ -28,6 +30,38 @@ export default function Customers() {
   const { settings: appSettings } = useAuth();
   const testMode = appSettings?.provider?.name === 'mock';
   const toastList = useToast();
+  const navigate = useNavigate();
+  // Ticked customers (on this page) and what to do with them.
+  const [sel, setSel] = useState(new Set());
+  const [groupName, setGroupName] = useState('');
+  const [askBulk, setAskBulk] = useState(null);
+  const canDelete = atLeast(appSettings?.role, 'manager');
+  const pageIds = (data?.customers || []).map((c) => c.id);
+  const ticked = (data?.customers || []).filter((c) => sel.has(c.id));
+  async function bulk(action, extra = {}) {
+    try {
+      const r = await api('/api/customers/bulk', { method: 'POST', body: { action, ids: [...sel], ...extra } });
+      const what = { delete: 'deleted', tag: `added to “${extra.tag}”`, untag: `removed from “${extra.tag}”`, 'no-consent': 'marked as not agreed' }[action];
+      toastList(`${num(r.done)} customer${r.done === 1 ? '' : 's'} ${what}`);
+      setSel(new Set());
+      setAskBulk(null);
+      setGroupName('');
+      reload();
+    } catch (e) {
+      toastList(e.message, 'bad');
+    }
+  }
+  function download() {
+    downloadCsv(`customers-${new Date().toISOString().slice(0, 10)}.csv`, [
+      { label: 'Name', value: (c) => c.name },
+      { label: 'Phone', value: (c) => c.phone },
+      { label: 'City', value: (c) => c.city },
+      { label: 'Bought or likes', value: (c) => c.last_purchase || c.interests },
+      { label: 'Birthday', value: (c) => c.birthday },
+      { label: 'Anniversary', value: (c) => c.anniversary },
+      { label: 'WhatsApp', value: (c) => (c.opted_out_at ? 'Said STOP' : c.whatsapp_opt_in ? 'Agreed' : 'Not agreed') },
+    ], ticked);
+  }
 
   const reload = () => {
     api('/api/customers/summary').then(setSummary).catch(() => {});
@@ -43,6 +77,7 @@ export default function Customers() {
   }, [filter, q, page]);
 
   useEffect(() => setPage(0), [filter, q]);
+  useEffect(() => setSel(new Set()), [filter, q, page]);
 
   async function samplesAction(add) {
     try {
@@ -106,6 +141,37 @@ export default function Customers() {
           ))}
         </div>
 
+        <SelectBar count={sel.size} onClear={() => setSel(new Set())} note={askBulk === 'delete' ? null : undefined}>
+          {askBulk === 'delete' ? (
+            <>
+              <span>Delete {num(sel.size)} customer{sel.size === 1 ? '' : 's'}? Their details and chats are removed; reports keep the numbers.</span>
+              <button className="btn sm" onClick={() => setAskBulk(null)}>Keep</button>
+              <button className="btn sm danger" onClick={() => bulk('delete')}>Yes, delete</button>
+            </>
+          ) : askBulk === 'group' ? (
+            <>
+              <input className="input sm" style={{ width: 170 }} placeholder="Group, e.g. bridal-2026" value={groupName} onChange={(e) => setGroupName(e.target.value)} autoFocus aria-label="Group name" />
+              <button className="btn sm primary" disabled={!groupName.trim()} onClick={() => bulk('tag', { tag: groupName })}>Add to group</button>
+              <button className="btn sm ghost" disabled={!groupName.trim()} onClick={() => bulk('untag', { tag: groupName })}>Remove from group</button>
+              <button className="btn sm ghost" onClick={() => setAskBulk(null)}>Back</button>
+            </>
+          ) : askBulk === 'no-consent' ? (
+            <>
+              <span>Mark as not agreed to WhatsApp? They will not get offers until they agree again.</span>
+              <button className="btn sm" onClick={() => setAskBulk(null)}>Keep</button>
+              <button className="btn sm danger" onClick={() => bulk('no-consent')}>Yes, mark</button>
+            </>
+          ) : (
+            <>
+              <button className="btn sm primary" onClick={() => navigate(`/campaigns/new?ids=${[...sel].join(',')}`)}><Send size={15} />Send a message</button>
+              <button className="btn sm" onClick={() => setAskBulk('group')}><Tag size={15} />Group</button>
+              <button className="btn sm" onClick={download}><Download size={15} />Download</button>
+              <button className="btn sm ghost" onClick={() => setAskBulk('no-consent')}><Ban size={15} />Not agreed</button>
+              {canDelete && <button className="btn sm ghost danger" onClick={() => setAskBulk('delete')}><Trash2 size={15} />Delete</button>}
+            </>
+          )}
+        </SelectBar>
+
         <div className="card">
           {!data ? (
             <div className="stack" style={{ padding: 20 }}>{[0, 1, 2, 3].map((i) => <Skeleton key={i} h={36} />)}</div>
@@ -116,11 +182,15 @@ export default function Customers() {
               <div className="table-wrap hide-mobile">
                 <table className="table">
                   <thead>
-                    <tr><th>Customer</th><th>Phone</th><th>City</th><th>Special days</th><th>WhatsApp</th><th>Added</th></tr>
+                    <tr>
+                      <th className="tick-col"><input type="checkbox" aria-label="Select all on this page" checked={allTicked(sel, pageIds)} onChange={(e) => setSel(e.target.checked ? new Set([...sel, ...pageIds]) : new Set([...sel].filter((id) => !pageIds.includes(id))))} /></th>
+                      <th>Customer</th><th>Phone</th><th>City</th><th>Special days</th><th>WhatsApp</th><th>Added</th>
+                    </tr>
                   </thead>
                   <tbody>
                     {data.customers.map((c) => (
-                      <tr key={c.id} className="clickable" onClick={() => setEditing(c)}>
+                      <tr key={c.id} className={`clickable ${sel.has(c.id) ? 'ticked' : ''}`} onClick={() => setEditing(c)}>
+                        <td className="tick-col" onClick={(e) => e.stopPropagation()}><input type="checkbox" aria-label={`Select ${c.name || phone(c.phone)}`} checked={sel.has(c.id)} onChange={() => setSel((s) => toggleIn(s, c.id))} /></td>
                         <td>
                           <div className="row" style={{ gap: 10 }}>
                             <Avatar name={c.name} seed={c.phone} size={34} />
@@ -143,6 +213,7 @@ export default function Customers() {
               <div className="show-mobile">
                 {data.customers.map((c) => (
                   <button key={c.id} className="list-item" onClick={() => setEditing(c)} style={{ width: '100%', background: 'none', border: 'none', borderBottom: '1px solid var(--border)', textAlign: 'left', cursor: 'pointer' }}>
+                    <input type="checkbox" className="tick-mob" aria-label={`Select ${c.name || phone(c.phone)}`} checked={sel.has(c.id)} onClick={(e) => e.stopPropagation()} onChange={() => setSel((s) => toggleIn(s, c.id))} />
                     <Avatar name={c.name} seed={c.phone} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <b>{c.name || 'No name'}</b>

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useOutletContext } from 'react-router-dom';
-import { Check, Flame, MessageCircle, Phone, ShoppingBag, ThumbsDown, X } from 'lucide-react';
+import { SelectBar, allTicked, toggleIn } from '../components/SelectBar.jsx';
+import { downloadCsv } from '../lib/csv.js';
+import { Check, Download, Flame, MessageCircle, Phone, ShoppingBag, ThumbsDown, X } from 'lucide-react';
 import { SearchBox, matches } from '../components/SearchBox.jsx';
 import { api } from '../lib/api.js';
 import { Avatar, Empty, Pic, SectionTabs, Skeleton, useToast } from '../components/ui.jsx';
@@ -15,7 +17,9 @@ const TABS = [
 
 export default function Leads() {
   const toast = useToast();
-  const { counts } = useOutletContext() || {};
+  const { counts, refreshCounts } = useOutletContext() || {};
+  // Ticked customers: mark them all at once, or download a call list.
+  const [sel, setSel] = useState(new Set());
   const [tab, setTab] = useState('');
   const [data, setData] = useState(null);
   const [q, setQ] = useState('');
@@ -38,6 +42,30 @@ export default function Leads() {
     } catch (e) {
       toast(e.message, 'bad');
     }
+  }
+
+  async function bulk(status) {
+    try {
+      const r = await api('/api/leads/bulk', { method: 'POST', body: { ids: [...sel], status } });
+      toast(`${r.done} marked ${({ called: 'called', won: 'bought', lost: 'not interested' })[status]}`);
+      setSel(new Set());
+      setData(null);
+      load();
+      refreshCounts?.();
+    } catch (e) {
+      toast(e.message, 'bad');
+    }
+  }
+  function downloadCalls() {
+    downloadCsv(`call-list-${new Date().toISOString().slice(0, 10)}.csv`, [
+      { label: 'Name', value: (l) => l.name },
+      { label: 'Phone', value: (l) => l.phone },
+      { label: 'City', value: (l) => l.city },
+      { label: 'Replied', value: (l) => l.reply || l.reason },
+      { label: 'To offer', value: (l) => l.campaign_name },
+      { label: 'Bought before', value: (l) => l.last_purchase },
+      { label: 'Status', value: (l) => l.status },
+    ], (data?.leads || []).filter((l) => sel.has(l.id)));
   }
 
   const c = data?.counts || {};
@@ -66,6 +94,18 @@ export default function Leads() {
         ))}
       </div>
       </div>
+      <SelectBar count={sel.size} onClear={() => setSel(new Set())}>
+        <button className="btn sm primary" onClick={() => bulk('called')}><Check size={15} />Called</button>
+        <button className="btn sm" onClick={() => bulk('won')}><ShoppingBag size={15} />Bought</button>
+        <button className="btn sm ghost" onClick={() => bulk('lost')}><ThumbsDown size={15} />Not interested</button>
+        <button className="btn sm" onClick={downloadCalls}><Download size={15} />Download call list</button>
+      </SelectBar>
+      {data?.leads?.length > 0 && (
+        <label className="row tick" style={{ gap: 8, margin: '0 0 8px 4px', fontSize: '0.88rem' }}>
+          <input type="checkbox" checked={allTicked(sel, data.leads.map((l) => l.id))} onChange={(e) => setSel(e.target.checked ? new Set(data.leads.map((l) => l.id)) : new Set())} />
+          <span className="subtle">Select all shown</span>
+        </label>
+      )}
       <div className="card">
         {!data ? (
           <div className="stack" style={{ padding: 20 }}>{[0, 1, 2].map((i) => <Skeleton key={i} h={56} />)}</div>
@@ -77,8 +117,11 @@ export default function Leads() {
           <p className="subtle" style={{ padding: 20 }}>{t('Nobody matches.')}</p>
         ) : (
           data.leads.filter((l) => matches(q, l.name, l.phone, l.city, l.campaign_name, l.reply)).map((l) => (
-            <div key={l.id} className="lead-card">
-              <Avatar name={l.name} seed={l.phone} size={44} />
+            <div key={l.id} className={`lead-card ${sel.has(l.id) ? 'ticked' : ''}`}>
+              <span className="row tick" style={{ gap: 10 }}>
+                <input type="checkbox" aria-label={`Select ${l.name || phone(l.phone)}`} checked={sel.has(l.id)} onChange={() => setSel((x) => toggleIn(x, l.id))} />
+                <Avatar name={l.name} seed={l.phone} size={44} />
+              </span>
               <div style={{ minWidth: 0 }}>
                 <div className="row wrap" style={{ gap: 8 }}>
                   <b>{l.name || phone(l.phone)}</b>
