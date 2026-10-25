@@ -204,9 +204,15 @@ export function createMetaProvider(cfg, { fetchImpl = fetch } = {}) {
     parseWebhook(req) {
       const statuses = [];
       const inbound = [];
+      const templates = [];
       for (const entry of req.body?.entry || []) {
         for (const change of entry.changes || []) {
           const v = change.value || {};
+          // A template was reviewed (only sent when this field is ticked in the Meta app's webhooks).
+          if (change.field === 'message_template_status_update' && v.message_template_name) {
+            templates.push({ name: v.message_template_name, language: v.message_template_language, status: v.event, reason: v.reason || null });
+            continue;
+          }
           const names = Object.fromEntries((v.contacts || []).map((c) => [c.wa_id, c.profile?.name || '']));
           for (const s of v.statuses || []) {
             const status = { sent: 'sent', delivered: 'delivered', read: 'read', failed: 'failed' }[s.status];
@@ -235,7 +241,7 @@ export function createMetaProvider(cfg, { fetchImpl = fetch } = {}) {
           }
         }
       }
-      return { statuses, inbound };
+      return { statuses, inbound, templates };
     },
   };
 }

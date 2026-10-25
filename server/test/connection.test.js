@@ -7,6 +7,7 @@ import { createUser } from '../src/routes/auth.js';
 import { getProvider } from '../src/providers/index.js';
 import { seal, open } from '../src/lib/secretbox.js';
 import { resetConnectionCache } from '../src/lib/whatsapp-connection.js';
+import { syncWaitingTemplates } from '../src/lib/template-approval.js';
 import { drain } from '../src/lib/dispatch.js';
 import '../src/lib/sender.js';
 
@@ -195,6 +196,37 @@ describe('Connect WhatsApp (owner only)', () => {
     expect(res.body.mismatch).toBe(true);
     expect(res.body.template.provider_status).toBeNull();
     expect(res.body.template.provider_reason).toMatch(/with a photo, but it now has a video/);
+  });
+
+  it('updates templates waiting for Meta by itself (no Check status needed)', async () => {
+    const clientId = await ensureClient('Test Store');
+    const { rows: [t] } = await query(
+      `INSERT INTO templates (client_id, name, body, status, category, provider_ref, provider_status, image_url)
+       VALUES ($1, 'Waiting photo', 'Hi there', 'approved', 'marketing', 'photo_tpl', 'PENDING', 'https://x/p.jpg') RETURNING *`, [clientId]);
+    fakeMeta();
+    resetConnectionCache();
+    await owner.get('/api/whatsapp'); // loads the saved connection
+    expect(await syncWaitingTemplates()).toBeGreaterThan(0);
+    const { rows: [u] } = await query('SELECT provider_status FROM templates WHERE id = $1', [t.id]);
+    expect(u.provider_status).toBe('APPROVED');
+  });
+
+  it('takes Meta’s template review from the webhook at once', async () => {
+    const clientId = await ensureClient('Test Store');
+    const { rows: [t] } = await query(
+      `INSERT INTO templates (client_id, name, body, status, category, provider_ref, provider_status)
+       VALUES ($1, 'Hooked', 'Hi there', 'approved', 'marketing', 'hooked_tpl', 'PENDING') RETURNING *`, [clientId]);
+    const body = JSON.stringify({
+      object: 'whatsapp_business_account',
+      entry: [{ changes: [{ field: 'message_template_status_update', value: { event: 'REJECTED', message_template_name: 'hooked_tpl', message_template_language: 'en', reason: 'INVALID_FORMAT' } }] }],
+    });
+    // Signed like Meta does, with the app secret saved when connecting.
+    const { createHmac } = await import('node:crypto');
+    const sig = `sha256=${createHmac('sha256', 'app-secret').update(body).digest('hex')}`;
+    const res = await request(createApp()).post('/webhooks/meta').set('Content-Type', 'application/json').set('X-Hub-Signature-256', sig).send(body);
+    expect(res.status).toBeLessThan(400);
+    const { rows: [u] } = await query('SELECT provider_status, provider_reason FROM templates WHERE id = $1', [t.id]);
+    expect(u).toMatchObject({ provider_status: 'REJECTED', provider_reason: 'INVALID_FORMAT' });
   });
 
   it('disconnects and goes back to test mode', async () => {

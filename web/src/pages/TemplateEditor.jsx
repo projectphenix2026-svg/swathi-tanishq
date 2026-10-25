@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, BadgeCheck, Check, ChevronDown, ExternalLink, Film, Image, MessageSquareText, MousePointerClick, Phone, Plus, RefreshCw, Reply, Settings2, Trash2 } from 'lucide-react';
+import { ArrowLeft, BadgeCheck, Check, ChevronDown, Clock, ExternalLink, Film, Image, MessageSquareText, MousePointerClick, Phone, Plus, RefreshCw, Reply, Send, Settings2, Trash2 } from 'lucide-react';
 import { VARIABLES, extractVariables, render, validateTemplate } from '@shared/template.js';
 import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.js';
@@ -46,13 +46,40 @@ export default function TemplateEditor() {
   const [open, setOpen] = useState(() => window.location.hash.slice(1) || null);
   const [askDelete, setAskDelete] = useState(false);
 
+  // The template as last saved, to know when there are changes not saved yet.
+  const [orig, setOrig] = useState(null);
+  const loaded = (tpl) => {
+    const x = { ...tpl, image_url: tpl.image_url || '', video_url: tpl.video_url || '', provider_ref: tpl.provider_ref || '', sms_body: tpl.sms_body || '', sms_dlt_template_id: tpl.sms_dlt_template_id || '' };
+    setT(x);
+    setOrig(x);
+  };
   useEffect(() => {
     if (id) {
       api(`/api/templates/${id}`)
-        .then((r) => setT({ ...r.template, image_url: r.template.image_url || '', video_url: r.template.video_url || '', provider_ref: r.template.provider_ref || '', sms_body: r.template.sms_body || '', sms_dlt_template_id: r.template.sms_dlt_template_id || '' }))
+        .then((r) => loaded(r.template))
         .catch((e) => { toast(e.message, 'bad'); navigate('/templates'); });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, navigate, toast]);
+
+  // While Meta reviews it, look again every 20 seconds; Sandesh itself asks Meta every few minutes.
+  const savedStatus = String(orig?.provider_status || '').toUpperCase();
+  useEffect(() => {
+    if (!id || !['PENDING', 'IN_APPEAL'].includes(savedStatus)) return undefined;
+    const timer = setInterval(() => {
+      api(`/api/templates/${id}`).then((r) => {
+        const st = String(r.template.provider_status || '').toUpperCase();
+        if (st === savedStatus) return;
+        // Only Meta's answer changes; anything typed but not saved stays.
+        const meta = (x) => ({ ...x, provider_ref: r.template.provider_ref || '', provider_status: r.template.provider_status, provider_reason: r.template.provider_reason });
+        setT(meta);
+        setOrig(meta);
+        if (st === 'APPROVED') toast('Approved by Meta. You can use it now.');
+        else if (st === 'REJECTED') toast('Meta did not approve it. See the reason under WhatsApp approval.', 'bad');
+      }).catch(() => {});
+    }, 20000);
+    return () => clearInterval(timer);
+  }, [id, savedStatus, toast]);
 
   // Same checks as the server, in shop words: [Customer name] instead of {{name}}.
   const errors = useMemo(() => (t ? validateTemplate(t) : []).map(plainError), [t]);
@@ -88,15 +115,55 @@ export default function TemplateEditor() {
   }
   const setButton = (i, patch) => set({ buttons: t.buttons.map((b, j) => (j === i ? { ...b, ...patch } : b)) });
 
-  async function save() {
+  // With WhatsApp connected a template must be approved by Meta before it can be sent, so the main
+  // button saves and sends it for approval in one go, then becomes "Use this template" once approved.
+  const needsMeta = Boolean(settings?.metaTemplatesReady);
+  const FIELDS = ['name', 'body', 'buttons', 'image_url', 'video_url', 'category', 'language', 'sms_body', 'sms_dlt_template_id', 'status', 'provider_ref'];
+  const pick = (x) => JSON.stringify(FIELDS.map((k) => x?.[k] ?? null));
+  const dirty = !id || !orig || pick(t) !== pick(orig);
+  const metaStatus = String(t?.provider_status || '').toUpperCase();
+
+  async function save({ submit = false } = {}) {
     if (!atLeast(user?.role, 'manager')) return toast('Templates are changed by a store manager or the store owner.', 'bad');
     setTried(true);
     if (errors.length) return;
     setBusy(true);
     try {
-      const r = await api(id ? `/api/templates/${id}` : '/api/templates', { method: id ? 'PUT' : 'POST', body: t });
-      toast('Template saved');
-      navigate(id ? '/templates' : `/campaigns/new?template=${r.template.id}`);
+      let saved = t;
+      if (dirty) saved = (await api(id ? `/api/templates/${id}` : '/api/templates', { method: id ? 'PUT' : 'POST', body: t })).template;
+      if (!needsMeta) {
+        toast('Template saved');
+        navigate(id ? '/templates' : `/campaigns/new?template=${saved.id}`);
+        return;
+      }
+      if (submit && String(saved.provider_status || '').toUpperCase() !== 'APPROVED') {
+        try {
+          const before = saved.provider_ref;
+          saved = (await api(`/api/templates/${saved.id}/submit-meta`, { method: 'POST' })).template;
+          toast(before && saved.provider_ref !== before
+            ? `Saved and sent to Meta as a new version (${saved.provider_ref}). Approval usually takes minutes.`
+            : 'Saved and sent to Meta for approval. It usually takes minutes; press “Check status”.');
+        } catch (e) {
+          toast(`Saved, but not sent to Meta. ${e.message}`, 'bad');
+        }
+      } else {
+        toast(submit ? 'Saved. Meta’s approval still applies, so it can be used now.' : 'Template saved');
+      }
+      loaded(saved);
+      if (!id) navigate(`/templates/${saved.id}`, { replace: true });
+    } catch (e) {
+      toast(e.message, 'bad');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function checkStatus() {
+    setBusy(true);
+    try {
+      const r = await api(`/api/templates/${id}/sync-meta`, { method: 'POST' });
+      loaded(r.template);
+      toast(r.template.provider_status ? `Meta says: ${String(r.template.provider_status).toLowerCase()}` : r.template.provider_reason || 'Not approved yet.');
     } catch (e) {
       toast(e.message, 'bad');
     } finally {
@@ -209,7 +276,12 @@ export default function TemplateEditor() {
             )}
             {isOwner && id && (
               <Extra id="meta" open={open} setOpen={setOpen} icon={BadgeCheck} title="WhatsApp approval (Meta)" summary={meta ? meta[1] : 'Not submitted'}>
-                <MetaFields t={t} onChange={(u) => setT((x) => ({ ...x, provider_ref: u.provider_ref || '', provider_status: u.provider_status, provider_reason: u.provider_reason }))} canSubmit={settings?.metaTemplatesReady} />
+                <MetaFields t={t} onChange={(u) => {
+                  // Approval changes come from Meta, not from editing: keep them out of "unsaved changes".
+                  const meta = (x) => ({ ...x, provider_ref: u.provider_ref || '', provider_status: u.provider_status, provider_reason: u.provider_reason });
+                  setT(meta);
+                  setOrig(meta);
+                }} canSubmit={settings?.metaTemplatesReady} />
               </Extra>
             )}
             {isOwner && (
@@ -263,7 +335,26 @@ export default function TemplateEditor() {
             </span>
           ) : <button className="btn ghost danger" onClick={() => setAskDelete(true)}><Trash2 size={17} />Delete</button>
         ) : <span />}
-        <button className="btn primary lg" onClick={save} disabled={busy}>{busy ? <Spinner /> : id ? 'Save changes' : 'Save and use it'}</button>
+        {!needsMeta ? (
+          <button className="btn primary lg" onClick={() => save()} disabled={busy}>{busy ? <Spinner /> : id ? 'Save changes' : 'Save and use it'}</button>
+        ) : dirty ? (
+          <span className="row wrap" style={{ gap: 8, justifyContent: 'flex-end' }}>
+            <button className="btn ghost" onClick={() => save()} disabled={busy}>Save only</button>
+            <button className="btn primary lg" onClick={() => save({ submit: true })} disabled={busy}>{busy ? <Spinner /> : <><Send size={17} />Save and send to Meta</>}</button>
+          </span>
+        ) : metaStatus === 'APPROVED' ? (
+          <span className="row wrap" style={{ gap: 10, justifyContent: 'flex-end', alignItems: 'center' }}>
+            <span className="badge ok"><Check size={13} />Approved by Meta</span>
+            <Link to={`/campaigns/new?template=${id}`} className="btn primary lg"><Send size={17} />Use this template</Link>
+          </span>
+        ) : ['PENDING', 'IN_APPEAL'].includes(metaStatus) ? (
+          <span className="row wrap" style={{ gap: 10, justifyContent: 'flex-end', alignItems: 'center' }}>
+            <span className="subtle row" style={{ gap: 6 }}><Spinner size={14} />Waiting for Meta’s approval. This page updates by itself.</span>
+            <button className="btn ghost sm" onClick={checkStatus} disabled={busy}><RefreshCw size={15} />Check now</button>
+          </span>
+        ) : (
+          <button className="btn primary lg" onClick={() => save({ submit: true })} disabled={busy}>{busy ? <Spinner /> : <><Send size={17} />{metaStatus ? 'Send to Meta again' : 'Send to Meta for approval'}</>}</button>
+        )}
       </div>
     </div>
   );
@@ -364,7 +455,7 @@ function MetaFields({ t, onChange, canSubmit }) {
       {!status && t.provider_ref && t.provider_reason && <Alert tone="warn">{t.provider_reason}</Alert>}
       <div className="row wrap" style={{ gap: 8 }}>
         <button className="btn" disabled={busy || !canSubmit} onClick={() => go('submit-meta', (u) => (u.provider_ref && u.provider_ref !== t.provider_ref && t.provider_ref ? `Sent to Meta as a new version (${u.provider_ref}). Approval usually takes minutes.` : 'Sent to Meta for approval'))}>{busy ? <Spinner /> : status || t.provider_ref ? 'Submit again' : 'Submit to Meta'}</button>
-        {t.provider_ref && <button className="btn ghost" disabled={busy} onClick={() => go('sync-meta', (u) => (u.provider_status ? `Meta says: ${u.provider_status.toLowerCase()}` : u.provider_reason || 'Not approved for this version yet.'))}><RefreshCw size={16} />Check status</button>}
+        {t.provider_ref && <button className="btn ghost" disabled={busy} onClick={() => go('sync-meta', (u) => (u.provider_status ? `Meta says: ${u.provider_status.toLowerCase()}` : u.provider_reason || 'Not approved for this version yet.'))}><RefreshCw size={16} />Check now</button>}
       </div>
       {!canSubmit && <span className="subtle">Connect WhatsApp in Settings first.</span>}
     </>
