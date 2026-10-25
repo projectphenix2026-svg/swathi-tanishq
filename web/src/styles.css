@@ -741,6 +741,13 @@ a.chart-card:hover { border-color: var(--brand); }
 .tpl-result { display: flex; gap: 10px; align-items: flex-start; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); cursor: pointer; font: inherit; color: inherit; text-align: left; }
 .tpl-result:hover, .tpl-result.on { border-color: var(--brand); background: var(--brand-50); }
 .tpl-text.short { -webkit-line-clamp: 2; margin-top: 4px; }
+/* Home: business numbers for a period. */
+.ins-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+.ins-grid h3 { font-size: 1rem; margin-bottom: 4px; }
+.ins-grid .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fn-bar { height: 10px; border-radius: 5px; background: var(--surface-2); overflow: hidden; margin-top: 3px; }
+.fn-bar span { display: block; height: 100%; background: var(--ok); border-radius: 5px; }
+
 /* Ticking rows in a list, and the bar of actions for the ticked ones. */
 .select-bar { position: sticky; top: 0; z-index: 15; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 14px; margin-bottom: 10px;
   background: var(--brand-50); border: 1px solid color-mix(in srgb, var(--brand) 30%, var(--border)); border-radius: 12px; }

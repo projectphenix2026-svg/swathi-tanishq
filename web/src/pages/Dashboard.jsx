@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowDownRight, ArrowUpRight, Check, ChevronRight, Plus, Smartphone } from 'lucide-react';
+import { Check, ChevronRight, Clock, Plus, Smartphone } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.js';
 import { Alert, CampaignStatus, Pic, Skeleton } from '../components/ui.jsx';
@@ -14,10 +14,12 @@ export default function Dashboard() {
   const { user, settings } = useAuth();
   const { t, lang } = useT();
   const [d, setD] = useState(null);
+  // Which period the business numbers cover: this month, last month or the last 3 months.
+  const [period, setPeriod] = useState('month');
 
   useEffect(() => {
-    api('/api/dashboard').then(setD).catch(() => setD({ error: true }));
-  }, []);
+    api(`/api/dashboard?period=${period}`).then(setD).catch(() => setD({ error: true }));
+  }, [period]);
 
   const first = user.name.split(' ')[0];
 
@@ -40,19 +42,12 @@ export default function Dashboard() {
             {atLeast(settings?.role, 'owner') && <GettingStarted d={d} live={settings && settings.provider.name !== 'mock'} />}
             <Today d={d} t={t} lang={lang} />
 
-            <div className="kpi-row">
-              <Tile label="Customers" value={num(d.customers.total)} sub={d.new_customers ? `+${num(d.new_customers)} this month` : `${num(d.customers.reachable)} can get WhatsApp`} />
-              <Tile label="Messages sent" value={num(d.month.sent)} sub="this month" />
-              <Tile label="Read" value={d.month.sent ? `${pct(d.month.read, d.month.sent)}%` : '—'} sub={<Change now={pct(d.month.read, d.month.sent)} before={d.last_sent ? pct(d.last_read, d.last_sent) : null} hasNow={d.month.sent > 0} />} />
-              <Tile label="Replies" value={num(d.replies)} sub={`${num(d.interested)} said Interested`} />
-              <Link to="/spending" className="tile-link"><Tile label="WhatsApp cost" value={inr(d.month.spend)} sub="this month, plus GST · see daily" /></Link>
-            </div>
+            <Insights d={d} i={d.insights} period={period} setPeriod={setPeriod} salesCodes={Boolean(settings?.salesCodes)} />
 
             <div className="home-grid">
               <WeeksChart weeks={d.weeks} />
-              <LastMessage m={d.lastMessage} />
-              <CitiesChart cities={d.cities} total={d.customers.total} />
               <Upcoming days={d.upcoming} />
+              <CitiesChart cities={d.cities} total={d.customers.total} />
             </div>
 
             <div className="card">
@@ -84,6 +79,91 @@ export default function Dashboard() {
   );
 }
 
+const PERIODS = [['month', 'This month'], ['last', 'Last month'], ['90d', 'Last 3 months']];
+
+/**
+ * The business picture for a period: what messages brought in, where customers drop off between
+ * sent and sale, the best offers and time to send, gaps in the customer list, and the WhatsApp
+ * number's health. How each number is worked out: server/src/routes/dashboard.js homeInsights().
+ */
+function Insights({ d, i, period, setPeriod, salesCodes }) {
+  if (!i) return null;
+  const f = i.funnel;
+  const steps = [
+    ['Sent', f.sent],
+    ['Reached the phone', f.delivered],
+    ['Read', f.read],
+    ['Replied or Interested', f.engaged],
+    ...(salesCodes ? [['Bought with a code', f.bought]] : []),
+  ];
+  const h = i.health;
+  const qual = { GREEN: ['ok', 'Good'], YELLOW: ['warn', 'Medium'], RED: ['bad', 'Low'] }[String(i.account.quality || '').toUpperCase()];
+  return (
+    <div className="stack" style={{ gap: 12 }}>
+      <div className="row between wrap" style={{ gap: 8 }}>
+        <h2>How your messages are doing</h2>
+        <select className="select sm" value={period} onChange={(e) => setPeriod(e.target.value)} aria-label="Period">
+          {PERIODS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+        </select>
+      </div>
+      <div className="kpi-row">
+        {salesCodes ? (
+          <>
+            <Link to="/offers" className="tile-link"><Tile label="Sales from messages" value={inr(i.sales.revenue)} sub={`${plural(i.sales.bought, 'customer')} bought with a code`} /></Link>
+            <Link to="/spending" className="tile-link"><Tile label="Back for every ₹1 spent" value={i.sales.perRupee != null ? `₹${num(i.sales.perRupee)}` : '—'} sub={`${inr(i.sales.spend)} on WhatsApp`} /></Link>
+          </>
+        ) : (
+          <>
+            <Tile label="Read" value={f.sent ? `${pct(f.read, f.sent)}%` : '—'} sub={f.sent ? `${num(f.read)} of ${num(f.sent)} messages` : 'nothing sent yet'} />
+            <Link to="/spending" className="tile-link"><Tile label="WhatsApp cost" value={inr(i.sales.spend)} sub="plus GST · see daily" /></Link>
+          </>
+        )}
+        <Link to="/leads" className="tile-link"><Tile label="Interested customers" value={num(i.interested.count)} sub={i.interested.notCalled ? <span className="badge warn">{num(i.interested.notCalled)} not called yet</span> : 'everyone called'} /></Link>
+        <Link to="/customers" className="tile-link"><Tile label="Customers" value={num(d.customers.total)} sub={d.new_customers ? `+${num(d.new_customers)} this month` : `${num(d.customers.reachable)} can get WhatsApp`} /></Link>
+      </div>
+
+      <div className="ins-grid">
+        <div className="card card-pad stack-sm">
+          <h3>From message to sale</h3>
+          {!f.sent ? <p className="subtle" style={{ margin: 0 }}>Nothing sent in this period yet.</p> : steps.map(([label, n]) => (
+            <div key={label}>
+              <div className="row between"><span className="subtle">{label}</span><span className="num">{num(n)}{label !== 'Sent' ? ` (${pct(n, f.sent)}%)` : ''}</span></div>
+              <div className="fn-bar"><span style={{ width: `${Math.max(2, (100 * n) / Math.max(1, f.sent))}%` }} /></div>
+            </div>
+          ))}
+        </div>
+        <div className="card card-pad stack-sm">
+          <h3>Best offers</h3>
+          {i.best.length === 0 ? <p className="subtle" style={{ margin: 0 }}>No offers or wishes in this period yet.</p> : i.best.map((b) => (
+            <div key={b.id} className="row between" style={{ gap: 8 }}>
+              <span className="ellipsis" style={{ minWidth: 0 }}>{b.name.replace(/^Test · /, '')}</span>
+              <span className="subtle num" style={{ flexShrink: 0 }}>{b.readPct}% read{salesCodes ? ` · ${plural(b.sales, 'sale')}` : ''}</span>
+            </div>
+          ))}
+          <div className="subtle" style={{ marginTop: 6 }}>
+            <Clock size={14} style={{ verticalAlign: '-2px' }} />{' '}
+            {i.bestTime ? `Read most when sent ${i.bestTime.label} (${i.bestTime.readPct}% read within a day)` : 'Best time to send shows after about 50 messages.'}
+          </div>
+        </div>
+        <div className="card card-pad stack-sm">
+          <h3>Customer health</h3>
+          <div className="row between"><span>Can get WhatsApp</span><span className="num">{num(h.reachable)} ({pct(h.reachable, h.total)}%)</span></div>
+          <div className="row between"><span>Birthday saved</span><span className="row" style={{ gap: 8 }}><span className="num">{num(h.with_birthday)} ({pct(h.with_birthday, h.total)}%)</span>{h.total > h.with_birthday && <Link to="/customers?filter=no_birthday" className="btn sm">Add more</Link>}</span></div>
+          <div className="row between"><span>Not read anything in 90 days</span><span className="row" style={{ gap: 8 }}><span className="num">{num(h.sleeping)}</span>{h.sleeping > 0 && <Link to="/customers?filter=sleeping" className="btn sm">Win them back</Link>}</span></div>
+          <div className="row between"><span>Said STOP</span><span className="num">{num(h.stopped)}</span></div>
+        </div>
+        <div className="card card-pad stack-sm">
+          <h3>WhatsApp account</h3>
+          <div className="row between"><span>Quality</span>{qual ? <span className={`badge ${qual[0]}`}>{qual[1]}</span> : <span className="subtle">Not connected yet</span>}</div>
+          <div className="row between"><span>New customers per day</span><span className="num">{i.account.dailyLimit ? num(i.account.dailyLimit) : '—'}</span></div>
+          <div className="row between"><span>Templates approved by Meta</span><Link to="/templates" className="num">{num(i.account.approved)} of {num(i.account.templates)}</Link></div>
+          <div className="row between"><span>Spent in this period</span><Link to="/spending" className="num">{inr(i.sales.spend)} + GST</Link></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Tile({ label, value, sub }) {
   return (
     <div className="card kpi-tile">
@@ -92,16 +172,6 @@ function Tile({ label, value, sub }) {
       <span className="subtle">{sub}</span>
     </div>
   );
-}
-
-/** "+4% vs last month" with an arrow (shape and sign, not only colour). */
-function Change({ now, before, hasNow }) {
-  if (!hasNow) return 'nothing sent yet';
-  if (before === null) return 'of messages sent';
-  const diff = now - before;
-  if (!diff) return 'same as last month';
-  const Up = diff > 0 ? ArrowUpRight : ArrowDownRight;
-  return <span className={diff > 0 ? 'chg up' : 'chg down'}><Up size={14} />{diff > 0 ? '+' : ''}{diff}% vs last month</span>;
 }
 
 /** Only what needs someone today. Empty: the row is not shown at all. */
@@ -182,34 +252,6 @@ function WeeksChart({ weeks }) {
         </div>
       )}
     </div>
-  );
-}
-
-/** What happened to the last message: sent, read, replied, Interested (and bought, with sales codes). */
-function LastMessage({ m }) {
-  if (!m) {
-    return (
-      <div className="card card-pad chart-card">
-        <h3>Last message</h3>
-        <p className="subtle">When you send a message, you see here how many read it and replied.</p>
-      </div>
-    );
-  }
-  const steps = [['Sent', m.sent], ['Read', m.read], ['Replied', m.replied], ['Interested', m.interested], ...(m.bought !== null ? [['Bought', m.bought]] : [])];
-  const max = Math.max(1, m.sent);
-  return (
-    <Link to={`/campaigns/${m.id}`} className="card card-pad chart-card" style={{ textDecoration: 'none', color: 'inherit' }}>
-      <h3>Last message: {m.name}</h3>
-      <div className="hbars">
-        {steps.map(([label, n]) => (
-          <div key={label} className="hbar" title={`${label}: ${num(n)}`}>
-            <span className="hbar-lbl">{label}</span>
-            <span className="hbar-track"><span className="hbar-fill" style={{ width: `${Math.max(n ? 2 : 0, (n / max) * 100)}%` }} /></span>
-            <span className="hbar-val num">{num(n)}{label !== 'Sent' && m.sent ? <span className="subtle"> · {pct(n, m.sent)}%</span> : null}</span>
-          </div>
-        ))}
-      </div>
-    </Link>
   );
 }
 

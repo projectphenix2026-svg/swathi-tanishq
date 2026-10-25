@@ -13,6 +13,7 @@ const router = express.Router();
 
 router.get('/', async (req, res) => {
   await ensureDefaultWishes(req.clientId);
+  const insights = await homeInsights(req.clientId, ['month', 'last', '90d'].includes(req.query.period) ? req.query.period : 'month');
   const { rows: [customers] } = await query(
     `SELECT count(*) AS total,
             count(*) FILTER (WHERE whatsapp_opt_in = 1 AND opted_out_at IS NULL) AS reachable
@@ -60,8 +61,132 @@ router.get('/', async (req, res) => {
   );
   const { rows: [cl] } = await query('SELECT last_export_at, sales_codes FROM clients WHERE id = $1', [req.clientId]);
   const charts = await homeCharts(req.clientId, Boolean(cl?.sales_codes));
-  res.json({ customers, month: { ...month, spend: Math.round(month.spend * 100) / 100 }, inbox, recent, templates: t.n, lastExportAt: cl?.last_export_at || null, ...extra, ...charts });
+  res.json({ customers, month: { ...month, spend: Math.round(month.spend * 100) / 100 }, inbox, recent, templates: t.n, lastExportAt: cl?.last_export_at || null, ...extra, ...charts, insights });
 });
+
+/**
+ * Home's business numbers for a period (this month, last month or the last 90 days), all from what
+ * Sandesh records: offers and wishes sent and Meta's ticks, replies and Interested taps within 7
+ * days, sales codes used at the counter, consent and dates saved on customers, and the number's
+ * Meta status. Tests to a staff phone are left out.
+ */
+async function homeInsights(clientId, period) {
+  const now = new Date();
+  const monthStart = indiaStartOf('month');
+  const range = period === 'last'
+    ? [indiaStartOf('month', new Date(Date.parse(monthStart) - 86400000)), monthStart]
+    : period === '90d' ? [new Date(now.getTime() - 90 * 86400000).toISOString(), now.toISOString()]
+      : [monthStart, now.toISOString()];
+  const P = [clientId, ...range];
+  const OFFERS = `(campaign_id IS NOT NULL OR occasion_id IS NOT NULL)
+    AND NOT EXISTS (SELECT 1 FROM campaigns tc WHERE tc.id = messages.campaign_id AND tc.name LIKE 'Test · %')`;
+  const { rows: [f] } = await query(
+    `SELECT count(*) FILTER (WHERE status IN ('sent', 'delivered', 'read')) AS sent,
+            count(*) FILTER (WHERE status IN ('delivered', 'read')) AS delivered,
+            count(*) FILTER (WHERE status = 'read') AS read,
+            COALESCE(sum(cost), 0) AS spend
+       FROM messages WHERE client_id = $1 AND direction = 'outbound' AND ${OFFERS} AND created_at >= $2 AND created_at < $3`,
+    P,
+  );
+  // Wrote back or tapped a button within 7 days of getting an offer or wish.
+  const { rows: [e] } = await query(
+    `SELECT count(DISTINCT i.contact_id) AS n FROM messages i
+      WHERE i.client_id = $1 AND i.direction = 'inbound' AND i.created_at >= $2 AND i.created_at < $3
+        AND EXISTS (SELECT 1 FROM messages o WHERE o.contact_id = i.contact_id AND o.direction = 'outbound'
+                      AND (o.campaign_id IS NOT NULL OR o.occasion_id IS NOT NULL) AND o.sent_at <= i.created_at
+                      AND o.sent_at > strftime('%Y-%m-%dT%H:%M:%fZ', i.created_at, '-7 days'))`,
+    P,
+  );
+  const { rows: [s] } = await query(
+    `SELECT count(*) AS bought, COALESCE(sum(amount), 0) AS revenue FROM redemptions WHERE client_id = $1 AND redeemed_at >= $2 AND redeemed_at < $3`,
+    P,
+  );
+  const { rows: [l] } = await query(
+    `SELECT count(*) FILTER (WHERE created_at >= $2 AND created_at < $3) AS interested,
+            count(*) FILTER (WHERE status = 'new') AS not_called
+       FROM leads WHERE client_id = $1`,
+    P,
+  );
+  // Best offers and wishes: most sales, then most read.
+  const { rows: offers } = await query(
+    `SELECT 'c' || c.id AS id, c.name,
+            count(m.id) FILTER (WHERE m.status IN ('sent', 'delivered', 'read')) AS sent,
+            count(m.id) FILTER (WHERE m.status = 'read') AS read,
+            count(DISTINCT r.id) AS sales, COALESCE(sum(r.amount), 0) AS revenue
+       FROM campaigns c JOIN messages m ON m.campaign_id = c.id LEFT JOIN redemptions r ON r.message_id = m.id
+      WHERE c.client_id = $1 AND c.name NOT LIKE 'Test · %' AND m.created_at >= $2 AND m.created_at < $3
+      GROUP BY c.id
+     UNION ALL
+     SELECT 'o' || o.id AS id, o.name,
+            count(m.id) FILTER (WHERE m.status IN ('sent', 'delivered', 'read')) AS sent,
+            count(m.id) FILTER (WHERE m.status = 'read') AS read,
+            count(DISTINCT r.id) AS sales, COALESCE(sum(r.amount), 0) AS revenue
+       FROM occasions o JOIN messages m ON m.occasion_id = o.id LEFT JOIN redemptions r ON r.message_id = m.id
+      WHERE o.client_id = $1 AND m.created_at >= $2 AND m.created_at < $3
+      GROUP BY o.id`,
+    P,
+  );
+  const best = offers.filter((x) => x.sent > 0)
+    .sort((a, b) => b.sales - a.sales || b.read / b.sent - a.read / a.sent)
+    .slice(0, 3)
+    .map((x) => ({ ...x, readPct: Math.round((100 * x.read) / x.sent) }));
+  // Best time to send (last 90 days, India time): the 2-hour slot, weekday or weekend, where the
+  // most messages were read within a day. Needs enough messages to mean anything.
+  const { rows: slots } = await query(
+    `SELECT CAST(strftime('%H', sent_at, '+330 minutes') AS INTEGER) AS h,
+            CAST(strftime('%w', sent_at, '+330 minutes') AS INTEGER) AS wd,
+            count(*) AS n,
+            count(*) FILTER (WHERE read_at IS NOT NULL AND julianday(read_at) - julianday(sent_at) < 1) AS quick
+       FROM messages WHERE client_id = $1 AND direction = 'outbound' AND sent_at IS NOT NULL
+        AND status IN ('sent', 'delivered', 'read') AND sent_at > $2
+      GROUP BY h, wd`,
+    [clientId, new Date(now.getTime() - 90 * 86400000).toISOString()],
+  );
+  const buckets = {};
+  for (const r of slots) {
+    const key = `${r.h - (r.h % 2)}|${r.wd === 0 || r.wd === 6 ? 'weekends' : 'weekdays'}`;
+    buckets[key] = buckets[key] || { n: 0, quick: 0 };
+    buckets[key].n += Number(r.n);
+    buckets[key].quick += Number(r.quick);
+  }
+  const total = Object.values(buckets).reduce((a, b) => a + b.n, 0);
+  const top = Object.entries(buckets).filter(([, b]) => b.n >= 20).sort(([, a], [, b]) => b.quick / b.n - a.quick / a.n)[0];
+  const hour = (h) => `${((h + 11) % 12) + 1} ${h < 12 || h === 24 ? 'am' : 'pm'}`;
+  const bestTime = total >= 50 && top ? (() => {
+    const [h, days] = top[0].split('|');
+    return { label: `${hour(Number(h))}–${hour(Number(h) + 2)} on ${days}`, readPct: Math.round((100 * top[1].quick) / top[1].n), basedOn: total };
+  })() : null;
+  const { rows: [h] } = await query(
+    `SELECT count(*) AS total,
+            count(*) FILTER (WHERE whatsapp_opt_in = 1 AND opted_out_at IS NULL) AS reachable,
+            count(*) FILTER (WHERE birthday IS NOT NULL) AS with_birthday,
+            count(*) FILTER (WHERE opted_out_at IS NOT NULL) AS stopped,
+            count(*) FILTER (WHERE EXISTS (SELECT 1 FROM messages mm WHERE mm.contact_id = c.id AND mm.direction = 'outbound' AND mm.status IN ('sent', 'delivered', 'read') AND mm.created_at > ${ago('90 days')})
+                               AND NOT EXISTS (SELECT 1 FROM messages mr WHERE mr.contact_id = c.id AND mr.direction = 'outbound' AND mr.status = 'read' AND mr.created_at > ${ago('90 days')})
+                               AND opted_out_at IS NULL) AS sleeping
+       FROM contacts c WHERE client_id = $1 AND phone NOT LIKE 'deleted:%'`,
+    [clientId],
+  );
+  const { rows: [acct] } = await query(
+    `SELECT (SELECT quality FROM whatsapp_connection WHERE client_id = $1) AS quality,
+            (SELECT daily_limit FROM whatsapp_connection WHERE client_id = $1) AS daily_limit,
+            (SELECT live FROM whatsapp_connection WHERE client_id = $1) AS live,
+            (SELECT count(*) FROM templates WHERE client_id = $1 AND archived_at IS NULL AND upper(COALESCE(provider_status, '')) = 'APPROVED') AS approved,
+            (SELECT count(*) FROM templates WHERE client_id = $1 AND archived_at IS NULL) AS templates`,
+    [clientId],
+  );
+  const spend = Math.round(Number(f.spend) * 100) / 100;
+  return {
+    period,
+    funnel: { sent: f.sent, delivered: f.delivered, read: f.read, engaged: e.n, bought: s.bought },
+    sales: { revenue: Number(s.revenue), bought: s.bought, spend, perRupee: spend > 0 ? Math.round(Number(s.revenue) / spend) : null },
+    interested: { count: l.interested, notCalled: l.not_called },
+    best,
+    bestTime,
+    health: h,
+    account: { ...acct, dailyLimit: acct.daily_limit ?? (acct.live ? config.dailyLimit : null) },
+  };
+}
 
 // Settings the screens need: which provider, cost per message, sandbox hints, limits.
 router.get('/settings', async (req, res) => {

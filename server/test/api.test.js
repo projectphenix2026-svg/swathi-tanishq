@@ -394,3 +394,28 @@ describe('Bulk actions on ticked rows', () => {
     expect(u.n).toBe(0);
   });
 });
+
+describe('Home insights', () => {
+  it('reports the funnel, sales, interested, best offers, customer health and account for a period', async () => {
+    const { insights: i } = (await agent.get('/api/dashboard?period=month')).body;
+    expect(i.period).toBe('month');
+    expect(i.funnel.sent).toBeGreaterThan(0);
+    expect(i.funnel.delivered).toBeLessThanOrEqual(i.funnel.sent);
+    expect(i.funnel.read).toBeLessThanOrEqual(i.funnel.delivered);
+    expect(i.best.length).toBeGreaterThan(0);
+    expect(i.best[0]).toHaveProperty('readPct');
+    expect(i.health.total).toBeGreaterThan(0);
+    expect(i.health).toHaveProperty('sleeping');
+    expect(i.sales).toHaveProperty('perRupee');
+    expect(i.account).toHaveProperty('templates');
+    // Not enough messages yet for a "best time".
+    expect(i.bestTime).toBeNull();
+    const last = (await agent.get('/api/dashboard?period=last')).body.insights;
+    expect(last.funnel.sent).toBe(0);
+    const summary = (await agent.get('/api/customers/summary')).body;
+    expect(summary).toHaveProperty('no_birthday');
+    expect(summary).toHaveProperty('sleeping');
+    expect((await agent.get('/api/customers?filter=no_birthday')).status).toBe(200);
+    expect((await agent.get('/api/customers?filter=sleeping')).status).toBe(200);
+  });
+});
