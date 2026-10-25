@@ -63,6 +63,8 @@ describe('After a purchase: thank-you + Google review', () => {
 describe('Call back reminders', () => {
   it('flags customers waiting more than a day and shows who called', async () => {
     await request(createApp()).post('/webhooks/twilio').type('form').send({ MessageSid: 'SMcb1', SmsStatus: 'received', From: 'whatsapp:+919000060001', Body: 'Interested' });
+    // A button tap opens the lead; here the customer is put on the list directly.
+    await query("INSERT INTO leads (client_id, contact_id, reason) SELECT client_id, id, 'Interested' FROM contacts WHERE phone = '+919000060001'");
     await query("UPDATE leads SET created_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-30 hours')");
     const list = await owner.get('/api/leads');
     expect(list.body.counts.overdue).toBe(1);

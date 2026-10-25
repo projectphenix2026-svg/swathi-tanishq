@@ -294,6 +294,19 @@ describe('Phase 5: offer codes, leads, weekly limit, roles', () => {
     expect(after.tags).toContain('interested');
   });
 
+  it('does not put customers on the call list for typed words, only for a button tap', async () => {
+    const c = await contact('Priya Sharma', '+919876543210');
+    const t = await template('Hi {{name}}, new bridal sets are here.', { buttons: [{ type: 'quick_reply', text: 'Interested' }] });
+    const { rows: [cp] } = await query(`INSERT INTO campaigns (client_id, name, template_id, cost_per_message, provider) VALUES ($1, 'Bridal', $2, 0.8631, 'fake') RETURNING *`, [clientId, t.id]);
+    const { launchCampaign } = await import('../src/lib/campaigns.js');
+    await launchCampaign(clientId, cp, t);
+    await drain();
+    await recordInbound(clientId, { providerMessageId: 'in1', from: '+919876543210', body: 'yes', provider: 'fake' });
+    expect((await query('SELECT id FROM leads WHERE contact_id = $1', [c.id])).rows).toEqual([]);
+    await recordInbound(clientId, { providerMessageId: 'in2', from: '+919876543210', body: 'Interested', provider: 'fake' });
+    expect((await query('SELECT id FROM leads WHERE contact_id = $1', [c.id])).rows).toHaveLength(1);
+  });
+
   it('skips customers who already got the weekly number of offers', async () => {
     const busy = await contact('Busy', '+919876543210');
     await contact('Fresh', '+919876543299');
