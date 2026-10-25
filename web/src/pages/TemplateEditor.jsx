@@ -16,7 +16,7 @@ import { readyFor } from '../lib/ready-lang.js';
 import { useT } from '../lib/i18n.jsx';
 
 // The template editor: one message box with a small toolbar (bold, slanted, add a detail),
-// and everything else (photo, buttons, SMS version, WhatsApp approval, advanced) in rows that
+// and everything else (photo, video, buttons, WhatsApp approval, advanced; SMS version once SMS is on) in rows that
 // open when needed, each with a one-line summary. The phone on the right shows the result.
 const EXAMPLES = Object.fromEntries(VARIABLES.map((v) => [v.key, v.example]));
 const BUTTON_TYPES = [
@@ -274,7 +274,8 @@ export default function TemplateEditor() {
               <span className="hint">Customers who tap “Interested” go to Replies → Interested.</span>
             </Extra>
 
-            {isOwner && (
+            {/* SMS is not offered yet: the section shows only once SMS is switched on (after DLT registration). */}
+            {isOwner && settings?.sms?.live && (
               <Extra id="sms" open={open} setOpen={setOpen} icon={MessageSquareText} title="SMS version" summary={t.sms_body ? 'Added' : 'None. Only needed for SMS (after DLT registration).'}>
                 <SmsFields t={t} set={set} />
               </Extra>
