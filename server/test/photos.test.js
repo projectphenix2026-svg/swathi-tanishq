@@ -156,3 +156,24 @@ describe('Offer videos', () => {
     expect(sent.template.components[0]).toEqual({ type: 'header', parameters: [{ type: 'video', video: { link: 'https://x/v.mp4' } }] });
   });
 });
+
+describe('A different photo or video for one offer (Meta approves the slot, not the file)', () => {
+  it('never adds a photo to a template that was approved without one', async () => {
+    const t = (await owner.post('/api/templates').send({ name: 'Plain offer', body: 'Hi {{name}}, our new designs are in.' })).body.template;
+    const c = await owner.post('/api/campaigns').send({ name: 'Plain', templateId: t.id, audience: { mode: 'all' }, variables: { image_url: 'https://example.com/offer.jpg' }, expectedCount: 1 });
+    expect(c.status).toBe(201);
+    await drain();
+    expect(provider.outbox.at(-1).imageUrl).toBeFalsy();
+    const again = (await owner.get(`/api/templates/${t.id}`)).body.template;
+    expect(again.image_url).toBeNull();
+  });
+
+  it('sends the offer’s own video in an approved video template', async () => {
+    let sent;
+    const meta = createMetaProvider({ accessToken: 'x', phoneNumberId: '1', graphVersion: 'v25.0' }, {
+      fetchImpl: async (url, init) => { sent = JSON.parse(init.body); return { ok: true, json: async () => ({ messages: [{ id: 'wamid.2' }] }) }; },
+    });
+    await meta.send({ to: '+919000070001', template: { provider_ref: 'video_offer', body: 'Hi {{name}}.', video_url: 'https://x/saved.mp4' }, values: { name: 'Priya' }, videoUrl: 'https://x/this-week.mp4' });
+    expect(sent.template.components[0].parameters[0].video.link).toBe('https://x/this-week.mp4');
+  });
+});

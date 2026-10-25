@@ -7,6 +7,7 @@ import { useAuth } from '../lib/auth.js';
 import { Alert, Avatar, Field, Pic, Spinner, useToast } from '../components/ui.jsx';
 import { Highlighted, PhonePreview } from '../components/PhonePreview.jsx';
 import { PhotoPicker } from '../components/PhotoPicker.jsx';
+import { VideoPicker } from '../components/VideoPicker.jsx';
 import { ago, dateTime, inr, num, phone, plural } from '../lib/format.js';
 import { READY_MESSAGES } from '../lib/ready.js';
 import { LANGS, isReadyText, readyFor, readyIn } from '../lib/ready-lang.js';
@@ -188,7 +189,7 @@ export default function CampaignBuilder() {
               {isSms ? (
                 <SmsPreview text={template.sms_body} values={values} live={smsOn} />
               ) : (
-                <PhonePreview body={template.body} values={values} buttons={template.buttons} imageUrl={template.image_url} videoUrl={template.video_url} businessName={settings?.businessName} />
+                <PhonePreview body={template.body} values={values} buttons={template.buttons} imageUrl={template.image_url && (variables.image_url || template.image_url)} videoUrl={template.video_url && (variables.video_url || template.video_url)} businessName={settings?.businessName} />
               )}
               {rendered?.missing.some((k) => !SHOP_KEYS.includes(k)) && (
                 <span className="subtle" style={{ color: 'var(--warn)' }}>
@@ -202,7 +203,7 @@ export default function CampaignBuilder() {
               )}
             </>
           ) : (
-            <PhonePreview body={template?.body} buttons={template?.buttons} imageUrl={template?.image_url} videoUrl={template?.video_url} businessName={settings?.businessName} caption={template ? 'No customer to show yet' : 'Pick a template to see it here'} />
+            <PhonePreview body={template?.body} buttons={template?.buttons} imageUrl={template?.image_url && (variables.image_url || template.image_url)} videoUrl={template?.video_url && (variables.video_url || template.video_url)} businessName={settings?.businessName} caption={template ? 'No customer to show yet' : 'Pick a template to see it here'} />
           )}
         </aside>
       </div>
@@ -267,16 +268,13 @@ function TemplateStep({ t, templates, setTemplates, templateId, setTemplateId, n
     }
   }
 
-  async function setPhoto(url) {
-    if (!template) return;
-    try {
-      const { template: saved } = await api(`/api/templates/${template.id}`, { method: 'PUT', body: { ...template, image_url: url || '' } });
-      setTemplates((list) => list.map((x) => (x.id === saved.id ? saved : x)));
-      toast(url ? 'Photo added to the template' : 'Photo removed');
-    } catch (e) {
-      toast(e.message, 'bad');
-    }
-  }
+  // Meta approves the template with a photo or video slot; the file itself can change for each
+  // offer without new approval. So this only swaps the file for this offer (saved with the offer),
+  // and never edits the template: adding or removing the slot would undo Meta's approval.
+  const setOfferMedia = (key, url) => setVariables((x) => {
+    const { [key]: _old, ...rest } = x;
+    return url ? { ...rest, [key]: url } : rest;
+  });
 
   // Every template in one searchable list: the ready-made ones (in the message language) and the shop's own.
   const ready = READY_MESSAGES.map((m) => ({ m, r: readyFor(m, lang, salesCodes) }));
@@ -321,16 +319,34 @@ function TemplateStep({ t, templates, setTemplates, templateId, setTemplateId, n
         </div>
       )}
 
-      {template && (
+      {template && (template.video_url || template.image_url ? (
+        <div className="card card-pad stack-sm">
+          <div className="row wrap" style={{ gap: 12, alignItems: 'center' }}>
+            <div style={{ flex: '1 1 220px', minWidth: 0 }}>
+              <b>{template.video_url ? 'Video' : 'Photo'} for this offer</b>
+              <div className="subtle">
+                {(template.video_url ? variables.video_url : variables.image_url)
+                  ? `Using a different ${template.video_url ? 'video' : 'photo'} for this offer only. The template keeps its own.`
+                  : `Using the template’s ${template.video_url ? 'video' : 'photo'}. You can use a different one for this offer; Meta does not need to approve it again.`}
+              </div>
+            </div>
+            {template.video_url
+              ? <VideoPicker value={variables.video_url || template.video_url} onChange={(url) => setOfferMedia('video_url', url)} changeLabel="Use a different video" removable={false} />
+              : <PhotoPicker value={variables.image_url || template.image_url} onChange={(url) => setOfferMedia('image_url', url)} changeLabel="Use a different photo" removable={false} />}
+            {(template.video_url ? variables.video_url : variables.image_url) && (
+              <button type="button" className="btn ghost sm" onClick={() => setOfferMedia(template.video_url ? 'video_url' : 'image_url', '')}>Use the template’s {template.video_url ? 'video' : 'photo'}</button>
+            )}
+          </div>
+        </div>
+      ) : (
         <div className="card card-pad row wrap" style={{ gap: 12, alignItems: 'center' }}>
           <div style={{ flex: '1 1 220px', minWidth: 0 }}>
-            <b>{template.video_url ? 'Video' : 'Photo'}</b>
-            <div className="subtle">{template.video_url ? 'This message plays its video at the top. Change it on the template page.' : template.image_url ? 'Shown at the top of the message.' : 'Optional: a jewellery photo at the top of the message.'}</div>
+            <b>Photo or video</b>
+            <div className="subtle">This template has none. To send one, add a photo or video to the template and get it approved by Meta; after that you can change the file for each offer.</div>
           </div>
-          {!template.video_url && <PhotoPicker value={template.image_url || ''} onChange={setPhoto} removable />}
-          <Link to={`/templates/${template.id}`} className="btn ghost sm"><Pencil size={15} />Edit wording</Link>
+          <Link to={`/templates/${template.id}`} className="btn ghost sm"><Pencil size={15} />Open the template</Link>
         </div>
-      )}
+      ))}
       {template && !salesCodes && usesCode && (
         <Alert tone="info">This template has a sales code in it. Sales codes are off in Settings, so pick a ready-made template or edit the wording to remove it.</Alert>
       )}

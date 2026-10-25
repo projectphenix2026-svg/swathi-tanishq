@@ -5,7 +5,7 @@ import { Film, X } from 'lucide-react';
 import { uploadVideo } from '../lib/photo.js';
 import { Spinner, useToast } from './ui.jsx';
 
-export function VideoPicker({ value, onChange }) {
+export function VideoPicker({ value, onChange, removable = true, changeLabel = 'Change video' }) {
   const toast = useToast();
   const input = useRef(null);
   const [busy, setBusy] = useState(false);
@@ -29,9 +29,9 @@ export function VideoPicker({ value, onChange }) {
       {value && <video src={value} muted playsInline controls preload="metadata" style={{ width: 160, height: 96, objectFit: 'cover', borderRadius: 10, border: '1px solid var(--border)', background: '#000' }} />}
       <input ref={input} type="file" accept="video/mp4,video/3gpp" hidden onChange={pick} />
       <button type="button" className="btn" onClick={() => input.current?.click()} disabled={busy}>
-        {busy ? <><Spinner />Uploading…</> : <><Film size={17} />{value ? 'Change video' : 'Add a video'}</>}
+        {busy ? <><Spinner />Uploading…</> : <><Film size={17} />{value ? changeLabel : 'Add a video'}</>}
       </button>
-      {value && !busy && <button type="button" className="btn ghost sm" onClick={() => onChange('')}><X size={15} />Remove</button>}
+      {value && removable && !busy && <button type="button" className="btn ghost sm" onClick={() => onChange('')}><X size={15} />Remove</button>}
     </div>
   );
 }

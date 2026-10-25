@@ -11,6 +11,7 @@ import { cleanPrefix, makeOfferCode } from './offers.js';
 import { setRunner, kick } from './dispatch.js';
 import { retryTomorrow } from './messages.js';
 import { testProvider } from './whatsapp-connection.js';
+import { offerFile } from './campaigns.js';
 
 // WhatsApp errors meaning "this number cannot get WhatsApp": SMS backup is worth trying.
 export const NOT_ON_WHATSAPP = new Set(['63003', '63024', '131026']);
@@ -85,7 +86,7 @@ export async function processSendJob(messageId) {
       const real = campaign?.name.startsWith('Test · ') || (isReply && (await wroteInOnWhatsApp(contact.id)));
       const provider = real ? testProvider() : getProvider();
       providerName = provider.name;
-      const payload = { to: contact.phone, body, buttons: msg.buttons || [], imageUrl: msg.image_url, template, values, idempotencyKey: msg.idempotency_key };
+      const payload = { to: contact.phone, body, buttons: msg.buttons || [], imageUrl: msg.image_url, videoUrl: offerFile(msg.variables?.video_url), template, values, idempotencyKey: msg.idempotency_key };
       result = isReply ? await provider.sendText(payload) : await provider.send(payload);
       if (!isReply) cost = campaign ? campaign.cost_per_message : config.costPerMessage;
     }
