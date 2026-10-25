@@ -741,6 +741,15 @@ a.chart-card:hover { border-color: var(--brand); }
 .tpl-result { display: flex; gap: 10px; align-items: flex-start; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); cursor: pointer; font: inherit; color: inherit; text-align: left; }
 .tpl-result:hover, .tpl-result.on { border-color: var(--brand); background: var(--brand-50); }
 .tpl-text.short { -webkit-line-clamp: 2; margin-top: 4px; }
+/* Ticking rows in a list, and the bar of actions for the ticked ones. */
+.select-bar { position: sticky; top: 0; z-index: 15; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 14px; margin-bottom: 10px;
+  background: var(--brand-50); border: 1px solid color-mix(in srgb, var(--brand) 30%, var(--border)); border-radius: 12px; }
+.select-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; flex: 1; min-width: 0; }
+.tick-col { width: 36px; }
+.tick-col input, .tick-mob, .tick input { width: 18px; height: 18px; accent-color: var(--brand); cursor: pointer; }
+tr.ticked td { background: var(--brand-50); }
+.input.sm { height: 32px; padding: 4px 10px; font-size: 0.85rem; }
+
 /* Special days: one line per automatic wish (switch, what and when, who, gift, change). */
 .sd-card { padding: 0; overflow: hidden; }
 .sd-head { padding: 10px 16px; font-weight: 600; background: var(--surface-2); border-bottom: 1px solid var(--border); }
@@ -760,6 +769,8 @@ a.chart-card:hover { border-color: var(--brand); }
 }
 
 /* Templates: one row per template (name and wording, what it has, Meta approval, use, actions). */
+.tpl-table.with-tick .tpl-row { grid-template-columns: 24px minmax(0, 2.4fr) minmax(0, 1.1fr) minmax(0, 1.2fr) minmax(0, 0.8fr) auto; }
+.tpl-row.ticked, .lead-card.ticked, .convo.ticked { background: var(--brand-50); }
 .tpl-row { display: grid; grid-template-columns: minmax(0, 2.4fr) minmax(0, 1.1fr) minmax(0, 1.2fr) minmax(0, 0.8fr) auto; gap: 16px; align-items: center;
   padding: 12px 20px; border-top: 1px solid var(--border); cursor: pointer; }
 .tpl-row:hover { background: var(--surface-2); }

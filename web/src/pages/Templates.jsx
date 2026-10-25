@@ -13,6 +13,7 @@ import { useAuth } from '../lib/auth.js';
 import { atLeast } from '@shared/roles.js';
 import { useT } from '../lib/i18n.jsx';
 import { META_BADGE, isApproved, metaState } from '../lib/approval.js';
+import { SelectBar, allTicked, toggleIn } from '../components/SelectBar.jsx';
 
 const STATUS = { approved: ['ok', 'Ready'], draft: ['neutral', 'Not finished'], rejected: ['bad', 'Needs a change'] };
 const READY_NAMES = new Set(READY_MESSAGES.flatMap((m) => LANGS.map((l) => readyIn(m, l.code).name)));
@@ -28,6 +29,48 @@ export default function Templates() {
   const { settings } = useAuth();
   const canWrite = atLeast(settings?.role, 'manager');
   const [asking, setAsking] = useState(null);
+  // Ticked templates and what to do with them (send for approval, delete).
+  const [sel, setSel] = useState(new Set());
+  const [askBulk, setAskBulk] = useState(false);
+  const [working, setWorking] = useState(false);
+  async function bulkSubmit() {
+    const picked = (list || []).filter((x) => sel.has(x.id) && metaState(x) !== 'approved' && metaState(x) !== 'waiting');
+    if (!picked.length) return toast('The ticked templates are already approved or waiting for Meta.', 'bad');
+    setWorking(true);
+    let ok = 0;
+    const failed = [];
+    for (const x of picked) {
+      try {
+        await api(`/api/templates/${x.id}/submit-meta`, { method: 'POST' });
+        ok += 1;
+      } catch (e) {
+        failed.push(`${x.name}: ${e.message}`);
+      }
+    }
+    setWorking(false);
+    toast(`${ok} sent to Meta for approval${failed.length ? `; ${failed.length} not sent (${failed[0]})` : ''}`, failed.length ? 'bad' : undefined);
+    setSel(new Set());
+    api('/api/templates').then((r) => setList(r.templates)).catch(() => {});
+    return undefined;
+  }
+  async function bulkDelete() {
+    setWorking(true);
+    let ok = 0;
+    const failed = [];
+    for (const id of sel) {
+      try {
+        await api(`/api/templates/${id}`, { method: 'DELETE' });
+        ok += 1;
+      } catch (e) {
+        failed.push(e.message);
+      }
+    }
+    setWorking(false);
+    setAskBulk(false);
+    toast(`${ok} deleted${failed.length ? `; ${failed.length} kept (${failed[0]})` : ''}`, failed.length ? 'bad' : undefined);
+    setSel(new Set());
+    api('/api/templates').then((r) => setList(r.templates)).catch(() => {});
+  }
   async function removeTemplate(tpl) {
     try {
       await api(`/api/templates/${tpl.id}`, { method: 'DELETE' });
@@ -125,9 +168,27 @@ export default function Templates() {
       ) : list.length === 0 && !canWrite ? (
         <div className="card card-pad subtle">No templates yet.</div>
       ) : (
+        <>
+        {canWrite && (
+          <SelectBar count={sel.size} onClear={() => { setSel(new Set()); setAskBulk(false); }}>
+            {askBulk ? (
+              <>
+                <span>Delete {sel.size} template{sel.size === 1 ? '' : 's'}?</span>
+                <button className="btn sm" onClick={() => setAskBulk(false)}>Keep</button>
+                <button className="btn sm danger" disabled={working} onClick={bulkDelete}>{working ? <Spinner /> : 'Yes, delete'}</button>
+              </>
+            ) : (
+              <>
+                {needsMeta && <button className="btn sm primary" disabled={working} onClick={bulkSubmit}>{working ? <Spinner /> : <><Send size={15} />Send to Meta for approval</>}</button>}
+                <button className="btn sm ghost danger" onClick={() => setAskBulk(true)}><Trash2 size={15} />Delete</button>
+              </>
+            )}
+          </SelectBar>
+        )}
         <div className="card">
-          <div className="tpl-table" role="table" aria-label="Your templates">
+          <div className={`tpl-table ${canWrite ? 'with-tick' : ''}`} role="table" aria-label="Your templates">
             <div className="tpl-row tpl-head" role="row">
+              {canWrite && <span role="columnheader" className="tick"><input type="checkbox" aria-label="Select all shown" checked={allTicked(sel, shown.map((x) => x.id))} onChange={(e) => setSel(e.target.checked ? new Set(shown.map((x) => x.id)) : new Set())} /></span>}
               <span role="columnheader">Template</span>
               <span role="columnheader">Has</span>
               <span role="columnheader">{needsMeta ? 'Meta approval' : 'Status'}</span>
@@ -139,7 +200,8 @@ export default function Templates() {
             {shown.map((t) => {
               const [tone, label] = needsMeta ? META_BADGE[metaState(t)] : STATUS[t.status] || ['neutral', t.status];
               return (
-                <div key={t.id} className={`tpl-row ${ok(t) ? 'tpl-ok' : ''}`} role="row" onClick={() => navigate(`/templates/${t.id}`)}>
+                <div key={t.id} className={`tpl-row ${ok(t) ? 'tpl-ok' : ''} ${sel.has(t.id) ? 'ticked' : ''}`} role="row" onClick={() => navigate(`/templates/${t.id}`)}>
+                  {canWrite && <span role="cell" className="tick" onClick={(e) => e.stopPropagation()}><input type="checkbox" aria-label={`Select ${t.name}`} checked={sel.has(t.id)} onChange={() => setSel((s) => toggleIn(s, t.id))} /></span>}
                   <span className="tpl-cell-name" role="cell">
                     <span className="row" style={{ gap: 8, minWidth: 0 }}>
                       <Pic name={iconFor(t.name)} size={26} />
@@ -179,6 +241,7 @@ export default function Templates() {
             })}
           </div>
         </div>
+        </>
       )}
     </div>
   );

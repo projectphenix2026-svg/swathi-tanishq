@@ -166,6 +166,40 @@ router.patch('/:id', canEdit, async (req, res) => {
 router.delete('/:id', canManage, async (req, res) => {
   const { rows: [c] } = await query(`SELECT id FROM contacts WHERE id = $1 AND client_id = $2 AND ${NOT_DELETED}`, [req.params.id, req.clientId]);
   if (!c) return res.status(404).json({ error: 'Customer not found.' });
+  await deleteContact(c.id);
+  res.json({ ok: true });
+});
+
+// Changes for the customers ticked on the Customers page, at most 500 at a time:
+// delete, add or remove a group, or mark as not agreed to WhatsApp messages.
+const BULK = ['delete', 'tag', 'untag', 'no-consent'];
+router.post('/bulk', canEdit, async (req, res) => {
+  const action = req.body?.action;
+  if (!BULK.includes(action)) return res.status(400).json({ error: 'Choose what to do with the selected customers.' });
+  if (action === 'delete' && !['manager', 'owner', 'app_owner'].includes(req.user.role)) return res.status(403).json({ error: 'Only the store manager or owner can delete customers.' });
+  const ids = [...new Set((Array.isArray(req.body?.ids) ? req.body.ids : []).map(Number).filter(Number.isInteger))].slice(0, 500);
+  if (!ids.length) return res.status(400).json({ error: 'Tick at least one customer.' });
+  const tag = String(req.body?.tag || '').trim().toLowerCase().replace(/\s+/g, '-').slice(0, 30);
+  if ((action === 'tag' || action === 'untag') && !tag) return res.status(400).json({ error: 'Type the group name.' });
+  const { rows } = await query(
+    `SELECT id, tags FROM contacts WHERE client_id = $1 AND ${NOT_DELETED} AND id IN (SELECT value FROM json_each($2))`,
+    [req.clientId, JSON.stringify(ids)],
+  );
+  for (const c of rows) {
+    if (action === 'delete') await deleteContact(c.id);
+    else if (action === 'no-consent') await query(`UPDATE contacts SET whatsapp_opt_in = 0, updated_at = ${NOW} WHERE id = $1`, [c.id]);
+    else {
+      const tags = new Set(Array.isArray(c.tags) ? c.tags : JSON.parse(c.tags || '[]'));
+      if (action === 'tag') tags.add(tag); else tags.delete(tag);
+      await query(`UPDATE contacts SET tags = $2, updated_at = ${NOW} WHERE id = $1`, [c.id, JSON.stringify([...tags])]);
+    }
+  }
+  res.json({ done: rows.length });
+});
+
+/** Removes a customer's personal details, chats and call-back entry (reports keep their numbers). */
+async function deleteContact(id) {
+  const c = { id };
   await batch([
     { sql: 'DELETE FROM leads WHERE contact_id = $1', params: [c.id] },
     { sql: 'DELETE FROM contact_dates WHERE contact_id = $1', params: [c.id] },
@@ -189,8 +223,7 @@ router.delete('/:id', canManage, async (req, res) => {
       params: [c.id],
     },
   ]);
-  res.json({ ok: true });
-});
+}
 
 // ---- Import. The browser reads Excel/CSV/contacts files and builds the preview; the server
 // ---- says which numbers already exist and saves the accepted rows in chunks.

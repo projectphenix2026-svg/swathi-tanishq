@@ -74,6 +74,18 @@ router.post('/simulate', canEdit, async (req, res) => {
 });
 
 // Staff reply. clientRequestId comes from the browser, so a double-click sends once.
+// Mark the ticked chats as read.
+router.post('/read', canEdit, async (req, res) => {
+  const ids = [...new Set((Array.isArray(req.body?.contactIds) ? req.body.contactIds : []).map(Number).filter(Number.isInteger))].slice(0, 500);
+  if (!ids.length) return res.status(400).json({ error: 'Tick at least one chat.' });
+  const { rowCount } = await query(
+    `UPDATE messages SET seen_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      WHERE client_id = $1 AND direction = 'inbound' AND seen_at IS NULL AND contact_id IN (SELECT value FROM json_each($2))`,
+    [req.clientId, JSON.stringify(ids)],
+  );
+  res.json({ done: rowCount ?? 0 });
+});
+
 router.post('/:contactId/reply', canEdit, async (req, res) => {
   const body = String(req.body?.body || '').trim();
   if (!body) return res.status(400).json({ error: 'Type a reply first.' });

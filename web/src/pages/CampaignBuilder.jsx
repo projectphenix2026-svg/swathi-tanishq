@@ -43,7 +43,11 @@ export default function CampaignBuilder() {
   // Who gets it: the filters, then single people ticked off (everyone else stays in) or,
   // after "Untick all", only the people ticked by hand.
   const [filters, setFilters] = useState({ cities: [], tags: [], search: '' });
-  const [pick, setPick] = useState({ only: false, ids: [] });
+  // Coming from Customers with ticked rows (?ids=1,2,3): only those customers.
+  const [pick, setPick] = useState(() => {
+    const ids = String(params.get('ids') || '').split(',').map(Number).filter(Boolean);
+    return ids.length ? { only: true, ids } : { only: false, ids: [] };
+  });
   const [when, setWhen] = useState({ mode: 'now', at: defaultLater() });
   const [channel, setChannel] = useState('whatsapp');
   const isSms = channel === 'sms';

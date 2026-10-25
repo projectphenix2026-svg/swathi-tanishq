@@ -46,6 +46,20 @@ router.get('/summary', async (req, res) => {
   res.json({ staff: rows });
 });
 
+// Mark several interested customers at once (e.g. all called today).
+router.post('/bulk', canEdit, async (req, res) => {
+  const status = req.body?.status;
+  if (!STATUSES.includes(status)) return res.status(400).json({ error: 'Unknown status.' });
+  const ids = [...new Set((Array.isArray(req.body?.ids) ? req.body.ids : []).map(Number).filter(Number.isInteger))].slice(0, 500);
+  if (!ids.length) return res.status(400).json({ error: 'Tick at least one customer.' });
+  const { rowCount } = await query(
+    `UPDATE leads SET status = $3, updated_by = $4, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      WHERE client_id = $1 AND id IN (SELECT value FROM json_each($2))`,
+    [req.clientId, JSON.stringify(ids), status, req.user.id],
+  );
+  res.json({ done: rowCount ?? ids.length });
+});
+
 router.patch('/:id', canEdit, async (req, res) => {
   const status = req.body?.status;
   if (status && !STATUSES.includes(status)) return res.status(400).json({ error: 'Unknown status.' });

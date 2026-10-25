@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useOutletContext, useParams } from 'react-router-dom';
+import { SelectBar, allTicked, toggleIn } from '../components/SelectBar.jsx';
 import { AlertCircle, ArrowLeft, Check, CheckCheck, Clock, ExternalLink, FlaskConical, Inbox as InboxIcon, Lock, Phone, Reply, SendHorizontal } from 'lucide-react';
 import { SearchBox, matches } from '../components/SearchBox.jsx';
 import { api } from '../lib/api.js';
@@ -14,7 +15,21 @@ const QUICK = ['Thank you! We will call you shortly.', 'Yes, the offer is valid 
 export default function Inbox() {
   const { t } = useT();
   const { contactId } = useParams();
-  const { counts } = useOutletContext() || {};
+  const { counts, refreshCounts } = useOutletContext() || {};
+  const toastList = useToast();
+  // Ticked chats: mark them read at once.
+  const [sel, setSel] = useState(new Set());
+  async function markRead() {
+    try {
+      const r = await api('/api/inbox/read', { method: 'POST', body: { contactIds: [...sel] } });
+      toastList(`${r.done} message${r.done === 1 ? '' : 's'} marked read`);
+      setSel(new Set());
+      loadList();
+      refreshCounts?.();
+    } catch (e) {
+      toastList(e.message, 'bad');
+    }
+  }
   const [list, setList] = useState(null);
   const [filter, setFilter] = useState('all');
   const [q, setQ] = useState('');
@@ -43,6 +58,19 @@ export default function Inbox() {
             <button className={`chip ${filter === 'unread' ? 'on' : ''}`} onClick={() => setFilter('unread')}>{t('Unread')}</button>
           </div>
         </div>
+        {sel.size > 0 && (
+          <div style={{ padding: '8px 10px 0' }}>
+            <SelectBar count={sel.size} onClear={() => setSel(new Set())}>
+              <button className="btn sm primary" onClick={markRead}><CheckCheck size={15} />Mark as read</button>
+            </SelectBar>
+          </div>
+        )}
+        {list?.length > 0 && (
+          <label className="row tick" style={{ gap: 8, padding: '8px 16px 0', fontSize: '0.85rem' }}>
+            <input type="checkbox" checked={allTicked(sel, list.map((c) => c.contact_id))} onChange={(e) => setSel(e.target.checked ? new Set(list.map((c) => c.contact_id)) : new Set())} />
+            <span className="subtle">Select all</span>
+          </label>
+        )}
         {!list ? (
           <div style={{ padding: 20 }}><Spinner /></div>
         ) : list.length === 0 ? (
@@ -53,7 +81,10 @@ export default function Inbox() {
           <p className="subtle" style={{ padding: 16 }}>{t('Nobody matches.')}</p>
         ) : (
           list.filter((c) => matches(q, c.name, c.phone, c.last_body)).map((c) => (
-            <Link key={c.contact_id} to={`/inbox/${c.contact_id}`} className={`convo ${String(c.contact_id) === contactId ? 'on' : ''}`}>
+            <Link key={c.contact_id} to={`/inbox/${c.contact_id}`} className={`convo ${String(c.contact_id) === contactId ? 'on' : ''} ${sel.has(c.contact_id) ? 'ticked' : ''}`}>
+              <span className="tick" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setSel((x) => toggleIn(x, c.contact_id)); }} style={{ alignSelf: 'center' }}>
+                <input type="checkbox" readOnly tabIndex={-1} checked={sel.has(c.contact_id)} aria-label={`Select ${c.name || phone(c.phone)}`} />
+              </span>
               <Avatar name={c.name} seed={c.phone} size={44} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div className="row between" style={{ gap: 8 }}>
