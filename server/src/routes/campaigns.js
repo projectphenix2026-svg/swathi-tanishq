@@ -11,6 +11,7 @@ import { shopValues } from '../lib/shop.js';
 import { withButtons } from '../providers/twilio.js';
 import { requireLevel } from './auth.js';
 import { atLeast } from '../lib/roles.js';
+import { refreshProvider, testProvider } from '../lib/whatsapp-connection.js';
 
 const canEdit = requireLevel('manager');
 
@@ -76,7 +77,7 @@ router.post('/render', async (req, res) => {
 });
 
 /** The template, or an error in plain words if it cannot be sent right now. */
-async function sendableTemplate(clientId, templateId, channel = 'whatsapp') {
+async function sendableTemplate(clientId, templateId, channel = 'whatsapp', provider = getProvider()) {
   const { rows: [t] } = await query('SELECT * FROM templates WHERE id = $1 AND client_id = $2', [templateId, clientId]);
   if (!t) return { error: 'Choose a message.' };
   if (t.status !== 'approved') return { error: 'This message is not ready to send yet.' };
@@ -86,7 +87,6 @@ async function sendableTemplate(clientId, templateId, channel = 'whatsapp') {
     if (missing.length) return { error: `SMS sending is not set up yet. Missing: ${missing.join(', ')}.` };
     return { t };
   }
-  const provider = getProvider();
   const missingConfig = provider.missingConfig();
   if (missingConfig.length) return { error: `Sending is not set up yet. Missing: ${missingConfig.join(', ')}.` };
   if (provider.name === 'meta' && (!t.provider_ref || (t.provider_status && t.provider_status !== 'APPROVED'))) {
@@ -97,12 +97,15 @@ async function sendableTemplate(clientId, templateId, channel = 'whatsapp') {
 
 // "Send a test to my phone": the message as one customer would get it, to a staff phone.
 // The phone is saved once as a customer tagged test-phone, which normal sends leave out.
+// Before Go live it still goes out through the connected WhatsApp, so the check is real.
 router.post('/test', canEdit, async (req, res) => {
   const b = req.body || {};
   const ph = normalizePhone(b.phone);
   if (!ph.ok) return res.status(400).json({ error: ph.reason });
   const channel = b.channel === 'sms' ? 'sms' : 'whatsapp';
-  const { t, error } = await sendableTemplate(req.clientId, b.templateId, channel);
+  await refreshProvider();
+  const provider = channel === 'sms' ? getSmsProvider() : testProvider();
+  const { t, error } = await sendableTemplate(req.clientId, b.templateId, channel, provider);
   if (error) return res.status(400).json({ error });
   const { rows: [as] } = await query('SELECT * FROM contacts WHERE id = $1 AND client_id = $2', [b.asContactId, req.clientId]);
   const { rows: [existing] } = await query('SELECT * FROM contacts WHERE client_id = $1 AND phone = $2', [req.clientId, ph.e164]);
@@ -131,7 +134,7 @@ router.post('/test', canEdit, async (req, res) => {
                             created_by, expected_count, approved_by, approved_at, channel)
      VALUES ($1, $2, $3, $4, $5, 'sending', ${NOW}, $6, $7, $8, 1, $8, ${NOW}, $9) RETURNING *`,
     [req.clientId, `Test · ${t.name}`, t.id, JSON.stringify(audience), JSON.stringify(b.variables || {}),
-      channel === 'sms' ? config.sms.costPerSms : config.costPerMessage, (channel === 'sms' ? getSmsProvider() : getProvider()).name, req.user.id, channel],
+      channel === 'sms' ? config.sms.costPerSms : config.costPerMessage, provider.name, req.user.id, channel],
   );
   const queued = await queueMessages(req.clientId, {
     audience, template: t, variables: b.variables || {}, keyPrefix: `campaign:${campaign.id}:contact:`, campaignId: campaign.id, ignoreCap: true, channel,
