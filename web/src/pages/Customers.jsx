@@ -137,18 +137,6 @@ export default function Customers() {
             <button className="btn sm" onClick={() => samplesAction(false)}>Remove them now</button>
           </div>
         )}
-        <div className="input-icon">
-          <Search size={18} />
-          <input className="input" placeholder="Search by name, phone, city or purchase" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search customers" />
-        </div>
-        <div className="chips" role="tablist">
-          {FILTERS.map((f) => (
-            <button key={f.key} className={`chip ${filter === f.key ? 'on' : ''}`} onClick={() => setFilter(f.key)} role="tab" aria-selected={filter === f.key}>
-              {f.label} {summary && <span className="n">{num(summary[f.count])}</span>}
-            </button>
-          ))}
-        </div>
-
         <SelectBar count={sel.size} onClear={() => setSel(new Set())} note={askBulk === 'delete' ? null : undefined}>
           {askBulk === 'delete' ? (
             <>
@@ -181,6 +169,19 @@ export default function Customers() {
         </SelectBar>
 
         <div className="card">
+          <div className="list-tools">
+          <div className="input-icon" style={{ flex: '1 1 260px' }}>
+            <Search size={18} />
+            <input className="input" placeholder="Search by name, phone, city or purchase" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search customers" />
+          </div>
+          <div className="chips" role="tablist">
+            {FILTERS.map((f) => (
+              <button key={f.key} className={`chip ${filter === f.key ? 'on' : ''}`} onClick={() => setFilter(f.key)} role="tab" aria-selected={filter === f.key}>
+                {f.label} {summary && <span className="n">{num(summary[f.count])}</span>}
+              </button>
+            ))}
+          </div>
+          </div>
           {!data ? (
             <div className="stack" style={{ padding: 20 }}>{[0, 1, 2, 3].map((i) => <Skeleton key={i} h={36} />)}</div>
           ) : data.customers.length === 0 ? (

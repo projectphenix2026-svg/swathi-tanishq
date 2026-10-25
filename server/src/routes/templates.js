@@ -3,7 +3,7 @@ import { query } from '../db/index.js';
 import { validateTemplate, cleanButtons, extractVariables, VARIABLES } from '../lib/template.js';
 import { requireLevel } from './auth.js';
 import { mediaBytes } from './media.js';
-import { metaProvider, syncTemplate } from '../lib/template-approval.js';
+import { APPROVED_COPY, metaProvider, rememberApproved, syncTemplate } from '../lib/template-approval.js';
 
 const router = express.Router();
 const canEdit = requireLevel('manager');
@@ -53,6 +53,11 @@ router.put('/:id', canEdit, async (req, res) => {
   // Wording, buttons, or adding/removing a photo header need Meta's approval again (a different photo does not).
   const textChanged = existing.body !== input.body || JSON.stringify(existing.buttons) !== JSON.stringify(input.buttons)
     || Boolean(existing.image_url) !== Boolean(input.image_url) || Boolean(existing.video_url) !== Boolean(input.video_url);
+  // Before an approved template changes, keep a copy of it: that version goes on sending until
+  // Meta approves the new one.
+  if (textChanged && existing.provider_status === 'APPROVED') {
+    await query(`UPDATE templates SET approved_version = ${APPROVED_COPY} WHERE id = $1`, [existing.id]);
+  }
   const { rows: [t] } = await query(
     `UPDATE templates SET ${COLS.map((c, i) => `${c} = $${i + 3}`).join(', ')},
             provider_status = CASE WHEN $${COLS.length + 3} THEN NULL ELSE provider_status END,
@@ -60,6 +65,15 @@ router.put('/:id', canEdit, async (req, res) => {
       WHERE id = $1 AND client_id = $2 RETURNING *`,
     [req.params.id, req.clientId, ...values(input), textChanged && existing.provider_status !== null],
   );
+  // Changed back to exactly what Meta approved ("Undo changes"): it is approved again.
+  const av = t.approved_version;
+  if (av?.provider_ref && t.provider_status !== 'APPROVED' && sameContent(t, av)) {
+    const { rows: [back] } = await query(
+      `UPDATE templates SET provider_ref = $2, provider_status = 'APPROVED', provider_reason = NULL WHERE id = $1 RETURNING *`,
+      [t.id, av.provider_ref],
+    );
+    return res.json({ template: withVars(back), approvalReset: false });
+  }
   res.json({ template: withVars(t), approvalReset: textChanged && Boolean(existing.provider_status) });
 });
 
@@ -93,12 +107,15 @@ router.post('/:id/submit-meta', canEdit, async (req, res) => {
   const meta = metaProvider();
   const missing = meta.missingConfig();
   if (missing.length) return res.status(400).json({ error: `Meta is not set up yet. Missing: ${missing.join(', ')}.` });
-  const result = await meta.submitTemplate(t, EXAMPLES, { sample: await photoSample(t.video_url || t.image_url) });
-  const { rows: [u] } = await query(
-    `UPDATE templates SET provider_ref = $2, provider_status = $3, provider_reason = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = $1 RETURNING *`,
+  // The approved version keeps its name at Meta untouched (it goes on sending); the change goes as a new one.
+  const keep = t.provider_status !== 'APPROVED' ? t.approved_version?.provider_ref : null;
+  const result = await meta.submitTemplate(t, EXAMPLES, { sample: await photoSample(t.video_url || t.image_url), keep });
+  await query(
+    `UPDATE templates SET provider_ref = $2, provider_status = $3, provider_reason = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = $1`,
     [t.id, result.name, result.status],
   );
-  res.json({ template: withVars(u) });
+  await rememberApproved('id = $1', [t.id]);
+  res.json({ template: withVars(await find(req.clientId, t.id)) });
 });
 
 router.post('/:id/sync-meta', async (req, res) => {
@@ -157,6 +174,12 @@ function validate(input) {
 async function find(clientId, id) {
   const { rows: [t] } = await query('SELECT * FROM templates WHERE id = $1 AND client_id = $2', [id, clientId]);
   return t;
+}
+
+/** Same wording, buttons and kind of header: what Meta's approval covers. */
+function sameContent(t, v) {
+  return t.body === v.body && JSON.stringify(t.buttons || []) === JSON.stringify(v.buttons || [])
+    && Boolean(t.image_url) === Boolean(v.image_url) && Boolean(t.video_url) === Boolean(v.video_url);
 }
 
 function withVars(t) {

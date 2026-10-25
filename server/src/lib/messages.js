@@ -55,7 +55,6 @@ export async function retryTomorrow(messageId, errorCode) {
 const STOP_WORDS = ['stop', 'unsubscribe', 'stop all', 'opt out', 'optout'];
 const START_WORDS = ['start', 'subscribe', 'opt in', 'unstop'];
 // Replies that mean "I want this": the customer goes on the hot-lead call list.
-const INTEREST_WORDS = ['ఆసక్తి ఉంది', 'ఆసక్తి', 'रुचि है', 'दिलचस्पी है', 'interested', 'i am interested', 'im interested', 'book a visit', 'book visit', 'book', 'call me', 'yes', 'want to visit', 'see designs', 'see the designs'];
 const NOT_NOW_WORDS = ['not now', 'no', 'later', 'not interested', 'ఇప్పుడు కాదు', 'వద్దు', 'अभी नहीं', 'नहीं'];
 
 async function addTag(contactId, tag) {
@@ -68,8 +67,9 @@ async function addTag(contactId, tag) {
 }
 
 /**
- * Tags the customer from their reply and opens a lead when it shows interest.
- * A tap on one of our quick-reply buttons counts too (the button text arrives as the reply).
+ * Tags the customer from their reply and opens a lead when they tap one of our quick-reply
+ * buttons (the button text arrives as the reply). Typed words like "yes" do not count:
+ * the Interested list is only for button taps.
  */
 export async function trackInterest(clientId, contactId, inboundId, body) {
   const text = String(body || '').trim();
@@ -84,7 +84,7 @@ export async function trackInterest(clientId, contactId, inboundId, body) {
   );
   const quickReplies = (last?.buttons || []).filter((b) => b.type === 'quick_reply').map((b) => b.text.toLowerCase());
   const isNotNow = NOT_NOW_WORDS.includes(word);
-  const isInterest = !isNotNow && (INTEREST_WORDS.includes(word) || quickReplies.includes(word));
+  const isInterest = !isNotNow && quickReplies.includes(word);
   if (isNotNow) {
     await addTag(contactId, 'not-now');
     return null;

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, NavLink } from 'react-router-dom';
+import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { AlertCircle, Check, CheckCheck, Clock, Plus, Send, XCircle } from 'lucide-react';
 import { SearchBox, matches } from '../components/SearchBox.jsx';
 import { SortTh, useSort } from '../components/SortHead.jsx';
@@ -57,6 +57,7 @@ export default function Campaigns() {
   const [show, setShow] = useState('all');
   const [period, setPeriod] = useState('all');
   const toast = useToast();
+  const navigate = useNavigate();
   const [cancelling, setCancelling] = useState(null);
   const load = () => api('/api/campaigns').then((r) => setList(r.campaigns)).catch(() => setList([]));
   useEffect(() => {
@@ -112,52 +113,53 @@ export default function Campaigns() {
             <div className="chips">
               {SHOW.map(([k, label]) => <button key={k} type="button" className={`chip ${show === k ? 'on' : ''}`} onClick={() => setShow(k)}>{label}</button>)}
             </div>
-            <select className="input" style={{ width: 'auto' }} value={period} onChange={(e) => setPeriod(e.target.value)} aria-label="When">
+            <select className="select" style={{ width: 'auto' }} value={period} onChange={(e) => setPeriod(e.target.value)} aria-label="When">
               {PERIODS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
             </select>
           </div>
-          <div className="sent-table" role="table" aria-label="Campaigns">
-            <div className="sent-row sent-head" role="row">
-              <span role="columnheader" className="row" style={{ gap: 14 }}>
-                <SortTh as="span" label="Message" k="name" sort={sort} toggle={toggle} />
-                <SortTh as="span" label="When" k="when" sort={sort} toggle={toggle} />
-              </span>
-              <SortTh as="span" label="Sent to" k="to" sort={sort} toggle={toggle} />
-              <SortTh as="span" label="What happened" k="read" sort={sort} toggle={toggle} />
-              <span role="columnheader" className="sent-actions-h" />
+          {shown.length === 0 ? <p className="subtle" style={{ padding: 20 }}>Nothing matches. Try other words or another period.</p> : (
+            <div className="table-wrap">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th><span className="row" style={{ gap: 14 }}><SortTh as="span" label="Message" k="name" sort={sort} toggle={toggle} /><SortTh as="span" label="When" k="when" sort={sort} toggle={toggle} /></span></th>
+                    <SortTh label="Sent to" k="to" sort={sort} toggle={toggle} />
+                    <SortTh label="What happened" k="read" sort={sort} toggle={toggle} />
+                    <th aria-label="Actions" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {shown.map((c) => (
+                    <tr key={c.id} className="clickable" onClick={() => navigate(`/campaigns/${c.id}`)}>
+                      <td className="cell-main">
+                        <span className="row" style={{ gap: 8, minWidth: 0 }}>
+                          <Pic name={iconFor(c.template_name || c.name)} size={26} />
+                          <b className="ellipsis">{c.name.replace(/^Test · /, '')}</b>
+                          {c.name.startsWith('Test · ') && <span className="badge neutral">Test</span>}
+                          {c.provider === 'mock' && <span className="badge warn">Test mode</span>}
+                        </span>
+                        {c.first_body && <div className="cell-sub ellipsis">{toFriendly(c.first_body).replace(/\s*\n+\s*/g, ' ')}</div>}
+                        <div className="subtle cell-sub">{c.status === 'scheduled' ? `Goes out ${dateTime(c.scheduled_at)}` : dateTime(c.started_at || c.created_at)}</div>
+                      </td>
+                      <td className="nowrap">
+                        {Number(c.total) === 1 && c.first_phone ? (
+                          <><b>{c.first_name || phone(c.first_phone)}</b>{c.first_name && <div className="subtle num">{phone(c.first_phone)}</div>}</>
+                        ) : <b className="num">{plural(c.total, 'customer')}</b>}
+                      </td>
+                      <td><Outcome c={c} /></td>
+                      <td className="cell-actions" onClick={(e) => e.stopPropagation()}>
+                        {canSend && Number(c.pending) > 0 && c.status !== 'pending_approval' && (
+                          <button type="button" className="btn sm danger ghost" disabled={cancelling === c.id} onClick={() => cancelWaiting(c)}>
+                            {cancelling === c.id ? <Spinner /> : <><XCircle size={15} />Cancel{Number(c.total) > 1 ? ` ${num(c.pending)} waiting` : ''}</>}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-            {shown.length === 0 && <p className="subtle" style={{ padding: 20 }}>Nothing matches. Try other words or another period.</p>}
-            {shown.map((c) => (
-              <Link key={c.id} to={`/campaigns/${c.id}`} className="sent-row" role="row">
-                <span className="sent-msg" role="cell">
-                  <span className="row" style={{ gap: 8, minWidth: 0 }}>
-                    <Pic name={iconFor(c.template_name || c.name)} size={26} />
-                    <b className="ellipsis">{c.name.replace(/^Test · /, '')}</b>
-                    {c.name.startsWith('Test · ') && <span className="badge neutral">Test</span>}
-                    {c.provider === 'mock' && <span className="badge warn">Test mode</span>}
-                  </span>
-                  {c.first_body && <span className="sent-body">{toFriendly(c.first_body).replace(/\s*\n+\s*/g, ' ')}</span>}
-                  <span className="subtle sent-when">{c.status === 'scheduled' ? `Goes out ${dateTime(c.scheduled_at)}` : dateTime(c.started_at || c.created_at)}</span>
-                </span>
-                <span className="sent-to" role="cell">
-                  {Number(c.total) === 1 && c.first_phone ? (
-                    <><b>{c.first_name || phone(c.first_phone)}</b>{c.first_name && <span className="subtle num">{phone(c.first_phone)}</span>}</>
-                  ) : (
-                    <b className="num">{plural(c.total, 'customer')}</b>
-                  )}
-                </span>
-                <span className="sent-result" role="cell"><Outcome c={c} /></span>
-                <span className="sent-actions" role="cell">
-                  {canSend && Number(c.pending) > 0 && c.status !== 'pending_approval' && (
-                    <button type="button" className="btn sm danger ghost" disabled={cancelling === c.id}
-                      onClick={(e) => { e.preventDefault(); cancelWaiting(c); }}>
-                      {cancelling === c.id ? <Spinner /> : <><XCircle size={15} />Cancel{Number(c.total) > 1 ? ` ${num(c.pending)} waiting` : ''}</>}
-                    </button>
-                  )}
-                </span>
-              </Link>
-            ))}
-          </div>
+          )}
         </div>
       )}
     </div>

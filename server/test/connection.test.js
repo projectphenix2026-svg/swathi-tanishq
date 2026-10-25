@@ -19,7 +19,7 @@ let manager;
 function fakeMeta({ fail, refuseTemplates } = {}) {
   const calls = [];
   globalThis.fetch = async (url, init = {}) => {
-    calls.push({ url: String(url), method: init.method || 'GET' });
+    calls.push({ url: String(url), method: init.method || 'GET', body: init.body });
     const json = (status, body) => ({ ok: status < 400, status, json: async () => body });
     if (fail) return json(401, { error: { code: 190, message: 'Session has expired' } });
     if (String(url).includes('/subscribed_apps')) return json(200, { success: true });
@@ -153,6 +153,29 @@ describe('Connect WhatsApp (owner only)', () => {
     const res = await owner.post('/api/campaigns/test').send({ templateId: t.id, phone: '90000 44444' });
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/changed after Meta approved/);
+  });
+
+  it('keeps sending the approved version while a changed one waits for Meta; undo makes it approved again', async () => {
+    const clientId = await ensureClient('Test Store');
+    const { rows: [t] } = await query(
+      `INSERT INTO templates (client_id, name, body, status, category, provider_ref, provider_status, buttons)
+       VALUES ($1, 'Kept', 'Old approved words', 'approved', 'utility', 'kept', 'APPROVED', '[]') RETURNING *`,
+      [clientId],
+    );
+    const calls = fakeMeta();
+    resetConnectionCache();
+    const edited = await owner.put(`/api/templates/${t.id}`).send({ ...t, buttons: [], body: 'New words, not approved yet' });
+    expect(edited.body.template.provider_status).toBeNull();
+    expect(edited.body.template.approved_version).toMatchObject({ provider_ref: 'kept', body: 'Old approved words' });
+
+    const res = await owner.post('/api/campaigns/test').send({ templateId: t.id, phone: '90000 44444' });
+    expect(res.status).toBe(201);
+    await drain();
+    const sent = calls.filter((c) => c.url.endsWith('/555000111/messages') && c.method === 'POST').pop();
+    expect(JSON.parse(sent.body).template.name).toBe('kept');
+
+    const undone = await owner.put(`/api/templates/${t.id}`).send({ ...t, buttons: [], body: 'Old approved words' });
+    expect(undone.body.template).toMatchObject({ provider_ref: 'kept', provider_status: 'APPROVED' });
   });
 
   it('sends a reply to someone who wrote in on the real WhatsApp for real, even in Test mode', async () => {
