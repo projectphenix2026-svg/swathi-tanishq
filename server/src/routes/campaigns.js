@@ -12,6 +12,7 @@ import { withButtons } from '../providers/twilio.js';
 import { requireLevel } from './auth.js';
 import { atLeast } from '../lib/roles.js';
 import { refreshProvider, testProvider } from '../lib/whatsapp-connection.js';
+import { sendingVersion } from '../lib/template-approval.js';
 
 const canEdit = requireLevel('manager');
 
@@ -83,8 +84,9 @@ router.post('/render', async (req, res) => {
 
 /** The template, or an error in plain words if it cannot be sent right now. */
 async function sendableTemplate(clientId, templateId, channel = 'whatsapp', provider = getProvider()) {
-  const { rows: [t] } = await query('SELECT * FROM templates WHERE id = $1 AND client_id = $2', [templateId, clientId]);
-  if (!t) return { error: 'Choose a message.' };
+  const { rows: [saved] } = await query('SELECT * FROM templates WHERE id = $1 AND client_id = $2', [templateId, clientId]);
+  if (!saved) return { error: 'Choose a message.' };
+  const t = channel === 'sms' ? saved : sendingVersion(saved);
   if (t.status !== 'approved') return { error: 'This message is not ready to send yet.' };
   if (channel === 'sms') {
     if (!t.sms_body) return { error: 'This message has no SMS version yet. Add one on its template page (SMS version).' };

@@ -122,8 +122,9 @@ export function createMetaProvider(cfg, { fetchImpl = fetch } = {}) {
     /**
      * Submits a template to Meta for approval. Placeholders become {{1}}, {{2}}... in order,
      * with example values Meta's reviewers see. Returns { name, status, id }.
+     * keep: a name at Meta that must not change (the approved version, which goes on sending).
      */
-    async submitTemplate(template, examples, { sample } = {}) {
+    async submitTemplate(template, examples, { sample, keep = null } = {}) {
       if (!wabaId) throw new ProviderError('Connect the WhatsApp Business account first (Settings → Connect WhatsApp).');
       const name = metaTemplateName(template.name);
       const keys = extractVariables(template.body);
@@ -157,21 +158,26 @@ export function createMetaProvider(cfg, { fetchImpl = fetch } = {}) {
       };
 
       // Submitted before (e.g. a photo was added later): edit Meta's template, which keeps its name.
-      const existing = await findTemplate(name, language);
+      // Never the one to keep: that approved version goes on sending while this one is reviewed.
+      const target = template.provider_ref || name;
+      const existing = target === keep ? null : await findTemplate(target, language);
+      let refused = null;
       if (existing) {
         const edited = await send(existing.id, { components });
-        if (edited.res.ok) return { name, status: edited.data.status || 'PENDING', id: existing.id };
-        // Meta refused the edit (e.g. an approved template can change only once a day): send this
-        // version as a new template, dhanteras_2, dhanteras_3..., which Meta reviews like any other.
-        const fresh = await freeName(name, language);
-        if (!fresh) throw refusal(edited);
-        const created = await send(`${wabaId}/message_templates`, { name: fresh, language, category, components });
+        if (edited.res.ok) return { name: target, status: edited.data.status || 'PENDING', id: existing.id };
+        refused = edited;
+      } else if (name !== keep && !(await findTemplate(name, language))) {
+        const created = await send(`${wabaId}/message_templates`, { name, language, category, components });
         if (!created.res.ok) throw refusal(created);
-        return { name: fresh, status: created.data.status || 'PENDING', id: created.data.id };
+        return { name, status: created.data.status || 'PENDING', id: created.data.id };
       }
-      const created = await send(`${wabaId}/message_templates`, { name, language, category, components });
+      // Meta refused the edit (e.g. an approved template can change only once a day), or the name is
+      // taken by the version to keep: send this one as dhanteras_2, dhanteras_3..., reviewed like any other.
+      const fresh = await freeName(name, language);
+      if (!fresh) throw refused ? refusal(refused) : new ProviderError('Meta already has 20 versions of this template. Give it a new name and send it again.');
+      const created = await send(`${wabaId}/message_templates`, { name: fresh, language, category, components });
       if (!created.res.ok) throw refusal(created);
-      return { name, status: created.data.status || 'PENDING', id: created.data.id };
+      return { name: fresh, status: created.data.status || 'PENDING', id: created.data.id };
     },
 
     /** Latest approval status for a submitted template. */

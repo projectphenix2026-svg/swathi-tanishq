@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, BadgeCheck, Check, ChevronDown, Clock, ExternalLink, Film, Image, MessageSquareText, MousePointerClick, Phone, Plus, RefreshCw, Reply, Send, Settings2, Trash2 } from 'lucide-react';
+import { AlertCircle, ArrowLeft, ArrowRight, BadgeCheck, Check, ChevronDown, Clock, ExternalLink, Film, Image, MousePointerClick, Pencil, Phone, Plus, RefreshCw, Reply, Send, Settings2, Trash2, Type, Undo2 } from 'lucide-react';
 import { VARIABLES, extractVariables, render, validateTemplate } from '@shared/template.js';
 import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.js';
@@ -13,12 +13,19 @@ import { shopVars } from '../lib/shop.js';
 import { atLeast } from '@shared/roles.js';
 import { detailLabel, fromFriendly, toFriendly } from '../lib/friendly.js';
 import { LANGS, readyFor } from '../lib/ready-lang.js';
+import { metaState } from '../lib/approval.js';
+import { dateOnly } from '../lib/format.js';
 import { useT } from '../lib/i18n.jsx';
 
-// The template editor: one message box with a small toolbar (bold, slanted, add a detail),
-// and everything else (photo, video, buttons, WhatsApp approval, advanced; SMS version once SMS is on) in rows that
-// open when needed, each with a one-line summary. The phone on the right shows the result.
+// The template editor in three steps (message, photo or video, buttons) with the phone on the right
+// showing the result. An existing template opens with every step filled in; a strip under the name
+// says where Meta's approval stands and what to do next.
 const EXAMPLES = Object.fromEntries(VARIABLES.map((v) => [v.key, v.example]));
+const STEPS = [
+  { key: 'message', label: 'Message' },
+  { key: 'media', label: 'Photo or video' },
+  { key: 'buttons', label: 'Buttons' },
+];
 const BUTTON_TYPES = [
   { key: 'quick_reply', label: 'Reply', icon: Reply },
   { key: 'url', label: 'Website', icon: ExternalLink },
@@ -30,6 +37,14 @@ const BUTTON_PRESETS = [
   { type: 'phone', text: 'Call the store', phone: '' },
   { type: 'url', text: 'See the designs', url: 'https://' },
 ];
+// Meta's approval, as the badge next to the name shows it.
+const STATE = {
+  approved: ['ok', BadgeCheck, 'Approved by Meta'],
+  waiting: ['warn', Clock, 'Waiting for Meta'],
+  rejected: ['bad', AlertCircle, 'Rejected by Meta'],
+  changed: ['warn', Pencil, 'Changed, not sent yet'],
+  not_sent: ['neutral', Send, 'Not sent to Meta yet'],
+};
 
 export default function TemplateEditor() {
   const { id } = useParams();
@@ -39,11 +54,16 @@ export default function TemplateEditor() {
   const isOwner = atLeast(user?.role, 'owner');
   const { lang } = useT();
   const textRef = useRef(null);
-  const [t, setT] = useState(id ? null : { name: '', body: '', buttons: [], image_url: '', video_url: '', status: 'approved', provider_ref: '', category: 'marketing', sms_body: '', sms_dlt_template_id: '' });
+  const [t, setT] = useState(id ? null : { name: '', body: '', buttons: [], image_url: '', video_url: '', status: 'approved', provider_ref: '', category: 'marketing', language: lang, sms_body: '', sms_dlt_template_id: '' });
   const [busy, setBusy] = useState(false);
   const [tried, setTried] = useState(false);
-  // Which extra row is open; a link like /templates/5#buttons opens that one.
-  const [open, setOpen] = useState(() => window.location.hash.slice(1) || null);
+  // Which step is open; a link like /templates/5#buttons opens that one.
+  const [step, setStep] = useState(() => {
+    const h = window.location.hash.slice(1);
+    return h === 'photo' || h === 'video' ? 'media' : STEPS.some((s) => s.key === h) ? h : 'message';
+  });
+  const [mediaPick, setMediaPick] = useState(null); // 'photo' | 'video' | 'none' once chosen in step 2
+  const [more, setMore] = useState(false);
   const [askDelete, setAskDelete] = useState(false);
 
   // The template as last saved, to know when there are changes not saved yet.
@@ -52,6 +72,7 @@ export default function TemplateEditor() {
     const x = { ...tpl, image_url: tpl.image_url || '', video_url: tpl.video_url || '', provider_ref: tpl.provider_ref || '', sms_body: tpl.sms_body || '', sms_dlt_template_id: tpl.sms_dlt_template_id || '' };
     setT(x);
     setOrig(x);
+    setMediaPick(null);
   };
   useEffect(() => {
     if (id) {
@@ -62,6 +83,9 @@ export default function TemplateEditor() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, navigate, toast]);
 
+  // Approval changes come from Meta, not from editing: keep them out of "unsaved changes".
+  const fromMeta = (u) => (x) => ({ ...x, provider_ref: u.provider_ref || '', provider_status: u.provider_status, provider_reason: u.provider_reason, approved_version: u.approved_version });
+
   // While Meta reviews it, look again every 20 seconds; Sandesh itself asks Meta every few minutes.
   const savedStatus = String(orig?.provider_status || '').toUpperCase();
   useEffect(() => {
@@ -70,12 +94,10 @@ export default function TemplateEditor() {
       api(`/api/templates/${id}`).then((r) => {
         const st = String(r.template.provider_status || '').toUpperCase();
         if (st === savedStatus) return;
-        // Only Meta's answer changes; anything typed but not saved stays.
-        const meta = (x) => ({ ...x, provider_ref: r.template.provider_ref || '', provider_status: r.template.provider_status, provider_reason: r.template.provider_reason });
-        setT(meta);
-        setOrig(meta);
+        setT(fromMeta(r.template));
+        setOrig(fromMeta(r.template));
         if (st === 'APPROVED') toast('Approved by Meta. You can use it now.');
-        else if (st === 'REJECTED') toast('Meta did not approve it. See the reason under WhatsApp approval.', 'bad');
+        else if (st === 'REJECTED') toast('Meta did not approve it. The reason is under the name.', 'bad');
       }).catch(() => {});
     }, 20000);
     return () => clearInterval(timer);
@@ -114,6 +136,13 @@ export default function TemplateEditor() {
     });
   }
   const setButton = (i, patch) => set({ buttons: t.buttons.map((b, j) => (j === i ? { ...b, ...patch } : b)) });
+  const mediaKind = mediaPick || (t.video_url ? 'video' : t.image_url ? 'photo' : 'none');
+  function chooseMedia(kind) {
+    setMediaPick(kind);
+    if (kind === 'photo') set({ video_url: '' });
+    if (kind === 'video') set({ image_url: '' });
+    if (kind === 'none') set({ image_url: '', video_url: '' });
+  }
 
   // With WhatsApp connected a template must be approved by Meta before it can be sent, so the main
   // button saves and sends it for approval in one go, then becomes "Use this template" once approved.
@@ -121,7 +150,14 @@ export default function TemplateEditor() {
   const FIELDS = ['name', 'body', 'buttons', 'image_url', 'video_url', 'category', 'language', 'sms_body', 'sms_dlt_template_id', 'status', 'provider_ref'];
   const pick = (x) => JSON.stringify(FIELDS.map((k) => x?.[k] ?? null));
   const dirty = !id || !orig || pick(t) !== pick(orig);
-  const metaStatus = String(t?.provider_status || '').toUpperCase();
+  const approvedBefore = orig?.approved_version?.provider_ref ? orig.approved_version : null;
+  const saved = metaState(orig);
+  // A change to an approved template: the approved version keeps sending until Meta approves this one.
+  const state = !needsMeta || !id ? null
+    : (dirty && (saved === 'approved' || approvedBefore)) || (saved === 'not_sent' && approvedBefore) ? 'changed'
+      : saved;
+  const canUse = id && !dirty && (saved === 'approved' || Boolean(approvedBefore));
+  const stepAt = STEPS.findIndex((s) => s.key === step);
 
   async function save({ submit = false } = {}) {
     if (!atLeast(user?.role, 'manager')) return toast('Templates are changed by a store manager or the store owner.', 'bad');
@@ -129,28 +165,47 @@ export default function TemplateEditor() {
     if (errors.length) return;
     setBusy(true);
     try {
-      let saved = t;
-      if (dirty) saved = (await api(id ? `/api/templates/${id}` : '/api/templates', { method: id ? 'PUT' : 'POST', body: t })).template;
+      let next = t;
+      if (dirty) next = (await api(id ? `/api/templates/${id}` : '/api/templates', { method: id ? 'PUT' : 'POST', body: t })).template;
       if (!needsMeta) {
         toast('Template saved');
-        navigate(id ? '/templates' : `/campaigns/new?template=${saved.id}`);
+        navigate(id ? '/templates' : `/campaigns/new?template=${next.id}`);
         return;
       }
-      if (submit && String(saved.provider_status || '').toUpperCase() !== 'APPROVED') {
+      if (submit && String(next.provider_status || '').toUpperCase() !== 'APPROVED') {
         try {
-          const before = saved.provider_ref;
-          saved = (await api(`/api/templates/${saved.id}/submit-meta`, { method: 'POST' })).template;
-          toast(before && saved.provider_ref !== before
-            ? `Saved and sent to Meta as a new version (${saved.provider_ref}). Approval usually takes minutes.`
-            : 'Saved and sent to Meta for approval. It usually takes minutes; press “Check status”.');
+          next = (await api(`/api/templates/${next.id}/submit-meta`, { method: 'POST' })).template;
+          toast(next.approved_version?.provider_ref
+            ? 'Saved and sent to Meta. The approved version keeps sending until Meta approves this one.'
+            : 'Saved and sent to Meta. It usually takes minutes; this page updates by itself.');
         } catch (e) {
           toast(`Saved, but not sent to Meta. ${e.message}`, 'bad');
         }
       } else {
         toast(submit ? 'Saved. Meta’s approval still applies, so it can be used now.' : 'Template saved');
       }
-      loaded(saved);
-      if (!id) navigate(`/templates/${saved.id}`, { replace: true });
+      loaded(next);
+      if (!id) navigate(`/templates/${next.id}`, { replace: true });
+    } catch (e) {
+      toast(e.message, 'bad');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Back to the version Meta approved: unsaved changes are dropped; saved ones are put back.
+  async function undo() {
+    if (dirty) {
+      setT(orig);
+      setMediaPick(null);
+      return;
+    }
+    const v = approvedBefore;
+    setBusy(true);
+    try {
+      const r = await api(`/api/templates/${id}`, { method: 'PUT', body: { ...t, body: v.body, buttons: v.buttons || [], image_url: v.image_url || '', video_url: v.video_url || '' } });
+      loaded(r.template);
+      toast('Back to the version Meta approved');
     } catch (e) {
       toast(e.message, 'bad');
     } finally {
@@ -162,7 +217,8 @@ export default function TemplateEditor() {
     setBusy(true);
     try {
       const r = await api(`/api/templates/${id}/sync-meta`, { method: 'POST' });
-      loaded(r.template);
+      setT(fromMeta(r.template));
+      setOrig(fromMeta(r.template));
       toast(r.template.provider_status ? `Meta says: ${String(r.template.provider_status).toLowerCase()}` : r.template.provider_reason || 'Not approved yet.');
     } catch (e) {
       toast(e.message, 'bad');
@@ -188,141 +244,204 @@ export default function TemplateEditor() {
     { ok: vars.includes('offer_ends') || /\b(till|until|ends?|before|last day)\b/i.test(t.body), text: 'Says when the offer ends' },
     { ok: t.buttons.length > 0, text: 'Has a one-tap button' },
   ];
-  const meta = t.provider_status === 'APPROVED' ? ['ok', 'Approved by Meta'] : t.provider_status === 'REJECTED' ? ['bad', 'Rejected by Meta'] : t.provider_status ? ['warn', 'Waiting for Meta'] : null;
+  const stepInfo = {
+    message: [Boolean(t.body.trim()), t.body.trim() ? `${t.body.length} letters` : 'Not written yet'],
+    media: [mediaKind !== 'none' || mediaPick === 'none' || Boolean(id), { photo: 'Photo', video: 'Video', none: 'Words only' }[mediaKind]],
+    buttons: [t.buttons.length > 0, t.buttons.length ? t.buttons.map((b) => b.text || 'Button').join(' · ') : 'None'],
+  };
+  const [tone, StateIcon, stateLabel] = state ? STATE[state] : [];
 
   return (
     <div className="page te-page">
       <div className="page-head compact">
-        <div>
+        <div style={{ minWidth: 0 }}>
           <Link to="/templates" className="back"><ArrowLeft size={16} />Templates</Link>
-          <h1>{id ? 'Edit template' : 'New template'}</h1>
+          <h1 className="ellipsis">{id ? orig?.name || 'Template' : 'New template'}</h1>
         </div>
-        {meta && <span className={`badge ${meta[0]}`}>{meta[1]}</span>}
+        {state && <span className={`badge ${tone} te-badge`}><StateIcon size={14} />{stateLabel}</span>}
       </div>
+
+      {state && <MetaStrip state={state} t={orig} approvedBefore={approvedBefore} busy={busy} onCheck={checkStatus} />}
 
       <div className="two-col te-cols">
         <div className="stack" style={{ minWidth: 0, gap: 12 }}>
-          {!id && !t.body && (
-            <div className="row wrap" style={{ gap: 6, alignItems: 'center' }}>
-              <span className="subtle">Start from:</span>
-              {READY_MESSAGES.map((m) => (
-                <button key={m.key} type="button" className="chip" onClick={() => { const r = readyFor(m, lang, Boolean(settings?.salesCodes)); setT((x) => ({ ...x, name: r.name, body: r.body, buttons: r.buttons, sms_body: r.sms || x.sms_body })); }}>{m.title}</button>
-              ))}
+          <div className="card card-pad te-top">
+            <input id="tpl-name" className="input" value={t.name} onChange={(e) => set({ name: e.target.value })} placeholder="Template name, e.g. Diwali offer for past buyers" aria-label="Template name" />
+            <div className="seg te-lang" role="group" aria-label="Language of the message">
+              {LANGS.map((l) => <button key={l.code} type="button" className={(t.language || 'en').split('_')[0] === l.code ? 'on' : ''} onClick={() => set({ language: l.code })}>{l.label}</button>)}
             </div>
-          )}
-
-          <div className="card card-pad stack" style={{ gap: 12 }}>
-            <div className="form-grid two">
-              <Field label="Template name" hint="Only staff see this.">
-                <input id="tpl-name" className="input" value={t.name} onChange={(e) => set({ name: e.target.value })} placeholder="e.g. Diwali offer for past buyers" />
-              </Field>
-              <Field label="Language" hint="The language the message is written in. Meta checks it, and Campaigns shows it under that language.">
-                <select id="tpl-lang" className="select" value={t.language || 'en'} onChange={(e) => set({ language: e.target.value })}>
-                  {LANGS.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
-                  {t.language && !LANGS.some((l) => l.code === t.language) && <option value={t.language}>{t.language}</option>}
-                </select>
-              </Field>
-            </div>
-            <Field label="Message" error={tried ? errors.find((e) => /message|personal detail|1,024/i.test(e)) : null}>
-              <div className="te-box">
-                <div className="te-toolbar">
-                  <button type="button" className="te-tool" onClick={() => wrap('*')} title="Bold: select words, then click"><b>B</b></button>
-                  <button type="button" className="te-tool" onClick={() => wrap('_')} title="Slanted: select words, then click"><i>I</i></button>
-                  <span className="te-sep" />
-                  <AddDetail details={details} onPick={insert} />
-                  <span className="subtle num te-count" style={{ color: t.body.length > 1024 ? 'var(--bad)' : undefined }}>{t.body.length}/1024</span>
-                </div>
-                <textarea ref={textRef} id="tpl-body" className="te-text" rows={11} value={shown} onChange={(e) => set({ body: fromFriendly(e.target.value) })} placeholder="Hi [Customer name], ..." />
-              </div>
-              <span className="hint">Details in [brackets] are filled in for each customer. Select words, then B or I, to make them stand out.</span>
-              {longForWhatsApp(t) && (
-                <Alert tone="warn">{t.image_url || t.video_url
-                  ? 'Under a photo or video, WhatsApp shows only about the first 3 lines; the rest is behind “Read more” (big brands too). Put the offer and the date in the first 2–3 lines. The buttons always show in full.'
-                  : 'Long message: WhatsApp may hide the end behind “Read more”. Put the offer and the date near the top. The buttons always show in full.'}</Alert>
-              )}
-            </Field>
           </div>
 
-          <div className="card te-extras">
-            <Extra id="photo" open={open} setOpen={setOpen} icon={Image} title="Photo" summary={t.image_url ? 'Photo added' : 'None. A jewellery photo gets far more taps.'}>
-              {t.video_url && <p className="subtle" style={{ margin: 0 }}>This message has a video. A message can have a photo or a video, so adding a photo removes the video.</p>}
-              <PhotoPicker value={t.image_url} onChange={(url) => set({ image_url: url || '', ...(url ? { video_url: '' } : {}) })} />
-              <Field label="Or paste a photo link" hint="A public https:// link to a photo of the jewellery.">
-                <input id="tpl-image" className="input" value={t.image_url} onChange={(e) => set({ image_url: e.target.value, ...(e.target.value ? { video_url: '' } : {}) })} placeholder="https://..." />
-              </Field>
-            </Extra>
+          <div className="te-steps" role="tablist" aria-label="Steps">
+            {STEPS.map((s, i) => (
+              <button key={s.key} type="button" role="tab" aria-selected={step === s.key} className={`te-step ${step === s.key ? 'on' : ''} ${stepInfo[s.key][0] ? 'done' : ''}`} onClick={() => setStep(s.key)}>
+                <span className="te-step-n">{stepInfo[s.key][0] && step !== s.key ? <Check size={13} strokeWidth={3} /> : i + 1}</span>
+                <span style={{ minWidth: 0 }}><b>{s.label}</b><span className="subtle te-sum">{stepInfo[s.key][1]}</span></span>
+              </button>
+            ))}
+          </div>
 
-            <Extra id="video" open={open} setOpen={setOpen} icon={Film} title="Video" summary={t.video_url ? 'Video added' : 'None. A short video of a new collection (MP4, up to 16 MB).'}>
-              {t.image_url && <p className="subtle" style={{ margin: 0 }}>This message has a photo. A message can have a photo or a video, so adding a video removes the photo.</p>}
-              <VideoPicker value={t.video_url} onChange={(url) => set({ video_url: url || '', ...(url ? { image_url: '' } : {}) })} />
-              <span className="hint">MP4, up to 16 MB (about 1–2 minutes on a phone). Meta approves the message with its video; after a change, press “Submit again”.</span>
-            </Extra>
-
-            <Extra id="buttons" open={open} setOpen={setOpen} icon={MousePointerClick} title="Buttons" summary={t.buttons.length ? t.buttons.map((b) => b.text || 'Button').join(' · ') : 'None. Add up to 2, like “Interested”.'}>
-              {t.buttons.map((b, i) => (
-                <div key={i} className="te-button">
-                  <div className="seg" role="group" aria-label="Button type">
-                    {BUTTON_TYPES.map(({ key, label, icon: Icon }) => (
-                      <button key={key} type="button" className={b.type === key ? 'on' : ''} onClick={() => setButton(i, { type: key })}><Icon size={14} />{label}</button>
+          <div className="card card-pad stack te-panel" style={{ gap: 12 }}>
+            {step === 'message' && (
+              <>
+                {!id && !t.body && (
+                  <div className="row wrap" style={{ gap: 6, alignItems: 'center' }}>
+                    <span className="subtle">Start from:</span>
+                    {READY_MESSAGES.map((m) => (
+                      <button key={m.key} type="button" className="chip" onClick={() => { const r = readyFor(m, t.language || lang, Boolean(settings?.salesCodes)); setT((x) => ({ ...x, name: x.name || r.name, body: r.body, buttons: r.buttons, sms_body: r.sms || x.sms_body })); }}>{m.title}</button>
                     ))}
                   </div>
-                  <input className="input" maxLength={25} value={b.text} onChange={(e) => setButton(i, { text: e.target.value })} placeholder="Button text" aria-label="Button text" />
-                  {b.type === 'url' && <input className="input" value={b.url || ''} onChange={(e) => setButton(i, { url: e.target.value })} inputMode="url" placeholder="https://" aria-label="Website link" />}
-                  {b.type === 'phone' && <input className="input" value={b.phone || ''} onChange={(e) => setButton(i, { phone: e.target.value })} inputMode="tel" placeholder="+91 98765 43210" aria-label="Phone number" />}
-                  <button type="button" className="icon-btn sm" onClick={() => set({ buttons: t.buttons.filter((_, j) => j !== i) })} aria-label="Remove button"><Trash2 size={16} /></button>
-                </div>
-              ))}
-              {t.buttons.length < 2 && (
-                <div className="row wrap" style={{ gap: 6 }}>
-                  {BUTTON_PRESETS.filter((p) => !t.buttons.some((b) => b.text === p.text)).map((p) => (
-                    <button key={p.text} type="button" className="chip" onClick={() => set({ buttons: [...t.buttons, { ...p }] })}><Plus size={13} />{p.text}</button>
+                )}
+                <Field label="Message" error={tried ? errors.find((e) => /message|personal detail|1,024/i.test(e)) : null}>
+                  <div className="te-box">
+                    <div className="te-toolbar">
+                      <button type="button" className="te-tool" onClick={() => wrap('*')} title="Bold: select words, then click"><b>B</b></button>
+                      <button type="button" className="te-tool" onClick={() => wrap('_')} title="Slanted: select words, then click"><i>I</i></button>
+                      <span className="te-sep" />
+                      <AddDetail details={details} onPick={insert} />
+                      <span className="subtle num te-count" style={{ color: t.body.length > 1024 ? 'var(--bad)' : undefined }}>{t.body.length}/1024</span>
+                    </div>
+                    <textarea ref={textRef} id="tpl-body" className="te-text" rows={8} value={shown} onChange={(e) => set({ body: fromFriendly(e.target.value) })} placeholder="Hi [Customer name], ..." />
+                  </div>
+                  <span className="hint">Details in [brackets] are filled in for each customer. Put the offer in the first 3 lines.</span>
+                  {longForWhatsApp(t) && (
+                    <Alert tone="warn">{t.image_url || t.video_url
+                      ? 'Under a photo or video, WhatsApp shows only about the first 3 lines; the rest is behind “Read more” (big brands too). Put the offer and the date in the first 2–3 lines. The buttons always show in full.'
+                      : 'Long message: WhatsApp may hide the end behind “Read more”. Put the offer and the date near the top. The buttons always show in full.'}</Alert>
+                  )}
+                </Field>
+              </>
+            )}
+
+            {step === 'media' && (
+              <>
+                <div className="te-choices" role="radiogroup" aria-label="Photo or video">
+                  {[['photo', Image, 'Photo', 'A jewellery photo gets far more taps'], ['video', Film, 'Video', 'MP4, up to 16 MB'], ['none', Type, 'Words only', 'No photo or video']].map(([k, Icon, label, sub]) => (
+                    <button key={k} type="button" role="radio" aria-checked={mediaKind === k} className={`te-choice ${mediaKind === k ? 'on' : ''}`} onClick={() => chooseMedia(k)}>
+                      <Icon size={22} /><b>{label}</b><span className="subtle">{sub}</span>
+                    </button>
                   ))}
                 </div>
-              )}
-              <span className="hint">Customers who tap “Interested” go to Replies → Interested.</span>
-            </Extra>
+                {mediaKind === 'photo' && (
+                  <>
+                    <PhotoPicker value={t.image_url} onChange={(url) => set({ image_url: url || '', ...(url ? { video_url: '' } : {}) })} />
+                    <Field label="Or paste a photo link" hint="A public https:// link to a photo of the jewellery.">
+                      <input id="tpl-image" className="input" value={t.image_url} onChange={(e) => set({ image_url: e.target.value })} placeholder="https://..." />
+                    </Field>
+                  </>
+                )}
+                {mediaKind === 'video' && <VideoPicker value={t.video_url} onChange={(url) => set({ video_url: url || '', ...(url ? { image_url: '' } : {}) })} />}
+                {mediaKind !== 'none' && <span className="hint">You can use a different {mediaKind} for each offer when you send it; Meta does not need to approve it again.</span>}
+              </>
+            )}
 
-            {/* SMS is not offered yet: the section shows only once SMS is switched on (after DLT registration). */}
-            {isOwner && settings?.sms?.live && (
-              <Extra id="sms" open={open} setOpen={setOpen} icon={MessageSquareText} title="SMS version" summary={t.sms_body ? 'Added' : 'None. Only needed for SMS (after DLT registration).'}>
-                <SmsFields t={t} set={set} />
-              </Extra>
+            {step === 'buttons' && (
+              <>
+                {t.buttons.length === 0 && <p className="subtle" style={{ margin: 0 }}>Add up to 2 buttons. One tap is easier for customers than typing a reply.</p>}
+                {t.buttons.map((b, i) => (
+                  <div key={i} className="te-button">
+                    <div className="seg" role="group" aria-label="Button type">
+                      {BUTTON_TYPES.map(({ key, label, icon: Icon }) => (
+                        <button key={key} type="button" className={b.type === key ? 'on' : ''} onClick={() => setButton(i, { type: key })}><Icon size={14} />{label}</button>
+                      ))}
+                    </div>
+                    <input className="input" maxLength={25} value={b.text} onChange={(e) => setButton(i, { text: e.target.value })} placeholder="Button text" aria-label="Button text" />
+                    {b.type === 'url' && <input className="input" value={b.url || ''} onChange={(e) => setButton(i, { url: e.target.value })} inputMode="url" placeholder="https://" aria-label="Website link" />}
+                    {b.type === 'phone' && <input className="input" value={b.phone || ''} onChange={(e) => setButton(i, { phone: e.target.value })} inputMode="tel" placeholder="+91 98765 43210" aria-label="Phone number" />}
+                    <button type="button" className="icon-btn sm" onClick={() => set({ buttons: t.buttons.filter((_, j) => j !== i) })} aria-label="Remove button"><Trash2 size={16} /></button>
+                  </div>
+                ))}
+                {t.buttons.length < 2 && (
+                  <div className="row wrap" style={{ gap: 6 }}>
+                    {BUTTON_PRESETS.filter((p) => !t.buttons.some((b) => b.text === p.text)).map((p) => (
+                      <button key={p.text} type="button" className="chip" onClick={() => set({ buttons: [...t.buttons, { ...p }] })}><Plus size={13} />{p.text}</button>
+                    ))}
+                  </div>
+                )}
+                <span className="hint">Customers who tap a reply button like “Interested” go to Replies → Interested.</span>
+              </>
             )}
-            {isOwner && id && (
-              <Extra id="meta" open={open} setOpen={setOpen} icon={BadgeCheck} title="WhatsApp approval (Meta)" summary={meta ? meta[1] : 'Not submitted'}>
-                <MetaFields t={t} onChange={(u) => {
-                  // Approval changes come from Meta, not from editing: keep them out of "unsaved changes".
-                  const meta = (x) => ({ ...x, provider_ref: u.provider_ref || '', provider_status: u.provider_status, provider_reason: u.provider_reason });
-                  setT(meta);
-                  setOrig(meta);
-                }} canSubmit={settings?.metaTemplatesReady} />
-              </Extra>
+
+            {tried && errors.length > 0 && (
+              <Alert tone="bad"><b>Please fix:</b><ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>{errors.map((e) => <li key={e}>{e}</li>)}</ul></Alert>
             )}
-            {isOwner && (
-              <Extra id="advanced" open={open} setOpen={setOpen} icon={Settings2} title="Advanced" summary={`${t.category === 'utility' ? 'Utility' : 'Marketing'} · ${t.status === 'draft' ? 'Draft' : 'Ready'}`}>
-                <div className="form-grid two">
-                  <Field label="Category" hint="Marketing counts towards the weekly limit. Utility is for service updates.">
-                    <select className="select" value={t.category || 'marketing'} onChange={(e) => set({ category: e.target.value })}>
-                      <option value="marketing">Marketing (offers, new designs)</option>
-                      <option value="utility">Utility (service update)</option>
-                    </select>
-                  </Field>
-                  <Field label="Status">
-                    <select className="select" value={t.status} onChange={(e) => set({ status: e.target.value })}>
-                      <option value="approved">Ready to send</option>
-                      <option value="draft">Draft (cannot be sent)</option>
-                    </select>
-                  </Field>
-                  <Field label="Approved template ID" hint="Meta: the approved template’s name. Twilio: the Content SID (HX…).">
-                    <input className="input" value={t.provider_ref} onChange={(e) => set({ provider_ref: e.target.value })} placeholder="e.g. past_buyers_offer" />
-                  </Field>
-                </div>
-              </Extra>
-            )}
+
+            <div className="te-foot">
+              {stepAt > 0 ? <button type="button" className="btn ghost" onClick={() => setStep(STEPS[stepAt - 1].key)}><ArrowLeft size={16} />Back</button> : <span />}
+              <span className="row wrap" style={{ gap: 8, justifyContent: 'flex-end' }}>
+                {!needsMeta ? (
+                  <>
+                    {!id && stepAt < 2 && <button type="button" className="btn" onClick={() => setStep(STEPS[stepAt + 1].key)}>Next<ArrowRight size={16} /></button>}
+                    <button className="btn primary" onClick={() => save()} disabled={busy}>{busy ? <Spinner /> : id ? 'Save changes' : 'Save and use it'}</button>
+                  </>
+                ) : dirty && !id && stepAt < 2 ? (
+                  <>
+                    <button className="btn ghost" onClick={() => save()} disabled={busy}>Save draft</button>
+                    <button className="btn primary" onClick={() => setStep(STEPS[stepAt + 1].key)}>Next<ArrowRight size={16} /></button>
+                  </>
+                ) : dirty ? (
+                  <>
+                    {id && state === 'changed' && <button className="btn ghost" onClick={undo} disabled={busy}><Undo2 size={16} />Undo changes</button>}
+                    <button className="btn ghost" onClick={() => save()} disabled={busy}>Save draft</button>
+                    <button className="btn primary" onClick={() => save({ submit: true })} disabled={busy}>{busy ? <Spinner /> : <><Send size={16} />Save and send to Meta</>}</button>
+                  </>
+                ) : (
+                  <>
+                    {state === 'waiting' && <button className="btn ghost" onClick={checkStatus} disabled={busy}><RefreshCw size={15} />Check now</button>}
+                    {state === 'changed' && <button className="btn ghost" onClick={undo} disabled={busy}><Undo2 size={16} />Undo changes</button>}
+                    {canUse && <Link to={`/campaigns/new?template=${id}`} className={`btn ${saved === 'approved' || state === 'waiting' ? 'primary' : 'ghost'}`}><Send size={16} />Use this template</Link>}
+                    {['rejected', 'not_sent', 'changed'].includes(state) && (
+                      <button className="btn primary" onClick={() => save({ submit: true })} disabled={busy}>{busy ? <Spinner /> : <><Send size={16} />{state === 'rejected' ? 'Send to Meta again' : 'Send to Meta for approval'}</>}</button>
+                    )}
+                  </>
+                )}
+              </span>
+            </div>
           </div>
 
-          {tried && errors.length > 0 && (
-            <Alert tone="bad"><b>Please fix:</b><ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>{errors.map((e) => <li key={e}>{e}</li>)}</ul></Alert>
+          {id && (
+            <div className="card te-extras">
+              <button type="button" className="te-extra-head" onClick={() => setMore((x) => !x)} aria-expanded={more}>
+                <Settings2 size={18} />
+                <span style={{ minWidth: 0, flex: 1 }}><b>More settings</b><span className="subtle te-sum">{t.category === 'utility' ? 'Service update' : 'Offer'}{t.provider_ref ? ` · Name at Meta: ${t.provider_ref}` : ''} · Delete</span></span>
+                <ChevronDown size={18} style={{ transform: more ? 'rotate(180deg)' : undefined, transition: 'transform .15s' }} />
+              </button>
+              {more && (
+                <div className="te-extra-body">
+                  {isOwner && (
+                    <div className="form-grid two">
+                      <Field label="Type" hint="Offers count towards the weekly limit. Service updates are for orders and repairs.">
+                        <select className="select" value={t.category || 'marketing'} onChange={(e) => set({ category: e.target.value })}>
+                          <option value="marketing">Offer (marketing)</option>
+                          <option value="utility">Service update (utility)</option>
+                        </select>
+                      </Field>
+                      <Field label="Status">
+                        <select className="select" value={t.status} onChange={(e) => set({ status: e.target.value })}>
+                          <option value="approved">Ready to send</option>
+                          <option value="draft">Draft (cannot be sent)</option>
+                        </select>
+                      </Field>
+                    </div>
+                  )}
+                  {isOwner && settings?.sms?.live && <SmsFields t={t} set={set} settings={settings} />}
+                  {t.provider_ref && (
+                    <p className="subtle" style={{ margin: 0 }}>
+                      Name at Meta: <code>{t.provider_ref}</code>
+                      {approvedBefore && approvedBefore.provider_ref !== t.provider_ref && <> · Sending now: <code>{approvedBefore.provider_ref}</code></>}
+                      {' '}<button type="button" className="link-btn" onClick={checkStatus} disabled={busy}>Check with Meta now</button>
+                    </p>
+                  )}
+                  {askDelete ? (
+                    <span className="row wrap" style={{ gap: 8 }}>
+                      <span>Delete this template?</span>
+                      <button className="btn sm" onClick={() => setAskDelete(false)}>Keep</button>
+                      <button className="btn sm danger" onClick={remove}><Trash2 size={15} />Yes, delete</button>
+                    </span>
+                  ) : <button className="btn sm ghost danger" style={{ alignSelf: 'flex-start' }} onClick={() => setAskDelete(true)}><Trash2 size={15} />Delete template</button>}
+                </div>
+              )}
+            </div>
           )}
         </div>
 
@@ -335,38 +454,27 @@ export default function TemplateEditor() {
           </div>
         </aside>
       </div>
+    </div>
+  );
+}
 
-      <div className="action-bar">
-        {id ? (
-          askDelete ? (
-            <span className="row wrap" style={{ gap: 8 }}>
-              <span>Delete this template?</span>
-              <button className="btn" onClick={() => setAskDelete(false)}>Keep</button>
-              <button className="btn danger" onClick={remove}><Trash2 size={16} />Yes, delete</button>
-            </span>
-          ) : <button className="btn ghost danger" onClick={() => setAskDelete(true)}><Trash2 size={17} />Delete</button>
-        ) : <span />}
-        {!needsMeta ? (
-          <button className="btn primary lg" onClick={() => save()} disabled={busy}>{busy ? <Spinner /> : id ? 'Save changes' : 'Save and use it'}</button>
-        ) : dirty ? (
-          <span className="row wrap" style={{ gap: 8, justifyContent: 'flex-end' }}>
-            <button className="btn ghost" onClick={() => save()} disabled={busy}>Save only</button>
-            <button className="btn primary lg" onClick={() => save({ submit: true })} disabled={busy}>{busy ? <Spinner /> : <><Send size={17} />Save and send to Meta</>}</button>
-          </span>
-        ) : metaStatus === 'APPROVED' ? (
-          <span className="row wrap" style={{ gap: 10, justifyContent: 'flex-end', alignItems: 'center' }}>
-            <span className="badge ok"><Check size={13} />Approved by Meta</span>
-            <Link to={`/campaigns/new?template=${id}`} className="btn primary lg"><Send size={17} />Use this template</Link>
-          </span>
-        ) : ['PENDING', 'IN_APPEAL'].includes(metaStatus) ? (
-          <span className="row wrap" style={{ gap: 10, justifyContent: 'flex-end', alignItems: 'center' }}>
-            <span className="subtle row" style={{ gap: 6 }}><Spinner size={14} />Waiting for Meta’s approval. This page updates by itself.</span>
-            <button className="btn ghost sm" onClick={checkStatus} disabled={busy}><RefreshCw size={15} />Check now</button>
-          </span>
-        ) : (
-          <button className="btn primary lg" onClick={() => save({ submit: true })} disabled={busy}>{busy ? <Spinner /> : <><Send size={17} />{metaStatus ? 'Send to Meta again' : 'Send to Meta for approval'}</>}</button>
-        )}
-      </div>
+/** The coloured strip under the name: where Meta's approval stands, in plain words. */
+function MetaStrip({ state, t, approvedBefore, busy, onCheck }) {
+  const when = approvedBefore?.approved_at ? ` on ${dateOnly(approvedBefore.approved_at)}` : '';
+  const old = approvedBefore ? ' Customers still get the version Meta approved before.' : '';
+  const text = {
+    approved: `Ready to send. Meta approved it${when}. Changing the words, photo or buttons means Meta checks it again; until then this version keeps sending.`,
+    waiting: `Sent to Meta. It usually takes a few minutes to a few hours, and this page updates by itself.${approvedBefore ? ' Until then customers get the version Meta approved before.' : ''}`,
+    rejected: `Meta said: ${t?.provider_reason || 'not approved'}. Change the words, then send it again.${old}`,
+    changed: `You changed an approved template. The approved version keeps sending until Meta approves this one.`,
+    not_sent: t?.provider_reason || 'Not sent to Meta yet. Meta approves a template before it can go to customers.',
+  }[state];
+  const [tone, Icon] = STATE[state];
+  return (
+    <div className={`te-strip ${tone}`} role="status">
+      <Icon size={18} />
+      <span style={{ flex: 1, minWidth: 0 }}>{text}</span>
+      {state === 'waiting' && <button type="button" className="link-btn" onClick={onCheck} disabled={busy}>Check now</button>}
     </div>
   );
 }
@@ -397,21 +505,6 @@ function AddDetail({ details, onPick }) {
   );
 }
 
-/** One fold-out row: title and a one-line summary; the fields show when opened. */
-function Extra({ id, open, setOpen, icon: Icon, title, summary, children }) {
-  const on = open === id;
-  return (
-    <div className={`te-extra ${on ? 'on' : ''}`}>
-      <button type="button" className="te-extra-head" onClick={() => setOpen(on ? null : id)} aria-expanded={on}>
-        <Icon size={18} />
-        <span style={{ minWidth: 0, flex: 1 }}><b>{title}</b><span className="subtle te-sum">{summary}</span></span>
-        <ChevronDown size={18} style={{ transform: on ? 'rotate(180deg)' : undefined, transition: 'transform .15s' }} />
-      </button>
-      {on && <div className="te-extra-body">{children}</div>}
-    </div>
-  );
-}
-
 function plainError(e) {
   return e.replace(/\{\{\s*(\w+)\s*\}\}/g, (all, k) => `[${detailLabel(k)}]`).replace(/placeholders?/gi, 'personal detail');
 }
@@ -423,7 +516,7 @@ function smsParts(text) {
   return text.length <= single ? 1 : Math.ceil(text.length / (unicode ? 67 : 153));
 }
 
-function SmsFields({ t, set }) {
+function SmsFields({ t, set, settings }) {
   const example = render(t.sms_body || '', { ...EXAMPLES, ...Object.fromEntries(Object.entries(shopVars(settings)).filter(([, v]) => v)) }).text;
   const parts = smsParts(example);
   return (
@@ -436,39 +529,6 @@ function SmsFields({ t, set }) {
       <Field label="DLT template ID" hint="The long number the DLT portal gives this SMS template.">
         <input className="input" value={t.sms_dlt_template_id || ''} onChange={(e) => set({ sms_dlt_template_id: e.target.value.replace(/\D/g, '') })} inputMode="numeric" placeholder="1107170000000000000" />
       </Field>
-    </>
-  );
-}
-
-function MetaFields({ t, onChange, canSubmit }) {
-  const toast = useToast();
-  const [busy, setBusy] = useState(false);
-  const status = t.provider_status;
-  async function go(path, done) {
-    setBusy(true);
-    try {
-      const r = await api(`/api/templates/${t.id}/${path}`, { method: 'POST' });
-      onChange(r.template);
-      toast(done(r.template));
-    } catch (e) {
-      toast(e.message, 'bad');
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <>
-      <p className="subtle" style={{ margin: 0 }}>
-        Meta approves a template before it can go to customers. It usually takes minutes to a day.
-        {t.provider_ref && <> Name at Meta: <code>{t.provider_ref}</code>.</>}
-      </p>
-      {status === 'REJECTED' && t.provider_reason && <Alert tone="bad">Reason: {t.provider_reason}. Edit the wording and submit again.</Alert>}
-      {!status && t.provider_ref && t.provider_reason && <Alert tone="warn">{t.provider_reason}</Alert>}
-      <div className="row wrap" style={{ gap: 8 }}>
-        <button className="btn" disabled={busy || !canSubmit} onClick={() => go('submit-meta', (u) => (u.provider_ref && u.provider_ref !== t.provider_ref && t.provider_ref ? `Sent to Meta as a new version (${u.provider_ref}). Approval usually takes minutes.` : 'Sent to Meta for approval'))}>{busy ? <Spinner /> : status || t.provider_ref ? 'Submit again' : 'Submit to Meta'}</button>
-        {t.provider_ref && <button className="btn ghost" disabled={busy} onClick={() => go('sync-meta', (u) => (u.provider_status ? `Meta says: ${u.provider_status.toLowerCase()}` : u.provider_reason || 'Not approved for this version yet.'))}><RefreshCw size={16} />Check now</button>}
-      </div>
-      {!canSubmit && <span className="subtle">Connect WhatsApp in Settings first.</span>}
     </>
   );
 }

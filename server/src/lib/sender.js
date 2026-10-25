@@ -12,6 +12,7 @@ import { setRunner, kick } from './dispatch.js';
 import { retryTomorrow } from './messages.js';
 import { testProvider } from './whatsapp-connection.js';
 import { offerFile } from './campaigns.js';
+import { sendingVersion } from './template-approval.js';
 
 // WhatsApp errors meaning "this number cannot get WhatsApp": SMS backup is worth trying.
 export const NOT_ON_WHATSAPP = new Set(['63003', '63024', '131026']);
@@ -34,7 +35,8 @@ export async function processSendJob(messageId) {
   const { rows: [contact] } = await query('SELECT * FROM contacts WHERE id = $1', [msg.contact_id]);
   const campaign = msg.campaign_id ? (await query('SELECT * FROM campaigns WHERE id = $1', [msg.campaign_id])).rows[0] : null;
   const occasion = msg.occasion_id ? (await query('SELECT * FROM occasions WHERE id = $1', [msg.occasion_id])).rows[0] : null;
-  const template = msg.template_id ? (await query('SELECT * FROM templates WHERE id = $1', [msg.template_id])).rows[0] : null;
+  // A template changed after Meta approved it sends the approved version until the new one is approved.
+  const template = msg.template_id ? sendingVersion((await query('SELECT * FROM templates WHERE id = $1', [msg.template_id])).rows[0]) : null;
   const isReply = !campaign && !occasion;
 
   if (campaign?.status === 'cancelled') return skip(msg, 'Campaign was cancelled');

@@ -7,7 +7,7 @@ import { SCHEMA, CONNECTION_TABLE, MEDIA_TABLE, DATES_TABLE, DATES_INDEX, LOGIN_
 
 let impl = null;
 
-const JSON_COLS = new Set(['buttons', 'template_buttons', 'audience', 'variables', 'template_values', 'tags', 'days_before', 'dates']);
+const JSON_COLS = new Set(['buttons', 'template_buttons', 'audience', 'variables', 'template_values', 'tags', 'days_before', 'dates', 'approved_version']);
 const BOOL_COLS = new Set(['whatsapp_opt_in', 'sms_opt_in', 'enabled', 'sms_fallback', 'repeat_yearly', 'sales_codes']);
 
 /** SQL for "now" and "N units ago" as ISO text, matching how times are stored. */

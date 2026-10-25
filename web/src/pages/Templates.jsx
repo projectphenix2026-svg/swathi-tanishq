@@ -12,7 +12,7 @@ import { LANGS, isReadyText, langLabel, readyFor, readyIn } from '../lib/ready-l
 import { useAuth } from '../lib/auth.js';
 import { atLeast } from '@shared/roles.js';
 import { useT } from '../lib/i18n.jsx';
-import { META_BADGE, isApproved, metaState } from '../lib/approval.js';
+import { META_BADGE, canSend, metaState } from '../lib/approval.js';
 import { SelectBar, allTicked, toggleIn } from '../components/SelectBar.jsx';
 import { SortTh, useSort } from '../components/SortHead.jsx';
 
@@ -115,7 +115,7 @@ export default function Templates() {
   const own = (list || []).filter((t) => !READY_NAMES.has(t.name));
   // With WhatsApp connected, "approved" means approved by Meta: only those can be sent.
   const needsMeta = Boolean(settings?.metaTemplatesReady);
-  const ok = (t) => (needsMeta ? isApproved(t) : t.status === 'approved');
+  const ok = (t) => (needsMeta ? canSend(t) : t.status === 'approved');
   const all = [...own, ...(list || []).filter((t) => READY_NAMES.has(t.name))];
   const nApproved = all.filter(ok).length;
   // Approved ones first, so the ones that can be sent are easy to find.
@@ -228,6 +228,7 @@ export default function Templates() {
                         <td>
                           <span className={`badge ${tone}`}>{tone === 'ok' && <Check size={13} />}{label}</span>
                           {needsMeta && metaState(t) === 'waiting' && <div className="subtle cell-sub">Updates by itself</div>}
+                          {needsMeta && metaState(t) !== 'approved' && canSend(t) && <div className="subtle cell-sub">Approved version still sends</div>}
                           {needsMeta && metaState(t) === 'rejected' && t.provider_reason && <div className="subtle cell-sub">{t.provider_reason}</div>}
                         </td>
                         <td className="subtle nowrap">{t.used_in ? `${t.used_in} time${t.used_in > 1 ? 's' : ''}` : 'Not yet'}<div className="cell-sub">Updated {dateOnly(t.updated_at)}</div></td>

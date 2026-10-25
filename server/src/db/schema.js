@@ -252,7 +252,9 @@ export const EXTRA_COLUMNS = {
   occasions: [['repeat_yearly', 'INTEGER NOT NULL DEFAULT 0']],
   // A deleted template that past messages used: hidden from every list, kept so reports still work.
   // video_url: a video header instead of a photo (the file itself lives in the file store, lib/blobs.js).
-  templates: [['archived_at', 'TEXT'], ['video_url', 'TEXT']],
+  // approved_version: the last version Meta approved ({ provider_ref, body, buttons, ... }); it keeps
+  // sending while a changed version waits for Meta or was rejected.
+  templates: [['archived_at', 'TEXT'], ['video_url', 'TEXT'], ['approved_version', 'TEXT']],
   // store = 'blob' when the bytes are in the file store (videos) rather than in data (photos).
   media: [['store', 'TEXT']],
   // Each person's app language (en | te | hi): the whole app opens in it, on any device.

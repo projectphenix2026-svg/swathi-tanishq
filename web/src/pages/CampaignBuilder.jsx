@@ -17,7 +17,7 @@ import { atLeast } from '@shared/roles.js';
 import { SHOP_KEYS, shopVars } from '../lib/shop.js';
 import { CustomersStep, LeftOut } from '../components/CustomerPicker.jsx';
 import { TemplateChooser } from '../components/TemplatePicker.jsx';
-import { metaState } from '../lib/approval.js';
+import { canSend, pickState } from '../lib/approval.js';
 
 // Send a message in three steps: pick a template, pick customers, check and send.
 const STEPS = ['Template', 'Customers', 'Check and send'];
@@ -99,7 +99,7 @@ export default function CampaignBuilder() {
   const blank = neededVars.find((v) => !String(variables[v.key] || '').trim());
 
   const stepError = [
-    !template ? 'Pick a template.' : needsMeta && !isSms && metaState(template) !== 'approved' ? 'Meta has not approved this template yet. Pick an approved one.' : blank ? `Fill in the ${blank.label.toLowerCase()}.` : null,
+    !template ? 'Pick a template.' : needsMeta && !isSms && !canSend(template) ? 'Meta has not approved this template yet. Pick an approved one.' : blank ? `Fill in the ${blank.label.toLowerCase()}.` : null,
     pick.only && !pick.ids.length ? 'Tick at least one customer.' : preview && sendCount === 0 ? (preview.atCap > 0 && preview.atCap === preview.eligible ? 'Everyone here already got this week’s messages. Try again in a few days.' : 'None of these customers can get this message.') : null,
     when.mode === 'later' && (!when.at || new Date(when.at).getTime() < Date.now()) ? 'Pick a time in the future.' : isSms && !template?.sms_body ? 'This template has no SMS version.' : sendCount >= 500 && !bigOk ? 'Tick the box to confirm this large send.' : !name.trim() ? 'Give it a name for your reports.' : null,
   ][step];
@@ -283,9 +283,9 @@ function TemplateStep({ t, templates, setTemplates, templateId, setTemplateId, n
   // Every template in one searchable list: the ready-made ones (in the message language) and the shop's own.
   const ready = READY_MESSAGES.map((m) => ({ m, r: readyFor(m, lang, salesCodes) }));
   const items = [
-    ...ready.map(({ m, r }) => ({ key: `ready:${m.key}`, ready: true, m, name: r.name, title: t(m.title), body: r.body, pic: m.pic, meta: needsMeta ? metaState(templates.find((x) => x.name === r.name)) : null })),
+    ...ready.map(({ m, r }) => ({ key: `ready:${m.key}`, ready: true, m, name: r.name, title: t(m.title), body: r.body, pic: m.pic, meta: needsMeta ? pickState(templates.find((x) => x.name === r.name)) : null })),
     // The shop's own templates in the chosen language (and the one already picked, whatever its language).
-    ...templates.filter((x) => !READY_NAMES.has(x.name) && (langOf(x) === lang || x.id === template?.id)).map((x) => ({ key: `t:${x.id}`, id: x.id, name: x.name, body: x.body, pic: 'memo', meta: needsMeta ? metaState(x) : null })),
+    ...templates.filter((x) => !READY_NAMES.has(x.name) && (langOf(x) === lang || x.id === template?.id)).map((x) => ({ key: `t:${x.id}`, id: x.id, name: x.name, body: x.body, pic: 'memo', meta: needsMeta ? pickState(x) : null })),
   ];
   const readyChosen = template && ready.find(({ r }) => r.name === template.name);
   const chosenKey = !template ? null : readyChosen ? `ready:${readyChosen.m.key}` : `t:${template.id}`;

@@ -20,3 +20,9 @@ export const META_BADGE = {
 };
 
 export const isApproved = (t) => metaState(t) === 'approved';
+
+/** Can go to customers now: approved, or changed after approval (the approved version keeps sending). */
+export const canSend = (t) => isApproved(t) || Boolean(t?.approved_version?.provider_ref);
+
+/** The state a template picker shows: 'approved' while an approved version still sends. */
+export const pickState = (t) => (canSend(t) ? 'approved' : metaState(t));
