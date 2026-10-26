@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useOutletContext, useParams } from 'react-router-dom';
 import { SelectBar, allTicked, toggleIn } from '../components/SelectBar.jsx';
-import { AlertCircle, ArrowLeft, Check, CheckCheck, Clock, ExternalLink, FlaskConical, Inbox as InboxIcon, Lock, Phone, Reply, SendHorizontal } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Check, CheckCheck, Clock, ExternalLink, FileText, FlaskConical, Inbox as InboxIcon, Lock, Phone, Reply, SendHorizontal } from 'lucide-react';
 import { SearchBox, matches } from '../components/SearchBox.jsx';
-import { api } from '../lib/api.js';
+import { api, apiUrl } from '../lib/api.js';
 import { useAuth } from '../lib/auth.js';
 import { Avatar, Empty, SectionTabs, Spinner, useToast } from '../components/ui.jsx';
 import { useT } from '../lib/i18n.jsx';
@@ -77,10 +77,10 @@ export default function Inbox() {
           <Empty icon={InboxIcon} title={filter === 'unread' ? 'All caught up' : 'No replies yet'} actions={filter === 'unread' ? null : <Link to="/campaigns/new" className="btn primary">Send a message</Link>}>
             {filter === 'unread' ? 'Every reply has been read.' : 'When customers reply to a message, you answer them here. Replies within 24 hours are free.'}
           </Empty>
-        ) : !list.some((c) => matches(q, c.name, c.phone, c.last_body)) ? (
+        ) : !list.some((c) => matches(q, c.name, c.phone, preview(c.last_body, c.last_media))) ? (
           <p className="subtle" style={{ padding: 16 }}>{t('Nobody matches.')}</p>
         ) : (
-          list.filter((c) => matches(q, c.name, c.phone, c.last_body)).map((c) => (
+          list.filter((c) => matches(q, c.name, c.phone, preview(c.last_body, c.last_media))).map((c) => (
             <Link key={c.contact_id} to={`/inbox/${c.contact_id}`} className={`convo ${String(c.contact_id) === contactId ? 'on' : ''} ${sel.has(c.contact_id) ? 'ticked' : ''}`}>
               <span className="tick" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setSel((x) => toggleIn(x, c.contact_id)); }} style={{ alignSelf: 'center' }}>
                 <input type="checkbox" readOnly tabIndex={-1} checked={sel.has(c.contact_id)} aria-label={`Select ${c.name || phone(c.phone)}`} />
@@ -92,7 +92,7 @@ export default function Inbox() {
                   <span className="subtle" style={{ flexShrink: 0, color: c.unread ? 'var(--wa)' : undefined }}>{ago(c.last_at)}</span>
                 </div>
                 <div className="row between" style={{ gap: 8 }}>
-                  <span className="snippet">{c.last_direction === 'outbound' ? 'You: ' : ''}{c.last_body}</span>
+                  <span className="snippet">{c.last_direction === 'outbound' ? 'You: ' : ''}{preview(c.last_body, c.last_media)}</span>
                   {c.unread > 0 && <span className="unread">{c.unread}</span>}
                 </div>
               </div>
@@ -202,7 +202,8 @@ function Thread({ contactId, onChange }) {
                 {m.direction === 'outbound' && (m.campaign_name || m.sent_by_name) && (
                   <span className="tag">{m.campaign_name ? `Offer: ${m.campaign_name}` : `Reply by ${m.sent_by_name}`}</span>
                 )}
-                <Highlighted body={m.body} values={{}} />
+                {m.direction === 'inbound' && <InboundMedia m={m} />}
+                {m.body && !OLD_PLACEHOLDER.test(m.body) && <Highlighted body={m.body} values={{}} />}
                 {m.buttons?.length > 0 && (
                   <span style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6 }}>
                     {m.buttons.map((b, i) => (
@@ -230,7 +231,7 @@ function Thread({ contactId, onChange }) {
         {optedOut ? (
           <div className="row subtle" style={{ gap: 8 }}><Lock size={16} />This customer replied STOP, so no more messages can be sent.</div>
         ) : !windowOpen ? (
-          <div className="row subtle" style={{ gap: 8 }}><Clock size={16} />More than 24 hours since they last wrote. WhatsApp only allows a free reply within 24 hours; reach them with a template (send an offer) template instead.</div>
+          <div className="row subtle" style={{ gap: 8 }}><Clock size={16} />More than 24 hours since they last wrote. WhatsApp only allows a free reply within 24 hours; reach them by sending a template (an offer) instead.</div>
         ) : (
           <>
             <div className="chips no-scrollbar" style={{ flexWrap: 'nowrap', overflowX: 'auto' }}>
@@ -267,4 +268,36 @@ function Tick({ status }) {
   if (status === 'read' || status === 'delivered') return <CheckCheck size={14} />;
   if (status === 'sent') return <Check size={14} />;
   return <Clock size={12} />;
+}
+
+// What customers send besides words. Meta's file is fetched (free) the first time someone opens it.
+const MEDIA_LABEL = { image: 'Photo', video: 'Video', audio: 'Voice note', document: 'Document', sticker: 'Sticker', revoke: 'Deleted message', unsupported: 'Message WhatsApp could not pass on' };
+// Saved before Sandesh showed files: "[image message]", "[unsupported message]" and so on.
+const OLD_PLACEHOLDER = /^\[(\w+) message\]$/;
+
+/** The list's one-line preview: the words, or what kind of file it was. */
+function preview(body, media) {
+  const old = OLD_PLACEHOLDER.exec(body || '');
+  const kind = media || old?.[1];
+  if (body && !old) return kind && MEDIA_LABEL[kind] ? `${MEDIA_LABEL[kind]}: ${body}` : body;
+  return MEDIA_LABEL[kind] || (kind ? `${kind[0].toUpperCase()}${kind.slice(1)}` : '');
+}
+
+function InboundMedia({ m }) {
+  const [broken, setBroken] = useState(false);
+  const kind = m.media_type || OLD_PLACEHOLDER.exec(m.body || '')?.[1];
+  if (!kind) return null;
+  const onPhone = 'Open WhatsApp on the shop phone to see it.';
+  if (kind === 'revoke') return <span className="msg-note">The customer deleted this message.</span>;
+  if (kind === 'unsupported') return <span className="msg-note">WhatsApp did not pass this message on (for example a view-once photo, a poll or an edited message). {onPhone}</span>;
+  const label = MEDIA_LABEL[kind] || 'File';
+  if (!m.has_file || broken) return <span className="msg-note">{label}: {broken ? 'could not be loaded from WhatsApp.' : 'arrived before Sandesh could show files.'} {onPhone}</span>;
+  const src = apiUrl(`/api/inbox/media/${m.id}`);
+  const fail = () => setBroken(true);
+  if (kind === 'image' || kind === 'sticker') {
+    return <a href={src} target="_blank" rel="noreferrer" className="msg-media"><img src={src} alt={label} loading="lazy" onError={fail} className={kind === 'sticker' ? 'sticker' : ''} /></a>;
+  }
+  if (kind === 'video') return <video className="msg-media" src={src} controls preload="metadata" onError={fail} />;
+  if (kind === 'audio') return <audio className="msg-audio" src={src} controls preload="none" onError={fail} />;
+  return <a href={src} target="_blank" rel="noreferrer" className="msg-file"><FileText size={20} /><span className="ellipsis">{m.media_name || 'Document'}</span></a>;
 }

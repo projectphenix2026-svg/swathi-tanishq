@@ -104,7 +104,7 @@ export async function trackInterest(clientId, contactId, inboundId, body) {
 }
 
 /** Saves a customer's message to the shared inbox, honours STOP / START, and tracks interest. */
-export async function recordInbound(clientId, { providerMessageId, from, profileName, body, mediaUrl, provider }) {
+export async function recordInbound(clientId, { providerMessageId, from, profileName, body, mediaUrl, media, provider }) {
   const phone = normalizePhone(from);
   if (!phone.ok) return null;
   let { rows: [contact] } = await query('SELECT * FROM contacts WHERE client_id = $1 AND phone = $2', [clientId, phone.e164]);
@@ -117,10 +117,12 @@ export async function recordInbound(clientId, { providerMessageId, from, profile
     ));
   }
   const inserted = await query(
-    `INSERT INTO messages (client_id, contact_id, direction, provider, idempotency_key, body, image_url, status, provider_message_id)
-     VALUES ($1, $2, 'inbound', $3, $4, $5, $6, 'received', $7)
+    `INSERT INTO messages (client_id, contact_id, direction, provider, idempotency_key, body, image_url, status, provider_message_id,
+                           media_type, media_ref, media_mime, media_name)
+     VALUES ($1, $2, 'inbound', $3, $4, $5, $6, 'received', $7, $8, $9, $10, $11)
      ON CONFLICT (idempotency_key) DO NOTHING RETURNING id`,
-    [clientId, contact.id, provider || getProvider().name, `in:${providerMessageId}`, body, mediaUrl, providerMessageId],
+    [clientId, contact.id, provider || getProvider().name, `in:${providerMessageId}`, body, mediaUrl, providerMessageId,
+      media?.type || null, media?.ref || null, media?.mime || null, media?.name || null],
   );
   const word = String(body || '').trim().toLowerCase();
   if (STOP_WORDS.includes(word)) {

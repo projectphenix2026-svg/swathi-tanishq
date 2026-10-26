@@ -22,6 +22,10 @@ function fakeMeta({ fail, refuseTemplates } = {}) {
     calls.push({ url: String(url), method: init.method || 'GET', body: init.body });
     const json = (status, body) => ({ ok: status < 400, status, json: async () => body });
     if (fail) return json(401, { error: { code: 190, message: 'Session has expired' } });
+    if (String(url).endsWith('/media-photo-1')) return json(200, { url: 'https://lookaside.fbsbx.com/photo-1', mime_type: 'image/jpeg' });
+    if (String(url) === 'https://lookaside.fbsbx.com/photo-1') {
+      return { ok: true, status: 200, headers: new Headers({ 'content-type': 'image/jpeg' }), arrayBuffer: async () => new Uint8Array([255, 216, 255]).buffer };
+    }
     if (String(url).includes('/subscribed_apps')) return json(200, { success: true });
     if (String(url).endsWith('/555000111/messages')) return json(200, { messages: [{ id: 'wamid.TEST1' }] });
     if (refuseTemplates && String(url).endsWith('/message_templates') && init.method === 'POST') {
@@ -176,6 +180,26 @@ describe('Connect WhatsApp (owner only)', () => {
 
     const undone = await owner.put(`/api/templates/${t.id}`).send({ ...t, buttons: [], body: 'Old approved words' });
     expect(undone.body.template).toMatchObject({ provider_ref: 'kept', provider_status: 'APPROVED' });
+  });
+
+  it('shows a photo a customer sent: fetched from Meta once, then kept', async () => {
+    const clientId = await ensureClient('Test Store');
+    const { recordInbound } = await import('../src/lib/messages.js');
+    const r = await recordInbound(clientId, { providerMessageId: 'wamid.PHOTO1', from: '+919000066666', body: '', media: { type: 'image', ref: 'media-photo-1', mime: 'image/jpeg' }, provider: 'meta' });
+    const calls = fakeMeta();
+    resetConnectionCache();
+    await owner.get('/api/whatsapp'); // loads the saved connection
+    const thread = await owner.get(`/api/inbox/${r.contactId}`);
+    expect(thread.body.messages[0]).toMatchObject({ media_type: 'image' });
+    expect(thread.body.messages[0].has_file).toBeTruthy();
+    const first = await owner.get(`/api/inbox/media/${r.messageId}`).buffer(true);
+    expect(first.status).toBe(200);
+    expect(first.headers['content-type']).toMatch(/image\/jpeg/);
+    expect([...first.body]).toEqual([255, 216, 255]);
+    const before = calls.length;
+    expect((await owner.get(`/api/inbox/media/${r.messageId}`)).status).toBe(200);
+    expect(calls.length).toBe(before); // kept: not fetched from Meta again
+    expect((await request(createApp()).get(`/api/inbox/media/${r.messageId}`)).status).toBe(401); // staff only
   });
 
   it('sends a reply to someone who wrote in on the real WhatsApp for real, even in Test mode', async () => {

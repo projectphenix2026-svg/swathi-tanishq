@@ -1,6 +1,9 @@
 // Small fetch wrapper. The session lives in an httpOnly cookie, so no token is stored in the browser.
 const BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 
+/** Full address of an API path, for <img>, <video> and links (the session cookie goes with them). */
+export const apiUrl = (path) => BASE + path;
+
 export class ApiError extends Error {
   constructor(message, status, data) {
     super(message);

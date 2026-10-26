@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import crypto from 'node:crypto';
 import { createTwilioProvider, withButtons } from '../src/providers/twilio.js';
-import { createMetaProvider } from '../src/providers/meta.js';
+import { createMetaProvider, readInbound } from '../src/providers/meta.js';
 import { createMockProvider } from '../src/providers/mock.js';
 
 const cfg = { accountSid: 'ACtest', authToken: 'test-token', whatsappFrom: '+17372508034' };
@@ -113,6 +113,17 @@ describe('Meta adapter (stub)', () => {
     const parsed = p.parseWebhook({ body });
     expect(parsed.statuses[0]).toMatchObject({ providerMessageId: 'wamid.1', status: 'read' });
     expect(parsed.inbound[0]).toMatchObject({ from: '+919876543210', body: 'Interested', profileName: 'Priya' });
+  });
+
+  it('reads photos, voice notes, documents, locations and unsupported messages', () => {
+    expect(readInbound({ type: 'image', image: { id: 'm1', mime_type: 'image/jpeg', caption: 'This design?' } }))
+      .toEqual({ body: 'This design?', media: { type: 'image', ref: 'm1', mime: 'image/jpeg', name: null } });
+    expect(readInbound({ type: 'audio', audio: { id: 'm2', mime_type: 'audio/ogg' } }).media).toMatchObject({ type: 'audio', ref: 'm2' });
+    expect(readInbound({ type: 'document', document: { id: 'm3', filename: 'bill.pdf' } }).media).toMatchObject({ type: 'document', name: 'bill.pdf' });
+    expect(readInbound({ type: 'location', location: { latitude: 17.97, longitude: 79.59, name: 'Hanamkonda' } }).body)
+      .toBe('Location: Hanamkonda\nhttps://maps.google.com/?q=17.97,79.59');
+    expect(readInbound({ type: 'unsupported', errors: [{ code: 131051 }] })).toEqual({ body: '', media: { type: 'unsupported', ref: null, mime: null, name: null } });
+    expect(readInbound({ type: 'text', text: { body: 'Hi' } })).toEqual({ body: 'Hi', media: null });
   });
 });
 
