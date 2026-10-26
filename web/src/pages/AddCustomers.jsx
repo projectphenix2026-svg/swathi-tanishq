@@ -9,6 +9,7 @@ const importer = () => import('@shared/importer.js');
 import { downloadSample } from '../lib/sample.js';
 import { api, apiText } from '../lib/api.js';
 import { Alert, Field, Spinner, useToast } from '../components/ui.jsx';
+import { PhoneInput } from '../components/PhoneInput.jsx';
 import { CustomerFields, customerBody, customerForm } from '../components/CustomerFields.jsx';
 import { useAuth } from '../lib/auth.js';
 import { atLeast } from '@shared/roles.js';
@@ -115,7 +116,7 @@ function FileStep({ onPreview }) {
           <span className="kpi-icon tone-wa" style={{ width: 40, height: 40, borderRadius: 12 }}><FileSpreadsheet size={20} /></span>
           <div>
             <b>Not sure about the columns?</b>
-            <p className="muted" style={{ fontSize: '0.9rem' }}>Only a phone column is required. Name, city, last purchase and interests make messages personal.</p>
+            <p className="muted" style={{ fontSize: '0.9rem' }}>Phone and City are required (marked * in the sample). A separate Country code column is optional; empty means India (+91). Name, last purchase and interests make messages personal.</p>
           </div>
         </div>
         <button className="btn" onClick={downloadSample}><Download size={18} />Sample Excel file</button>
@@ -288,7 +289,7 @@ function ImportReview({ preview, onBack, onDone, onRemap }) {
   }
 
   const fields = [
-    ['phone', 'Phone number', true], ['name', 'Name'], ['city', 'City', true], ['last_purchase', 'Last purchase'],
+    ['phone', 'Phone number', true], ['country_code', 'Country code'], ['name', 'Name'], ['city', 'City', true], ['last_purchase', 'Last purchase'],
     ['interests', 'Interests'], ['birthday', 'Birthday'], ['anniversary', 'Anniversary'], ['opt_in', 'Agreed to WhatsApp'],
   ];
 
@@ -493,9 +494,9 @@ function OneCustomer() {
       label={<>WhatsApp number <span className="req">*</span></>}
       htmlFor="cust-phone"
       error={errors.phone || (touched || f.phone.replace(/\D/g, '').length >= 10 ? (phone && !phone.ok ? phone.reason : null) : null)}
-      hint={phone?.ok ? `Will be saved as ${phone.display}` : '10-digit mobile number; +91 is added for you'}
+      hint={phone?.ok ? `Will be saved as ${phone.display}` : 'Pick the country code, then the mobile number (10 digits for India).'}
     >
-      <input id="cust-phone" name="customer-phone" autoComplete="off" className={`input ${errors.phone ? 'invalid' : ''}`} value={f.phone} onChange={(e) => setF((x) => ({ ...x, phone: e.target.value }))} inputMode="tel" placeholder="98765 43210" />
+      <PhoneInput id="cust-phone" name="customer-phone" autoComplete="off" invalid={Boolean(errors.phone)} value={f.phone} onChange={(v) => setF((x) => ({ ...x, phone: v }))} />
     </Field>
   );
 

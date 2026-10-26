@@ -994,3 +994,10 @@ a.sent-row:hover { background: var(--surface-2); text-decoration: none; }
 .tpl-new-link { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-weight: 600; color: var(--brand); text-decoration: none; padding: 4px 2px; }
 .tpl-new-link .subtle { font-weight: 400; font-size: 0.85rem; flex-basis: 100%; padding-left: 26px; }
 .tpl-new-link:hover { text-decoration: underline; }
+
+/* Phone fields: country code, then the number. */
+.phone-input { display: inline-flex; gap: 6px; width: 100%; max-width: 340px; min-width: 0; }
+.phone-input .select { flex: 0 0 auto; width: 104px; padding-right: 24px; }
+.phone-input .input { flex: 1 1 auto; min-width: 0; }
+.te-button .phone-input { max-width: none; }
+.te-button:has(.phone-input) { grid-template-columns: auto minmax(0, 0.8fr) minmax(0, 1.4fr) auto; }

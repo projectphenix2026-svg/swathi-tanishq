@@ -3,6 +3,7 @@ import { KeyRound, UserMinus, UserPlus } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.js';
 import { Avatar, Field, Modal, Pic, Spinner, useToast } from '../components/ui.jsx';
+import { PhoneInput } from '../components/PhoneInput.jsx';
 import { dateOnly, rate } from '../lib/format.js';
 import { SCREEN_LANGS, useT } from '../lib/i18n.jsx';
 import { ConnectWhatsApp } from './ConnectWhatsApp.jsx';
@@ -122,7 +123,7 @@ function ShopDetails({ shop, onSaved }) {
         <textarea id="shop-address" className="textarea" rows={2} value={f.address} onChange={set('address')} placeholder="Shop number, street, area, city" />
       </Field>
       <Field label="Shop phone" htmlFor="shop-phone" error={errors.phone} hint="Used in messages that include {{shop_phone}}.">
-        <input id="shop-phone" className={`input ${errors.phone ? 'invalid' : ''}`} value={f.phone} onChange={set('phone')} inputMode="tel" placeholder="98765 43210" />
+        <PhoneInput id="shop-phone" invalid={Boolean(errors.phone)} value={f.phone} onChange={(v) => set('phone')({ target: { value: v } })} />
       </Field>
       <Field label="Google review link" htmlFor="shop-review" error={errors.googleReviewLink} hint="Optional. Google Business Profile → Ask for reviews → copy link. Used for the thank-you message.">
         <input id="shop-review" className={`input ${errors.googleReviewLink ? 'invalid' : ''}`} value={f.googleReviewLink} onChange={set('googleReviewLink')} inputMode="url" placeholder="https://g.page/r/..." />
