@@ -31,16 +31,21 @@ export async function setup(clientId) {
   console.log(`[sms] ${getSmsProvider().label}`);
 }
 
-let minute = 0;
+/**
+ * The minute on the clock (minutes since 1970), not a count of runs: on Cloudflare each
+ * once-a-minute run can start fresh, so a counter kept in memory starts again at 1 and the
+ * "every 15 minutes" checks never came round (birthday wishes were never sent).
+ */
+export const clockMinute = (now = Date.now()) => Math.floor(now / 60000);
 
 /**
- * Runs every minute: send due messages, every 15 minutes check occasions,
+ * Runs every minute: send due messages, check occasions at :00, :15, :30 and :45,
  * and (Twilio without webhooks) ask for delivery statuses.
  */
 export async function everyMinute({ send = true, occasions = true } = {}) {
-  minute += 1;
+  const minute = clockMinute();
   await refreshProvider().catch((err) => console.warn('[whatsapp] could not read the connection:', err.message));
-  if (minute % 30 === 1) await refreshDailyLimit().catch(() => {});
+  if (minute % 30 === 0) await refreshDailyLimit().catch(() => {});
   // Templates waiting for Meta's approval: no need to press "Check status".
   if (occasions && minute % 3 === 0) await syncWaitingTemplates().catch((err) => console.warn('[templates]', err.message));
   if (send) {
