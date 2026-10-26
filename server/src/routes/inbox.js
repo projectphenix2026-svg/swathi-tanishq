@@ -4,6 +4,8 @@ import { query } from '../db/index.js';
 import { kick } from '../lib/dispatch.js';
 import { recordInbound } from '../lib/messages.js';
 import { getProvider } from '../providers/index.js';
+import { blobs } from '../lib/blobs.js';
+import { metaProvider } from '../lib/template-approval.js';
 import { requireLevel } from './auth.js';
 
 const router = express.Router();
@@ -19,7 +21,8 @@ router.get('/', async (req, res) => {
             max(m.created_at) FILTER (WHERE m.direction = 'inbound') AS last_inbound_at,
             count(*) FILTER (WHERE m.direction = 'inbound' AND m.seen_at IS NULL) AS unread,
             (SELECT body FROM messages x WHERE x.contact_id = c.id ORDER BY x.created_at DESC, x.id DESC LIMIT 1) AS last_body,
-            (SELECT direction FROM messages x WHERE x.contact_id = c.id ORDER BY x.created_at DESC, x.id DESC LIMIT 1) AS last_direction
+            (SELECT direction FROM messages x WHERE x.contact_id = c.id ORDER BY x.created_at DESC, x.id DESC LIMIT 1) AS last_direction,
+            (SELECT media_type FROM messages x WHERE x.contact_id = c.id ORDER BY x.created_at DESC, x.id DESC LIMIT 1) AS last_media
        FROM contacts c JOIN messages m ON m.contact_id = c.id
       WHERE c.client_id = $1
         AND EXISTS (SELECT 1 FROM messages i WHERE i.contact_id = c.id AND i.direction = 'inbound')
@@ -47,7 +50,7 @@ router.get('/:contactId', async (req, res) => {
   ]);
   if (!contact) return res.status(404).json({ error: 'Customer not found.' });
   const { rows: messages } = await query(
-    `SELECT m.id, m.direction, m.body, m.buttons, m.image_url, m.status, m.error_message, m.provider, m.created_at, m.sent_at,
+    `SELECT m.id, m.direction, m.body, m.buttons, m.image_url, m.media_type, m.media_mime, m.media_name, (m.media_ref IS NOT NULL) AS has_file, m.status, m.error_message, m.provider, m.created_at, m.sent_at,
             m.delivered_at, m.read_at, cp.name AS campaign_name, u.name AS sent_by_name
        FROM messages m LEFT JOIN campaigns cp ON cp.id = m.campaign_id LEFT JOIN users u ON u.id = m.sent_by
       WHERE m.contact_id = $1 ORDER BY m.created_at, m.id`,
@@ -57,6 +60,35 @@ router.get('/:contactId', async (req, res) => {
   const lastInbound = [...messages].reverse().find((m) => m.direction === 'inbound');
   const windowOpen = lastInbound ? Date.now() - new Date(lastInbound.created_at).getTime() < 24 * 3600 * 1000 : false;
   res.json({ contact, messages, windowOpen, lastInboundAt: lastInbound?.created_at || null });
+});
+
+// Largest file kept after the first download (the file store holds up to 25 MB per file).
+const MAX_KEEP = 24 * 1024 * 1024;
+
+// A photo, video, voice note or document a customer sent. Fetched from Meta the first time someone
+// opens it (free), then kept, so it still opens after Meta deletes it (about 30 days). Staff only.
+router.get('/media/:messageId', async (req, res) => {
+  const { rows: [m] } = await query(
+    `SELECT id, media_ref, media_mime, media_name FROM messages WHERE id = $1 AND client_id = $2 AND direction = 'inbound' AND media_ref IS NOT NULL`,
+    [req.params.messageId, req.clientId],
+  );
+  if (!m) return res.status(404).json({ error: 'File not found.' });
+  const key = `inbox/${m.id}`;
+  let file = await blobs().get(key);
+  if (!file) {
+    const meta = metaProvider();
+    if (meta.missingConfig().length) return res.status(404).json({ error: 'WhatsApp is not connected, so the file cannot be fetched.' });
+    try {
+      file = await meta.downloadMedia(m.media_ref);
+    } catch (e) {
+      return res.status(410).json({ error: `${e.message} Open WhatsApp on the shop phone to see it.` });
+    }
+    if (file.bytes.length <= MAX_KEEP) await blobs().put(key, file.bytes, file.mime);
+  }
+  res.set('Content-Type', file.mime || m.media_mime || 'application/octet-stream');
+  res.set('Cache-Control', 'private, max-age=86400');
+  if (m.media_name) res.set('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(m.media_name)}`);
+  res.send(Buffer.from(file.bytes));
 });
 
 // Test mode only: pretend a customer wrote in, so the inbox can be tried without a phone.

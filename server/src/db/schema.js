@@ -238,7 +238,10 @@ ${LOGIN_ATTEMPTS_TABLE}
 // Columns added after the first deploy; db/index.js adds any that an older database lacks.
 export const EXTRA_COLUMNS = {
   // When a message was put back in the queue after Meta's per-person marketing limit (error 131049).
-  messages: [['retried_at', 'TEXT']],
+  // media_type/media_ref/media_mime/media_name: a photo, video, voice note or document a customer sent
+  // (media_ref is Meta's media id; the file is fetched from Meta the first time someone opens it).
+  // media_type 'unsupported': WhatsApp did not pass the message on (view-once photo, poll...).
+  messages: [['retried_at', 'TEXT'], ['media_type', 'TEXT'], ['media_ref', 'TEXT'], ['media_mime', 'TEXT'], ['media_name', 'TEXT']],
   // Meta's daily limit for this number: new customers it may message in 24 hours (-1 = no limit).
   whatsapp_connection: [['daily_limit', 'INTEGER'], ['limit_tier', 'TEXT'], ['limit_checked_at', 'TEXT']],
   // Last time the owner downloaded all the shop's data.

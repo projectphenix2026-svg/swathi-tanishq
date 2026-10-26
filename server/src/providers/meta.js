@@ -197,6 +197,20 @@ export function createMetaProvider(cfg, { fetchImpl = fetch } = {}) {
       };
     },
 
+    /**
+     * A file a customer sent (photo, video, voice note, document), by Meta's media id: { bytes, mime }.
+     * Meta keeps it for about 30 days; downloading it is free.
+     */
+    async downloadMedia(mediaId) {
+      const auth = { headers: { Authorization: `Bearer ${accessToken}` } };
+      const info = await fetchImpl(`https://graph.facebook.com/${graphVersion}/${encodeURIComponent(mediaId)}`, auth);
+      const meta = await info.json().catch(() => ({}));
+      if (!info.ok || !meta.url) throw new ProviderError(`Meta said: ${meta.error?.message || 'this file is no longer available.'}`, { status: info.status });
+      const file = await fetchImpl(meta.url, auth);
+      if (!file.ok) throw new ProviderError('Could not download the file from Meta.', { status: file.status });
+      return { bytes: new Uint8Array(await file.arrayBuffer()), mime: meta.mime_type || file.headers.get('content-type') || 'application/octet-stream' };
+    },
+
     /** X-Hub-Signature-256 is an HMAC of the raw body with the app secret. */
     verifyWebhook(req) {
       const sig = req.get('X-Hub-Signature-256') || '';
@@ -236,12 +250,7 @@ export function createMetaProvider(cfg, { fetchImpl = fetch } = {}) {
               providerMessageId: m.id,
               from: `+${m.from}`,
               profileName: names[m.from] || '',
-              body:
-                m.text?.body ||
-                m.button?.text ||
-                m.interactive?.button_reply?.title ||
-                m.interactive?.list_reply?.title ||
-                `[${m.type} message]`,
+              ...readInbound(m),
               mediaUrl: null,
             });
           }
@@ -250,6 +259,33 @@ export function createMetaProvider(cfg, { fetchImpl = fetch } = {}) {
       return { statuses, inbound, templates };
     },
   };
+}
+
+const MEDIA_TYPES = new Set(['image', 'video', 'audio', 'document', 'sticker']);
+
+/**
+ * One incoming WhatsApp message as { body, media }: the words, and for a photo, video, voice note,
+ * document or sticker Meta's media id (the file is fetched when someone opens it).
+ */
+export function readInbound(m) {
+  if (MEDIA_TYPES.has(m.type)) {
+    const f = m[m.type] || {};
+    return { body: f.caption || '', media: { type: m.type, ref: f.id || null, mime: f.mime_type || null, name: f.filename || null } };
+  }
+  if (m.type === 'location') {
+    const l = m.location || {};
+    const place = [l.name, l.address].filter(Boolean).join(', ');
+    return { body: `Location${place ? `: ${place}` : ''}\nhttps://maps.google.com/?q=${l.latitude},${l.longitude}`, media: null };
+  }
+  if (m.type === 'contacts') {
+    const people = (m.contacts || []).map((c) => [c.name?.formatted_name, c.phones?.[0]?.phone].filter(Boolean).join(' '));
+    return { body: `Contact: ${people.join('; ') || 'shared a contact'}`, media: null };
+  }
+  if (m.type === 'reaction') return { body: m.reaction?.emoji ? `Reacted ${m.reaction.emoji}` : 'Removed a reaction', media: null };
+  const words = m.text?.body || m.button?.text || m.interactive?.button_reply?.title || m.interactive?.list_reply?.title;
+  if (words) return { body: words, media: null };
+  // Unsupported (view-once photos, polls, edited messages...): Meta sends no content.
+  return { body: '', media: { type: 'unsupported', ref: null, mime: null, name: null } };
 }
 
 /** Meta template names: lowercase letters, numbers and underscores. */
