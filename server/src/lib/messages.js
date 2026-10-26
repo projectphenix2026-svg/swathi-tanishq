@@ -56,7 +56,7 @@ export async function retryTomorrow(messageId, errorCode) {
 // "వద్దు" / "नहीं" alone mean "not this offer" (see NOT_NOW_WORDS), not "never message me".
 const STOP_WORDS = [
   'stop', 'unsubscribe', 'stop all', 'opt out', 'optout', 'stop messages', 'dont send', "don't send",
-  'ఆపు', 'ఆపండి', 'ఆపేయండి', 'మెసేజ్‌లు ఆపండి', 'మెసేజ్ లు ఆపండి', 'మెసేజ్‌లు వద్దు', 'మెసేజ్ లు వద్దు', 'పంపకండి', 'aapu', 'apandi', 'aapandi',
+  'ఆపు', 'ఆపండి', 'ఆపేయండి', 'మెసేజ్‌లు ఆపండి', 'మెసేజ్ లు ఆపండి', 'మెసేజ్‌లు వద్దు', 'మెసేజ్ లు వద్దు', 'పంపకండి', 'బంద్', 'బంద్ చేయండి', 'aapu', 'apandi', 'aapandi',
   'बंद', 'बंद करो', 'बंद करें', 'बंद कीजिए', 'रोको', 'मैसेज बंद करो', 'मैसेज मत भेजो', 'मत भेजो', 'मत भेजिए', 'band karo', 'band',
 ];
 const START_WORDS = [
