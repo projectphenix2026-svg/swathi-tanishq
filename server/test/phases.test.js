@@ -13,6 +13,8 @@ import { createSmsProvider, smsParts } from '../src/providers/sms.js';
 import { drain } from '../src/lib/dispatch.js';
 import '../src/lib/sender.js';
 import { runOccasion, addDays, indiaNow, upcoming } from '../src/lib/occasions.js';
+import { everyMinute } from '../src/runtime.js';
+import { vi } from 'vitest';
 import { recordInbound } from '../src/lib/messages.js';
 import { parseVcard, sheetsCsvUrl, parseFile, buildPreview } from '../src/lib/importer.js';
 import { makeOfferCode, cleanPrefix } from '../src/lib/offers.js';
@@ -113,6 +115,27 @@ describe('Phase 2: Meta template submission', () => {
 
 describe('Phase 3: occasions', () => {
   const today = indiaNow().date;
+
+  it('the once-a-minute job sends birthday wishes even when every run starts fresh (as on Cloudflare)', async () => {
+    // 26 Oct 2026, 11:30 in India: a quarter hour, after the 10:00 send time.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-26T06:00:00Z'));
+    try {
+      await contact('Vijay', '+919440900044', { birthday: '1968-10-26' });
+      const t = await template('Happy birthday {{name}}!', { category: 'utility' });
+      await query(
+        `INSERT INTO occasions (client_id, name, kind, days_before, template_id, send_hour, enabled) VALUES ($1, 'Birthday', 'birthday', '[0]', $2, 10, 1)`,
+        [clientId, t.id],
+      );
+      await everyMinute({ send: false });
+      const { rows } = await query("SELECT count(*) AS n FROM messages WHERE occasion_id IS NOT NULL");
+      expect(Number(rows[0].n)).toBe(1);
+      await everyMinute({ send: false }); // the same quarter hour again: nothing new
+      expect(Number((await query("SELECT count(*) AS n FROM messages WHERE occasion_id IS NOT NULL")).rows[0].n)).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   it('sends a birthday greeting on the day, once only', async () => {
     const md = today.slice(5);
