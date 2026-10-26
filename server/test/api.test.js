@@ -244,6 +244,23 @@ describe('API flow', () => {
     expect((await agent.delete(`/api/customers/${id}`)).status).toBe(404);
   });
 
+  it('understands STOP and START in Telugu and Hindi', async () => {
+    const say = (sid, from, body) => request(createApp()).post('/webhooks/twilio').type('form').send({ MessageSid: sid, SmsStatus: 'received', From: `whatsapp:${from}`, Body: body });
+    const state = async (phone) => (await query('SELECT whatsapp_opt_in, opted_out_at FROM contacts WHERE phone = $1', [phone])).rows[0];
+    await say('SMte1', '+919000077701', 'ఆపండి');
+    await say('SMhi1', '+919000077702', 'बंद करो।');
+    expect(await state('+919000077701')).toMatchObject({ whatsapp_opt_in: false });
+    expect((await state('+919000077702')).opted_out_at).toBeTruthy();
+    await say('SMte2', '+919000077701', 'మళ్ళీ పంపండి');
+    expect(await state('+919000077701')).toMatchObject({ whatsapp_opt_in: true, opted_out_at: null });
+    await say('SMte3', '+919000077703', 'వద్దు'); // "not now", not an opt-out
+    expect((await state('+919000077703')).opted_out_at).toBeNull();
+    // Leave the inbox as it was for the tests that follow.
+    await query("DELETE FROM leads WHERE contact_id IN (SELECT id FROM contacts WHERE phone LIKE '+91900007770%')");
+    await query("DELETE FROM messages WHERE contact_id IN (SELECT id FROM contacts WHERE phone LIKE '+91900007770%')");
+    await query("DELETE FROM contacts WHERE phone LIKE '+91900007770%'");
+  });
+
   it('puts customer replies in the inbox, and STOP opts them out', async () => {
     await request(createApp()).post('/webhooks/twilio').type('form').send({
       MessageSid: 'SMin1', SmsStatus: 'received', From: 'whatsapp:+919876543210', Body: 'Is the offer valid on Sunday?', ProfileName: 'Priya',

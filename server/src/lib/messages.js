@@ -52,8 +52,18 @@ export async function retryTomorrow(messageId, errorCode) {
   return (rowCount ?? 0) > 0;
 }
 
-const STOP_WORDS = ['stop', 'unsubscribe', 'stop all', 'opt out', 'optout'];
-const START_WORDS = ['start', 'subscribe', 'opt in', 'unstop'];
+// Opt-out and opt-in replies in English, Telugu and Hindi (also typed in English letters).
+// "వద్దు" / "नहीं" alone mean "not this offer" (see NOT_NOW_WORDS), not "never message me".
+const STOP_WORDS = [
+  'stop', 'unsubscribe', 'stop all', 'opt out', 'optout', 'stop messages', 'dont send', "don't send",
+  'ఆపు', 'ఆపండి', 'ఆపేయండి', 'మెసేజ్‌లు ఆపండి', 'మెసేజ్ లు ఆపండి', 'మెసేజ్‌లు వద్దు', 'మెసేజ్ లు వద్దు', 'పంపకండి', 'aapu', 'apandi', 'aapandi',
+  'बंद', 'बंद करो', 'बंद करें', 'बंद कीजिए', 'रोको', 'मैसेज बंद करो', 'मैसेज मत भेजो', 'मत भेजो', 'मत भेजिए', 'band karo', 'band',
+];
+const START_WORDS = [
+  'start', 'subscribe', 'opt in', 'unstop',
+  'ప్రారంభించు', 'ప్రారంభించండి', 'మళ్ళీ పంపండి', 'మళ్లీ పంపండి', 'మొదలు',
+  'शुरू', 'शुरू करो', 'शुरू करें', 'फिर से भेजो', 'फिर से भेजें', 'shuru', 'shuru karo',
+];
 // Replies that mean "I want this": the customer goes on the hot-lead call list.
 const NOT_NOW_WORDS = ['not now', 'no', 'later', 'not interested', 'ఇప్పుడు కాదు', 'వద్దు', 'अभी नहीं', 'नहीं'];
 
@@ -124,7 +134,7 @@ export async function recordInbound(clientId, { providerMessageId, from, profile
     [clientId, contact.id, provider || getProvider().name, `in:${providerMessageId}`, body, mediaUrl, providerMessageId,
       media?.type || null, media?.ref || null, media?.mime || null, media?.name || null],
   );
-  const word = String(body || '').trim().toLowerCase();
+  const word = String(body || '').trim().toLowerCase().replace(/[!.?।]+$/, '').replace(/\s+/g, ' ');
   if (STOP_WORDS.includes(word)) {
     await query(`UPDATE contacts SET whatsapp_opt_in = 0, sms_opt_in = 0, opted_out_at = ${NOW}, updated_at = ${NOW} WHERE id = $1`, [contact.id]);
   } else if (START_WORDS.includes(word)) {
