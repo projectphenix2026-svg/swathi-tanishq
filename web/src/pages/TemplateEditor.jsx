@@ -5,6 +5,7 @@ import { VARIABLES, extractVariables, render, validateTemplate } from '@shared/t
 import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.js';
 import { Alert, Field, Spinner, useToast } from '../components/ui.jsx';
+import { PhoneInput } from '../components/PhoneInput.jsx';
 import { PhonePreview } from '../components/PhonePreview.jsx';
 import { READY_MESSAGES } from '../lib/ready.js';
 import { PhotoPicker } from '../components/PhotoPicker.jsx';
@@ -347,7 +348,7 @@ export default function TemplateEditor() {
                     </div>
                     <input className="input" maxLength={25} value={b.text} onChange={(e) => setButton(i, { text: e.target.value })} placeholder="Button text" aria-label="Button text" />
                     {b.type === 'url' && <input className="input" value={b.url || ''} onChange={(e) => setButton(i, { url: e.target.value })} inputMode="url" placeholder="https://" aria-label="Website link" />}
-                    {b.type === 'phone' && <input className="input" value={b.phone || ''} onChange={(e) => setButton(i, { phone: e.target.value })} inputMode="tel" placeholder="+91 98765 43210" aria-label="Phone number" />}
+                    {b.type === 'phone' && <PhoneInput value={b.phone || ''} onChange={(v) => setButton(i, { phone: v })} aria-label="Phone number" />}
                     <button type="button" className="icon-btn sm" onClick={() => set({ buttons: t.buttons.filter((_, j) => j !== i) })} aria-label="Remove button"><Trash2 size={16} /></button>
                   </div>
                 ))}

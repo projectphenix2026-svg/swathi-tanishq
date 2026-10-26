@@ -10,6 +10,7 @@ export { parseDate, parseOptIn, sheetsCsvUrl, ImportError };
 
 export const FIELDS = [
   { key: 'name', label: 'Name', synonyms: ['name', 'customer name', 'full name', 'customer', 'client name', 'first name', 'contact name'] },
+  { key: 'country_code', label: 'Country code', synonyms: ['country code', 'isd code', 'isd', 'dial code', 'calling code', 'country calling code'] },
   { key: 'phone', label: 'Phone', synonyms: ['phone', 'mobile', 'mobile number', 'mobile no', 'phone number', 'phone no', 'whatsapp', 'whatsapp number', 'contact', 'contact number', 'cell', 'number', 'ph', 'mob'] },
   { key: 'city', label: 'City', synonyms: ['city', 'town', 'location', 'area', 'place'] },
   { key: 'birthday', label: 'Birthday', synonyms: ['birthday', 'dob', 'date of birth', 'birth date', 'birthdate', 'bday'] },
@@ -131,7 +132,8 @@ function colLetter(i) {
   return s;
 }
 
-const clean = (s) => String(s).toLowerCase().replace(/[_\-.]+/g, ' ').replace(/\s+/g, ' ').trim();
+// "Phone *" and "Name (optional)" read as phone and name.
+const clean = (s) => String(s).toLowerCase().replace(/\((required|mandatory|optional)\)|\*/g, ' ').replace(/[_\-.]+/g, ' ').replace(/\s+/g, ' ').trim();
 
 /** Guesses { field: columnIndex } from header names, falling back to the data itself for the phone column. */
 export function guessMapping(columns, rows = []) {
@@ -180,7 +182,7 @@ export function buildPreview({ rows, mapping }, existingPhones = new Set()) {
   const out = rows.map((r, i) => {
     const get = (key) => (mapping[key] === undefined ? '' : r[mapping[key]]);
     const phoneRaw = get('phone');
-    const phone = normalizePhone(phoneRaw);
+    const phone = normalizePhone(withCountryCode(phoneRaw, get('country_code')));
     const warnings = [];
     const row = {
       row: i + 1,
@@ -220,22 +222,57 @@ export function buildPreview({ rows, mapping }, existingPhones = new Set()) {
   return { rows: out, summary };
 }
 
+/** The phone with the Country code column put in front, unless the phone already has its own +code. */
+export function withCountryCode(phone, code) {
+  const cc = String(code ?? '').replace(/\D/g, '').replace(/^0+/, '');
+  if (!cc || phone === null || phone === undefined || phone instanceof Date) return phone;
+  const raw = String(phone).trim().replace(/\.0+$/, '');
+  if (!raw || /^(\+|00)/.test(raw)) return raw;
+  const digits = raw.replace(/\D/g, '').replace(/^0/, '');
+  // Already starts with the same code and is longer than a bare number (e.g. 919876543210).
+  if (digits.startsWith(cc) && digits.length > 10) return `+${digits}`;
+  return `+${cc}${digits}`;
+}
+
 function cleanText(v) {
   if (v === null || v === undefined) return '';
   if (v instanceof Date) return v.toISOString().slice(0, 10);
   return String(v).replace(/\s+/g, ' ').trim().slice(0, 200);
 }
 
-/** A small sample workbook staff can download, fill in and upload. */
+// The sample's columns: header, required?, what to write, example. "*" marks the required ones.
+export const SAMPLE_COLUMNS = [
+  ['Name', 'Optional (recommended)', 'Customer’s name, so messages greet them by name.', 'Priya Sharma'],
+  ['Country code', 'Optional', 'Digits only, without +. Leave empty for India (91).', '91'],
+  ['Phone *', 'Required', 'Mobile number on WhatsApp, without the country code. 10 digits for India.', '98765 43210'],
+  ['City *', 'Required', 'City or town. If left empty, Sandesh asks for it before adding the customer.', 'Hyderabad'],
+  ['Birthday', 'Optional', 'Day/month/year. For birthday wishes.', '14/02/1992'],
+  ['Anniversary', 'Optional', 'Day/month/year. For anniversary wishes.', '20/11/2016'],
+  ['Last purchase', 'Optional', 'What they bought last.', 'Gold bangles'],
+  ['Interests', 'Optional', 'What they like, separated by commas.', 'Bridal, Gold'],
+  ['WhatsApp opt-in', 'Optional', 'Yes if they agreed to get offers on WhatsApp; otherwise No.', 'Yes'],
+];
+
+/** A small sample workbook staff can download, fill in and upload, with a "How to fill" sheet. */
 export function sampleWorkbook() {
   const rows = [
-    ['Name', 'Phone', 'City', 'Birthday', 'Anniversary', 'Last purchase', 'Interests', 'WhatsApp opt-in'],
-    ['Priya Sharma', '98765 43210', 'Hyderabad', '14/02/1992', '20/11/2016', 'Gold bangles', 'Bridal, Gold', 'Yes'],
-    ['Ravi Kumar', '+91 91234 56789', 'Secunderabad', '03/07/1988', '', 'Diamond ring', 'Diamonds', 'Yes'],
+    SAMPLE_COLUMNS.map((c) => c[0]),
+    ['Priya Sharma', '91', '98765 43210', 'Hyderabad', '14/02/1992', '20/11/2016', 'Gold bangles', 'Bridal, Gold', 'Yes'],
+    ['Ravi Kumar', '91', '91234 56789', 'Secunderabad', '03/07/1988', '', 'Diamond ring', 'Diamonds', 'Yes'],
+    ['Anil Rao', '971', '50 123 4567', 'Dubai', '', '', 'Gold chain', 'Gold', 'Yes'],
   ];
   const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws['!cols'] = [18, 18, 14, 12, 12, 16, 16, 16].map((wch) => ({ wch }));
+  ws['!cols'] = [18, 13, 16, 14, 12, 12, 16, 16, 16].map((wch) => ({ wch }));
+  const help = XLSX.utils.aoa_to_sheet([
+    ['How to fill the Customers sheet'],
+    ['Columns marked * (Phone and City) are required. Keep the first row (the column names) as it is.'],
+    [],
+    ['Column', 'Required?', 'What to write', 'Example'],
+    ...SAMPLE_COLUMNS,
+  ]);
+  help['!cols'] = [16, 22, 70, 16].map((wch) => ({ wch }));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Customers');
+  XLSX.utils.book_append_sheet(wb, help, 'How to fill');
   return XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
 }

@@ -5,6 +5,7 @@ import { VARIABLES, extractVariables, valuesFor } from '@shared/template.js';
 import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.js';
 import { Alert, Field, Modal, Pic, Skeleton, Spinner, useToast } from '../components/ui.jsx';
+import { PhoneInput } from '../components/PhoneInput.jsx';
 import { Highlighted, PhonePreview } from '../components/PhonePreview.jsx';
 import { dateOnly, num, plural } from '../lib/format.js';
 import { READY_WISHES } from '../lib/ready.js';
@@ -495,7 +496,7 @@ function OccasionEditor({ initial, templates, setTemplates, businessName, shop, 
               <div className="sd-test">
                 <b>Send me a test</b>
                 <div className="row wrap" style={{ gap: 8 }}>
-                  <input className="input" style={{ maxWidth: 220 }} inputMode="tel" placeholder="Your WhatsApp number" value={testPhone} onChange={(e) => setTestPhone(e.target.value)} aria-label="Your WhatsApp number" />
+                  <PhoneInput placeholder="Your WhatsApp number" value={testPhone} onChange={setTestPhone} aria-label="Your WhatsApp number" />
                   <button type="button" className="btn" onClick={sendTest} disabled={testing || !testPhone.trim()}>{testing ? <Spinner /> : <><Send size={15} />Send test</>}</button>
                 </div>
               </div>

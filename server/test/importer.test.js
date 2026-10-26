@@ -70,8 +70,18 @@ describe('Excel import', () => {
 
   it('round-trips the downloadable sample file', () => {
     const { rows, summary } = buildPreview(parseFile(sampleWorkbook(), 'customers-sample.xlsx'));
-    expect(summary.ok).toBe(2);
-    expect(rows[0]).toMatchObject({ name: 'Priya Sharma', city: 'Hyderabad', anniversary: '2016-11-20', opt_in: true });
+    expect(summary.ok).toBe(3);
+    expect(rows[0]).toMatchObject({ name: 'Priya Sharma', phone: '+919876543210', city: 'Hyderabad', anniversary: '2016-11-20', opt_in: true });
+    expect(rows[2]).toMatchObject({ name: 'Anil Rao', phone: '+971501234567' });
+    expect(XLSX.read(sampleWorkbook(), { type: 'array' }).SheetNames).toEqual(['Customers', 'How to fill']);
+  });
+
+  it('puts a separate Country code column in front of the phone, and reads "Phone *" as the phone', () => {
+    const grid = { columns: ['Name', 'Country code', 'Phone *', 'City *'], rows: [['A', '91', '98765 43210', 'X'], ['B', '+971', '50 123 4567', 'Y'], ['C', '', '91234 56789', 'Z'], ['D', '1', '+44 7700 900123', 'W']] };
+    const mapping = guessMapping(grid.columns, grid.rows);
+    expect(mapping).toMatchObject({ name: 0, country_code: 1, phone: 2, city: 3 });
+    const { rows } = buildPreview({ ...grid, mapping });
+    expect(rows.map((r) => r.phone)).toEqual(['+919876543210', '+971501234567', '+919123456789', '+447700900123']);
   });
 });
 

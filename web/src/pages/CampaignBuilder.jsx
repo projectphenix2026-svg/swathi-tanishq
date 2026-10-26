@@ -5,6 +5,7 @@ import { VARIABLES, extractVariables, render, valuesFor } from '@shared/template
 import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.js';
 import { Alert, Avatar, Field, Pic, Spinner, useToast } from '../components/ui.jsx';
+import { PhoneInput } from '../components/PhoneInput.jsx';
 import { Highlighted, PhonePreview } from '../components/PhonePreview.jsx';
 import { PhotoPicker } from '../components/PhotoPicker.jsx';
 import { VideoPicker } from '../components/VideoPicker.jsx';
@@ -508,7 +509,7 @@ function TestSend({ template, variables, previewAs, channel }) {
         <b>Send a test to my phone</b>
         <span className="subtle">You get exactly what {previewAs?.name || 'the customer'} will get. Costs one message.</span>
         <div className="row wrap" style={{ gap: 8 }}>
-          <input id="test-phone" className="input" style={{ maxWidth: 220 }} inputMode="tel" autoComplete="tel" placeholder="Your WhatsApp number" value={phoneNo} onChange={(e) => setPhoneNo(e.target.value)} aria-label="Your WhatsApp number" />
+          <PhoneInput id="test-phone" autoComplete="tel" placeholder="Your WhatsApp number" value={phoneNo} onChange={setPhoneNo} aria-label="Your WhatsApp number" />
           <button className="btn" onClick={go} disabled={busy || !phoneNo.trim() || !template}>{busy ? <Spinner /> : 'Send test'}</button>
         </div>
         {sent && <TestOutcome sent={sent} />}
