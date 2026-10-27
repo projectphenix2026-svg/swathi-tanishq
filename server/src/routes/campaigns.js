@@ -13,6 +13,7 @@ import { requireLevel } from './auth.js';
 import { atLeast } from '../lib/roles.js';
 import { refreshProvider, testProvider } from '../lib/whatsapp-connection.js';
 import { sendingVersion } from '../lib/template-approval.js';
+import { sendingPaused } from '../lib/number-status.js';
 
 const canEdit = requireLevel('manager');
 
@@ -93,6 +94,9 @@ async function sendableTemplate(clientId, templateId, channel = 'whatsapp', prov
     const missing = getSmsProvider().missingConfig();
     if (missing.length) return { error: `SMS sending is not set up yet. Missing: ${missing.join(', ')}.` };
     return { t };
+  }
+  if (await sendingPaused()) {
+    return { error: 'WhatsApp sending is paused: the shop’s number is disconnected from Meta. Reconnect it, then press “I’ve reconnected” in the red bar at the top.' };
   }
   const missingConfig = provider.missingConfig();
   if (missingConfig.length) return { error: `Sending is not set up yet. Missing: ${missingConfig.join(', ')}.` };

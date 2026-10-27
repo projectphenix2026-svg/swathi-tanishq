@@ -48,9 +48,11 @@ export function Layout() {
 
   // Replies badge = chats with unread messages + new "Interested" customers: the same two numbers
   // shown on the Chats and Interested tabs, so they always add up.
+  const [paused, setPaused] = useState(null);
   const refreshCounts = useCallback(() =>
-    Promise.all([api('/api/inbox/unread-count'), api('/api/leads?status=new')])
-      .then(([i, l]) => {
+    Promise.all([api('/api/inbox/unread-count'), api('/api/leads?status=new'), api('/api/dashboard/sending').catch(() => ({ paused: null }))])
+      .then(([i, l, s]) => {
+        setPaused(s.paused || null);
         const chats = Number(i.chats ?? i.unread) || 0;
         const leads = Number(l.counts?.new) || 0;
         setCounts({ unread: chats, leads, replies: chats + leads });
@@ -106,7 +108,7 @@ export function Layout() {
             <button className="icon-btn" onClick={() => setSheet(true)} aria-label={t('Menu')} aria-haspopup="dialog"><Menu size={21} /></button>
           </span>
         </header>
-        <ModeBar settings={settings} />
+        <ModeBar settings={settings} paused={paused} onResumed={refreshCounts} />
         <Outlet context={{ counts, refreshCounts }} />
       </div>
       {welcome && settings && <Welcome user={user} testMode={settings.provider.name === 'mock'} onClose={() => setWelcome(false)} />}
