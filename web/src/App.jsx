@@ -34,20 +34,58 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.language]);
 
-  const loadSettings = useCallback(() => api('/api/dashboard/settings').then(setSettings).catch(() => {}), []);
+  // Settings drive every screen, so a failed load (Wi-Fi blip, laptop waking up, slow server start)
+  // is tried again a few times instead of leaving screens blank until the page is reloaded.
+  const loadSettings = useCallback(async () => {
+    for (let i = 0; i < 4; i++) {
+      try {
+        setSettings(await api('/api/dashboard/settings'));
+        return;
+      } catch (e) {
+        if (e.status === 401 || e.status === 403) return;
+        await new Promise((r) => setTimeout(r, 2000 * (i + 1)));
+      }
+    }
+  }, []);
 
   // Not signed in -> login page; no answer from the server -> a message with Try again.
   const [startError, setStartError] = useState(null);
-  const checkLogin = useCallback(() => {
+  // Asked twice before "Try again" shows: the first request after the server has been idle is slow.
+  const checkLogin = useCallback(async () => {
     setStartError(null);
-    api('/api/auth/me')
-      .then((r) => {
+    for (let i = 0; i < 2; i++) {
+      try {
+        const r = await api('/api/auth/me', { timeout: 15000 });
         setUser(r.user);
         loadSettings();
-      })
-      .catch((e) => (e.status === 401 || e.status === 403 ? setUser(null) : setStartError(e.message)));
+        return;
+      } catch (e) {
+        if (e.status === 401 || e.status === 403) {
+          setUser(null);
+          return;
+        }
+        if (i === 1) setStartError(e.message);
+      }
+    }
   }, [loadSettings]);
-  useEffect(() => checkLogin(), [checkLogin]);
+  useEffect(() => {
+    checkLogin();
+  }, [checkLogin]);
+
+  // Back on the tab, or back online, after a long time: load whatever did not load.
+  useEffect(() => {
+    const again = () => {
+      if (document.visibilityState === 'hidden') return;
+      if (user === undefined && startError) checkLogin();
+      else if (user && !settings) loadSettings();
+    };
+    document.addEventListener('visibilitychange', again);
+    window.addEventListener('online', again);
+    return () => {
+      document.removeEventListener('visibilitychange', again);
+      window.removeEventListener('online', again);
+    };
+  }, [user, settings, startError, checkLogin, loadSettings]);
 
   useEffect(() => {
     setUnauthorizedHandler(() => {

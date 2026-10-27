@@ -129,7 +129,36 @@ export async function initDb({ memory = false, d1 = null, file } = {}) {
   return impl;
 }
 
+/** A short fingerprint of the database layout this code expects (tables and added columns). */
+function schemaVersion() {
+  const text = SCHEMA + CONNECTION_TABLE + MEDIA_TABLE + DATES_TABLE + DATES_INDEX + LOGIN_ATTEMPTS_TABLE + JSON.stringify(EXTRA_COLUMNS);
+  let h = 5381;
+  for (let i = 0; i < text.length; i++) h = ((h * 33) ^ text.charCodeAt(i)) >>> 0;
+  return `${text.length}-${h.toString(36)}`;
+}
+
+/**
+ * Makes sure the tables and columns exist. Checking them all takes about 20 database calls, which
+ * made the first request after Cloudflare starts a fresh copy take ~6 seconds; once a layout has
+ * been checked its fingerprint is saved, and later starts only read the fingerprint.
+ */
 async function ensureSchema() {
+  const version = schemaVersion();
+  try {
+    const { rows: [r] } = await impl.query("SELECT value FROM app_meta WHERE key = 'schema'");
+    if (r?.value === version) return;
+  } catch {
+    /* no fingerprint yet */
+  }
+  await checkSchema();
+  await impl.query('CREATE TABLE IF NOT EXISTS app_meta (key TEXT PRIMARY KEY, value TEXT)');
+  await impl.query(
+    "INSERT INTO app_meta (key, value) VALUES ('schema', $1) ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+    [version],
+  );
+}
+
+async function checkSchema() {
   let ready = false;
   try {
     await impl.query('SELECT 1 FROM leads LIMIT 1');
