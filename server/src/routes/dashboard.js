@@ -1,4 +1,5 @@
 import { savedMetaProvider } from '../lib/whatsapp-connection.js';
+import { sendingPaused } from '../lib/number-status.js';
 import express from 'express';
 import { query, indiaStartOf, ago } from '../db/index.js';
 import { config } from '../config.js';
@@ -187,6 +188,11 @@ async function homeInsights(clientId, period) {
     account: { ...acct, dailyLimit: acct.daily_limit ?? (acct.live ? config.dailyLimit : null) },
   };
 }
+
+// Whether WhatsApp sending is paused because the number is disconnected (every screen checks this).
+router.get('/sending', async (req, res) => {
+  res.json({ paused: await sendingPaused() });
+});
 
 // Settings the screens need: which provider, cost per message, sandbox hints, limits.
 router.get('/settings', async (req, res) => {
