@@ -7,3 +7,8 @@
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
+
+# Only the WhatsApp reconnect page loads Facebook's script (Meta's pop-up).
+/connect-whatsapp*
+  ! Content-Security-Policy
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://connect.facebook.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://*.facebook.com https://*.facebook.net; frame-src https://*.facebook.com https://facebook.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests

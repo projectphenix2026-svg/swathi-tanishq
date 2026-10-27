@@ -7,7 +7,7 @@ import { seal } from '../lib/secretbox.js';
 import { checkMeta, loadConnection, refreshProvider } from '../lib/whatsapp-connection.js';
 import { requireLevel } from './auth.js';
 import { removeSamples } from '../lib/samples.js';
-import { resumeSending } from '../lib/number-status.js';
+import { afterBusinessAppSignup, resumeSending } from '../lib/number-status.js';
 
 const router = express.Router();
 router.use(requireLevel('owner'));
@@ -99,6 +99,35 @@ router.post('/connect', async (req, res) => {
 // "I've reconnected": carry on sending. If Meta still refuses, the next send pauses again.
 router.post('/resume', async (req, res) => {
   res.json({ ok: true, requeued: await resumeSending() });
+});
+
+// For the "Reconnect with the WhatsApp Business app" page (Meta's QR pop-up).
+router.get('/signup', async (req, res) => {
+  const { rows: [c] } = await query('SELECT * FROM whatsapp_connection WHERE client_id = $1', [req.clientId]);
+  res.json({
+    appId: config.meta.appId,
+    configId: config.meta.signupConfigId,
+    graphVersion: config.meta.graphVersion,
+    phone: c?.display_phone || null,
+    phoneNumberId: c?.phone_number_id || '',
+    wabaId: c?.waba_id || '',
+    paused: c?.disconnected_at ? { since: c.disconnected_at, code: c.disconnect_code } : null,
+  });
+});
+
+// Meta's pop-up finished. Only the number already saved here is reconnected; a different
+// number or account must be connected with "Change details" (it needs its own key).
+router.post('/business-app', async (req, res) => {
+  const phoneNumberId = digits(req.body?.phoneNumberId);
+  const wabaId = digits(req.body?.wabaId);
+  const c = await loadConnection();
+  if (!c?.token) return res.status(400).json({ error: 'Connect the WhatsApp account in Settings first.' });
+  if ((phoneNumberId && phoneNumberId !== c.phone_number_id) || (wabaId && wabaId !== c.waba_id)) {
+    return res.status(409).json({
+      error: `Meta connected a different number or account (phone number ID ${phoneNumberId || '?'}, account ${wabaId || '?'}) from the one saved in Sandesh (${c.phone_number_id}, ${c.waba_id}). Nothing was changed. Send these numbers to the developer.`,
+    });
+  }
+  res.json(await afterBusinessAppSignup(c));
 });
 
 router.post('/live', async (req, res) => {

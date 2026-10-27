@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Reconnect WhatsApp · Sandesh</title>
+  <link rel="icon" href="/brand/favicon.png" />
+  <!-- Meta's "connect your WhatsApp Business app" pop-up (Embedded Signup with coexistence).
+       A page of its own so only this page loads Facebook's script (see pages/_worker.js). -->
+  <style>
+    :root { --brand: #6d1a36; --brand-50: #fbf1f4; --bg: #f7f5f2; --surface: #fff; --text: #1d1a1b; --text-2: #5c5558; --border: #e7e1dc; --ok: #1f7a4d; --ok-bg: #e8f5ee; --bad: #b42318; --bad-bg: #fdecea; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    main { max-width: 640px; margin: 0 auto; padding: 32px 16px 48px; }
+    .head { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+    .head img { width: 40px; height: 40px; border-radius: 10px; }
+    h1 { font-size: 1.35rem; margin: 0; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px; margin-bottom: 16px; }
+    .card h2 { font-size: 1rem; margin: 0 0 8px; }
+    ol { margin: 8px 0 0; padding-left: 20px; display: grid; gap: 6px; }
+    .ids { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-size: 0.92rem; }
+    .ids span:nth-child(odd) { color: var(--text-2); }
+    .num { font-variant-numeric: tabular-nums; }
+    button { font: inherit; font-weight: 600; border: none; border-radius: 10px; padding: 12px 20px; cursor: pointer; }
+    .primary { background: var(--brand); color: #fff; width: 100%; font-size: 1rem; }
+    .primary:disabled { opacity: 0.55; cursor: default; }
+    .msg { border-radius: 10px; padding: 12px 14px; margin-top: 14px; white-space: pre-line; }
+    .msg.ok { background: var(--ok-bg); color: var(--ok); }
+    .msg.bad { background: var(--bad-bg); color: var(--bad); }
+    .msg.info { background: var(--brand-50); color: var(--brand); }
+    .warn { background: var(--bad-bg); color: var(--bad); border-radius: 10px; padding: 10px 14px; font-weight: 600; }
+    a { color: var(--brand); }
+    .subtle { color: var(--text-2); font-size: 0.88rem; }
+    code { font-size: 0.85rem; background: var(--bg); padding: 1px 5px; border-radius: 5px; word-break: break-all; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="head">
+      <img src="/brand/mark.png" alt="" />
+      <div>
+        <h1>Reconnect the shop’s WhatsApp number</h1>
+        <div class="subtle">Keeps the WhatsApp Business app on the shop phone working, and switches Sandesh sending back on.</div>
+      </div>
+    </div>
+
+    <div id="loading" class="card">Loading…</div>
+
+    <div id="login" class="card" hidden>
+      <h2>Log in first</h2>
+      <p>Only the shop owner can do this. <a href="/">Log in to Sandesh</a>, then open this page again.</p>
+    </div>
+
+    <div id="main" hidden>
+      <div class="card">
+        <h2>Number to reconnect</h2>
+        <div class="ids">
+          <span>Number</span><b id="phone" class="num">—</b>
+          <span>Phone number ID</span><span id="pnid" class="num">—</span>
+          <span>WhatsApp account ID</span><span id="waba" class="num">—</span>
+          <span>Status in Sandesh</span><span id="state">—</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Before you start</h2>
+        <ol>
+          <li>The shop phone is next to you, online, with the <b>WhatsApp Business</b> app (not regular WhatsApp) logged in on this number and updated from the Play Store.</li>
+          <li>You are logged in to Facebook as an admin of the Tanishq Warangal business.</li>
+        </ol>
+        <h2 style="margin-top:14px">In Meta’s pop-up</h2>
+        <ol>
+          <li>Choose the <b>existing</b> business and the <b>existing</b> WhatsApp account <b class="num" id="waba2">—</b>. Do not create a new one.</li>
+          <li>Choose <b>connect your existing WhatsApp Business app</b> and enter the shop number.</li>
+          <li>Scan the QR code with the WhatsApp Business app on the shop phone, as the pop-up shows.</li>
+          <li>Share chat history if asked (either answer is fine), then finish.</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <div id="noconfig" class="warn" hidden>This page is not set up yet (Meta app or configuration ID missing). Ask the developer.</div>
+        <button id="go" class="primary" disabled>Open Meta’s pop-up</button>
+        <div id="out" class="msg" hidden></div>
+        <p class="subtle" style="margin:12px 0 0">If the pop-up does not open, allow pop-ups for this site and try again. <a href="/settings#go-live">Back to Settings</a></p>
+      </div>
+    </div>
+  </main>
+  <script src="/connect-whatsapp.js"></script>
+</body>
+</html>

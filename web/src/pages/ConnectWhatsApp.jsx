@@ -1,7 +1,7 @@
 // Owner-only: connect the shop's own WhatsApp (Meta) account, check it, and switch real sending on.
 // The key is sent once to the server, stored encrypted there, and never shown again.
 import { useEffect, useState } from 'react';
-import { Check, Copy, Eye, EyeOff, Link2, Power, RefreshCw, Trash2 } from 'lucide-react';
+import { Check, Copy, Eye, EyeOff, Link2, Power, QrCode, RefreshCw, Trash2 } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.js';
 import { Alert, Field, Pic, Spinner, useToast } from '../components/ui.jsx';
@@ -110,6 +110,7 @@ export function ConnectWhatsApp() {
               </span>
             </div>
             <div className="row wrap" style={{ gap: 8 }}>
+              <a className="btn" href="/connect-whatsapp"><QrCode size={16} />Reconnect with WhatsApp Business app</a>
               <button className="btn" onClick={() => setEditing((x) => !x)}><RefreshCw size={16} />Change details</button>
               <button className="btn ghost danger" onClick={disconnect} disabled={busy === 'remove'}><Trash2 size={16} />Disconnect</button>
             </div>
