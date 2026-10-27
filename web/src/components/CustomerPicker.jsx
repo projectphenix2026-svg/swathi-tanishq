@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 import { Search, X } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { Avatar, Spinner } from './ui.jsx';
+import { TagPicker } from './TagPicker.jsx';
 import { ago, num, phone, plural } from '../lib/format.js';
 
 const REASON = {
@@ -38,7 +39,8 @@ export function CustomersStep({ t, filters, setFilters, pick, setPick, templateI
   const toggleIn = (arr, v) => (arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
   const ticked = (id) => (pick.only ? pick.ids.includes(id) : !pick.ids.includes(id));
   const tick = (id) => setPick((p) => ({ ...p, ids: toggleIn(p.ids, id) }));
-  const anyFilter = filters.cities.length || filters.tags.length || filters.search;
+  const anyFilter = filters.cities.length || filters.tags.length || filters.notTags?.length || filters.search;
+  const tagOptions = summary?.tags || [];
   const leftOut = preview ? preview.matched - preview.sendable : 0;
 
   return (
@@ -57,16 +59,22 @@ export function CustomersStep({ t, filters, setFilters, pick, setPick, templateI
             {c.city} <span className="n">{num(c.count)}</span>
           </button>
         ))}
-        {summary?.tags.filter((x) => !['live-check', 'test-phone'].includes(x.tag)).map((x) => (
-          <button key={x.tag} type="button" className={`chip ${filters.tags.includes(x.tag) ? 'on' : ''}`} onClick={() => set({ tags: toggleIn(filters.tags, x.tag) })}>
-            {x.tag} <span className="n">{num(x.count)}</span>
-          </button>
-        ))}
         <div className="input-icon filter-search">
           <Search size={15} />
           <input id="likes" className="input" placeholder="Bought or likes, e.g. bridal" value={filters.search} onChange={(e) => set({ search: e.target.value })} />
         </div>
-        {anyFilter ? <button className="btn ghost sm" onClick={() => set({ cities: [], tags: [], search: '' })}><X size={14} />Clear filters</button> : null}
+        {anyFilter ? <button className="btn ghost sm" onClick={() => set({ cities: [], tags: [], tagMode: 'any', notTags: [], search: '' })}><X size={14} />Clear filters</button> : null}
+      </div>
+
+      <div className="tag-row">
+        <span className="tag-filter"><TagPicker value={filters.tags} onChange={(tags) => set({ tags })} options={tagOptions} placeholder="Customers with tags…" label="Customers with these tags" compact /></span>
+        {filters.tags.length > 1 && (
+          <div className="seg" role="group" aria-label="Match">
+            <button type="button" className={filters.tagMode !== 'all' ? 'on' : ''} onClick={() => set({ tagMode: 'any' })}>Any of these</button>
+            <button type="button" className={filters.tagMode === 'all' ? 'on' : ''} onClick={() => set({ tagMode: 'all' })}>All of these</button>
+          </div>
+        )}
+        <span className="tag-filter"><TagPicker value={filters.notTags || []} onChange={(notTags) => set({ notTags })} options={tagOptions} placeholder="Except tags…" label="Leave out customers with these tags" compact /></span>
       </div>
 
       {preview && (

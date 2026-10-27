@@ -1002,6 +1002,32 @@ a.sent-row:hover { background: var(--surface-2); text-decoration: none; }
 .te-button .phone-input { max-width: none; }
 .te-button:has(.phone-input) { grid-template-columns: auto minmax(0, 0.8fr) minmax(0, 1.4fr) auto; }
 
+/* Tag picker: chips in a field, searchable list with counts. */
+.tp { position: relative; min-width: 0; width: 100%; }
+.tp-field { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 42px; padding: 5px 10px; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--surface); cursor: text; }
+.tp.compact .tp-field { min-height: 36px; padding: 3px 8px; }
+.tp-field.open { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-50); }
+.tp-ic { color: var(--text-3); flex-shrink: 0; }
+.tp-input { flex: 1 1 80px; min-width: 80px; border: none; outline: none; background: transparent; font: inherit; color: var(--text); padding: 4px 0; }
+.tp-chip { display: inline-flex; align-items: center; gap: 4px; background: var(--brand-50); color: var(--brand); border-radius: 999px; padding: 2px 6px 2px 10px; font-size: 0.85rem; font-weight: 600; }
+.tp-chip button { border: none; background: transparent; color: inherit; cursor: pointer; display: inline-flex; padding: 2px; border-radius: 50%; }
+.tp-chip button:hover { background: var(--brand-100); }
+.tp-menu { position: absolute; z-index: 40; top: calc(100% + 4px); left: 0; right: 0; min-width: 240px; max-height: 300px; overflow: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-lg); padding: 6px; }
+.tp-group { font-size: 0.72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); padding: 8px 8px 4px; }
+.tp-opt { width: 100%; display: flex; align-items: center; gap: 10px; padding: 7px 8px; border: none; background: transparent; border-radius: 8px; cursor: pointer; font: inherit; color: var(--text); text-align: left; }
+.tp-opt:hover { background: var(--surface-2); }
+.tp-opt.on { background: var(--brand-50); }
+.tp-box { width: 18px; height: 18px; border: 1.5px solid var(--border-strong); border-radius: 5px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; color: #fff; }
+.tp-opt.on .tp-box { background: var(--brand); border-color: var(--brand); }
+.tp-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tp-new { color: var(--brand); font-weight: 600; }
+.tp-empty { padding: 10px 8px; font-size: 0.88rem; }
+.tag-filter { flex: 1 1 220px; min-width: 200px; max-width: 360px; }
+.tag-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.bulk-tags { min-width: 240px; flex: 1 1 240px; max-width: 360px; }
+.tag-chips { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.tag-row .tag-filter { flex: 1 1 300px; max-width: none; }
+
 /* The red bar when the shop's number is disconnected from Meta. */
 .mode-bar.disconnected { flex-direction: column; align-items: flex-start; gap: 6px; padding-top: 10px; padding-bottom: 10px; }
 .mode-bar.disconnected .link-btn { color: inherit; font-weight: 600; text-decoration: underline; }

@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Plus, X } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { Field } from './ui.jsx';
+import { TagPicker, useTagOptions } from './TagPicker.jsx';
+import { isHiddenTag } from '@shared/tags.js';
 
 // The customer form, one column (required fields first), shared by Add customer and the
 // customer page. Special days are added with buttons; the year is optional (stored as 1904).
@@ -31,6 +33,7 @@ export function customerForm(c = {}) {
     city: c.city || '',
     last_purchase: c.last_purchase || '',
     interests: c.interests || '',
+    tags: (c.tags || []).filter((t) => !isHiddenTag(t)),
     birthday: c.birthday ? String(c.birthday).slice(0, 10) : '',
     anniversary: c.anniversary ? String(c.anniversary).slice(0, 10) : '',
     dates: Array.isArray(c.dates) ? c.dates.map((d) => ({ kind: d.kind, label: d.label || '', date: d.date })) : [],
@@ -50,6 +53,7 @@ function daysOf(f) {
 
 export function CustomerFields({ f, setF, errors = {}, phoneField, smsOn }) {
   const [cities, setCities] = useState([]);
+  const [tagOptions] = useTagOptions();
   useEffect(() => {
     api('/api/customers/summary').then((s) => setCities(s.cities.map((c) => c.city))).catch(() => {});
   }, []);
@@ -120,6 +124,9 @@ export function CustomerFields({ f, setF, errors = {}, phoneField, smsOn }) {
         </div>
         <input id="cust-likes" className="input" style={{ marginTop: 6 }} value={f.interests} onChange={set('interests')} placeholder="Or type, e.g. bangles, temple jewellery" />
       </Field>
+      <Field label="Tags" hint="Pick or type, then Enter. Use them to choose customers when sending, e.g. vip, bridal-2026.">
+        <TagPicker value={f.tags} onChange={(tags) => setF((x) => ({ ...x, tags }))} options={tagOptions} allowNew placeholder="Add tags" />
+      </Field>
       <Field label="Last purchase" hint="Shown in messages as “your …”, e.g. “your gold bangles”.">
         <input id="cust-purchase" className="input" value={f.last_purchase} onChange={set('last_purchase')} placeholder="Gold bangles" />
       </Field>
@@ -175,6 +182,7 @@ export function customerBody(f) {
     city: f.city,
     last_purchase: f.last_purchase,
     interests: f.interests,
+    tags: f.tags,
     birthday: f.birthday || null,
     anniversary: f.anniversary || null,
     dates: f.dates.map((d) => ({ kind: d.kind, label: d.label, date: d.date })),
