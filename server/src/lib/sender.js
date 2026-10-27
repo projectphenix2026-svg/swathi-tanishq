@@ -13,6 +13,7 @@ import { retryTomorrow } from './messages.js';
 import { testProvider } from './whatsapp-connection.js';
 import { offerFile } from './campaigns.js';
 import { sendingVersion } from './template-approval.js';
+import { isDisconnectError, markDisconnected } from './number-status.js';
 
 // WhatsApp errors meaning "this number cannot get WhatsApp": SMS backup is worth trying.
 export const NOT_ON_WHATSAPP = new Set(['63003', '63024', '131026']);
@@ -102,6 +103,16 @@ export async function processSendJob(messageId) {
       [msg.id, providerName, result.providerMessageId, cost, result.status === 'preview' ? 'preview' : 'sent'],
     );
   } catch (err) {
+    // The shop's number is off the WhatsApp API: pause sending and keep this message waiting.
+    if (msg.channel !== 'sms' && isDisconnectError(err)) {
+      await markDisconnected(err.code);
+      await query(
+        `UPDATE messages SET status = 'queued', attempts = 0, error_code = $2,
+                error_message = 'Waiting: the shop’s WhatsApp number is disconnected from Meta.' WHERE id = $1`,
+        [msg.id, String(err.code)],
+      );
+      return { paused: true };
+    }
     if (err.retryable && msg.attempts < config.maxAttempts) {
       await query(
         `UPDATE messages SET status = 'retrying', error_code = $2, error_message = $3,

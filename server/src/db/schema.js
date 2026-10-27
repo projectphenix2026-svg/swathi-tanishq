@@ -243,7 +243,8 @@ export const EXTRA_COLUMNS = {
   // media_type 'unsupported': WhatsApp did not pass the message on (view-once photo, poll...).
   messages: [['retried_at', 'TEXT'], ['media_type', 'TEXT'], ['media_ref', 'TEXT'], ['media_mime', 'TEXT'], ['media_name', 'TEXT']],
   // Meta's daily limit for this number: new customers it may message in 24 hours (-1 = no limit).
-  whatsapp_connection: [['daily_limit', 'INTEGER'], ['limit_tier', 'TEXT'], ['limit_checked_at', 'TEXT']],
+  // disconnected_at: Meta said the number is not on the API (#133010); WhatsApp sending is paused.
+  whatsapp_connection: [['daily_limit', 'INTEGER'], ['limit_tier', 'TEXT'], ['limit_checked_at', 'TEXT'], ['disconnected_at', 'TEXT'], ['disconnect_code', 'TEXT']],
   // Last time the owner downloaded all the shop's data.
   // auto_wishes: which default wishes (birthday, anniversary) were set up once, so a deleted one stays deleted.
   clients: [['last_export_at', 'TEXT'], ['sales_codes', 'INTEGER NOT NULL DEFAULT 0'], ['auto_wishes', 'TEXT'],

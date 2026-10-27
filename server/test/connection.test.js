@@ -16,7 +16,7 @@ let owner;
 let manager;
 
 // Fake Meta Graph API: answers like Meta for good details, or with an error.
-function fakeMeta({ fail, refuseTemplates } = {}) {
+function fakeMeta({ fail, refuseTemplates, notRegistered } = {}) {
   const calls = [];
   globalThis.fetch = async (url, init = {}) => {
     calls.push({ url: String(url), method: init.method || 'GET', body: init.body });
@@ -27,7 +27,10 @@ function fakeMeta({ fail, refuseTemplates } = {}) {
       return { ok: true, status: 200, headers: new Headers({ 'content-type': 'image/jpeg' }), arrayBuffer: async () => new Uint8Array([255, 216, 255]).buffer };
     }
     if (String(url).includes('/subscribed_apps')) return json(200, { success: true });
-    if (String(url).endsWith('/555000111/messages')) return json(200, { messages: [{ id: 'wamid.TEST1' }] });
+    if (String(url).endsWith('/555000111/messages')) {
+      if (notRegistered?.on) return json(400, { error: { code: 133010, message: '(#133010) Account not registered' } });
+      return json(200, { messages: [{ id: 'wamid.TEST1' }] });
+    }
     if (refuseTemplates && String(url).endsWith('/message_templates') && init.method === 'POST') {
       return json(400, { error: { code: 100, message: 'Invalid parameter', error_user_msg: 'The video header sample could not be read.' } });
     }
@@ -200,6 +203,37 @@ describe('Connect WhatsApp (owner only)', () => {
     expect((await owner.get(`/api/inbox/media/${r.messageId}`)).status).toBe(200);
     expect(calls.length).toBe(before); // kept: not fetched from Meta again
     expect((await request(createApp()).get(`/api/inbox/media/${r.messageId}`)).status).toBe(401); // staff only
+  });
+
+  it('pauses WhatsApp sending when Meta says the number is not registered (#133010), and resumes', async () => {
+    const clientId = await ensureClient('Test Store');
+    const { rows: [t] } = await query(
+      `INSERT INTO templates (client_id, name, body, status, category, provider_ref, provider_status)
+       VALUES ($1, 'Paused', 'Hello from the shop', 'approved', 'utility', 'paused_t', 'APPROVED') RETURNING *`,
+      [clientId],
+    );
+    const notRegistered = { on: true };
+    const calls = fakeMeta({ notRegistered });
+    resetConnectionCache();
+    const res = await owner.post('/api/campaigns/test').send({ templateId: t.id, phone: '90000 46464' });
+    expect(res.status).toBe(201);
+    await drain();
+    const { rows: [m] } = await query('SELECT id, status, error_code FROM messages WHERE campaign_id = $1', [res.body.campaign.id]);
+    expect(m).toMatchObject({ status: 'queued', error_code: '133010' }); // waiting, not lost
+    const paused = (await owner.get('/api/dashboard/sending')).body.paused;
+    expect(paused).toMatchObject({ code: '133010' });
+    const sendsBefore = calls.filter((c) => c.url.endsWith('/555000111/messages')).length;
+    await drain(); // paused: nothing is tried
+    expect(calls.filter((c) => c.url.endsWith('/555000111/messages')).length).toBe(sendsBefore);
+    const blocked = await owner.post('/api/campaigns/test').send({ templateId: t.id, phone: '90000 46464' });
+    expect(blocked.status).toBe(400);
+    expect(blocked.body.error).toMatch(/disconnected from Meta/);
+
+    notRegistered.on = false; // the shop reconnected the number
+    expect((await owner.post('/api/whatsapp/resume')).status).toBe(200);
+    expect((await owner.get('/api/dashboard/sending')).body.paused).toBeNull();
+    await drain();
+    expect((await query('SELECT status FROM messages WHERE id = $1', [m.id])).rows[0].status).toBe('sent');
   });
 
   it('sends a reply to someone who wrote in on the real WhatsApp for real, even in Test mode', async () => {

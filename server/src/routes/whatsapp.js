@@ -7,6 +7,7 @@ import { seal } from '../lib/secretbox.js';
 import { checkMeta, loadConnection, refreshProvider } from '../lib/whatsapp-connection.js';
 import { requireLevel } from './auth.js';
 import { removeSamples } from '../lib/samples.js';
+import { resumeSending } from '../lib/number-status.js';
 
 const router = express.Router();
 router.use(requireLevel('owner'));
@@ -95,6 +96,11 @@ router.post('/connect', async (req, res) => {
 });
 
 // Switch real sending on or off. Off means test mode: nothing reaches phones.
+// "I've reconnected": carry on sending. If Meta still refuses, the next send pauses again.
+router.post('/resume', async (req, res) => {
+  res.json({ ok: true, requeued: await resumeSending() });
+});
+
 router.post('/live', async (req, res) => {
   const live = Boolean(req.body?.live);
   const { rows: [c] } = await query(

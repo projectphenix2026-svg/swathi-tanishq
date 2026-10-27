@@ -1,5 +1,6 @@
 // Shared start-up and the once-a-minute job, used by Node (index.js) and Cloudflare (worker.js).
 import { config } from './config.js';
+import { checkReconnected } from './lib/number-status.js';
 import { query } from './db/index.js';
 import { createUser } from './routes/auth.js';
 import { getProvider, getSmsProvider } from './providers/index.js';
@@ -45,6 +46,8 @@ export const clockMinute = (now = Date.now()) => Math.floor(now / 60000);
 export async function everyMinute({ send = true, occasions = true } = {}) {
   const minute = clockMinute();
   await refreshProvider().catch((err) => console.warn('[whatsapp] could not read the connection:', err.message));
+  // Paused because the number was disconnected: every 5 minutes, ask Meta whether it is back.
+  if (minute % 5 === 0) await checkReconnected().catch(() => {});
   if (minute % 30 === 0) await refreshDailyLimit().catch(() => {});
   // Templates waiting for Meta's approval: no need to press "Check status".
   if (occasions && minute % 3 === 0) await syncWaitingTemplates().catch((err) => console.warn('[templates]', err.message));

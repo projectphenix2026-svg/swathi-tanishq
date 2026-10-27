@@ -6,6 +6,7 @@
 import { query, NOW } from '../db/index.js';
 import { config } from '../config.js';
 import { pace } from './pacing.js';
+import { sendingPaused } from './number-status.js';
 
 let runner = null;
 let scheduleBackground = (promise) => promise.catch((err) => console.error('[dispatch]', err));
@@ -27,7 +28,9 @@ export function setBackground(fn) {
  */
 export async function processDue({ limit = config.sendBatchSize, concurrency = config.sendConcurrency } = {}) {
   if (!runner) throw new Error('No sender registered');
-  const due = `direction = 'outbound' AND status IN ('queued', 'retrying') AND due_at <= ${NOW}`;
+  // While the shop's number is disconnected from Meta, WhatsApp messages wait (SMS still goes).
+  const paused = await sendingPaused();
+  const due = `direction = 'outbound' AND status IN ('queued', 'retrying') AND due_at <= ${NOW}${paused ? " AND channel = 'sms'" : ''}`;
   const p = await pace();
   let rows;
   if (!p) {
