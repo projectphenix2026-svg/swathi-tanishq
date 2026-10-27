@@ -11,6 +11,7 @@ import { api, apiText } from '../lib/api.js';
 import { Alert, Field, Spinner, useToast } from '../components/ui.jsx';
 import { PhoneInput } from '../components/PhoneInput.jsx';
 import { CustomerFields, customerBody, customerForm } from '../components/CustomerFields.jsx';
+import { TagPicker, useTagOptions } from '../components/TagPicker.jsx';
 import { useAuth } from '../lib/auth.js';
 import { atLeast } from '@shared/roles.js';
 import { num, plural } from '../lib/format.js';
@@ -116,7 +117,7 @@ function FileStep({ onPreview }) {
           <span className="kpi-icon tone-wa" style={{ width: 40, height: 40, borderRadius: 12 }}><FileSpreadsheet size={20} /></span>
           <div>
             <b>Not sure about the columns?</b>
-            <p className="muted" style={{ fontSize: '0.9rem' }}>Phone and City are required (marked * in the sample). A separate Country code column is optional; empty means India (+91). Name, last purchase and interests make messages personal.</p>
+            <p className="muted" style={{ fontSize: '0.9rem' }}>Phone and City are required (marked * in the sample). A separate Country code column is optional; empty means India (+91). A Tags column can hold none, one or several tags, separated by commas. Name, last purchase and interests make messages personal.</p>
           </div>
         </div>
         <button className="btn" onClick={downloadSample}><Download size={18} />Sample Excel file</button>
@@ -235,7 +236,8 @@ function ImportReview({ preview, onBack, onDone, onRemap }) {
   const [confirmed, setConfirmed] = useState(false);
   const [updateExisting, setUpdateExisting] = useState(false);
   const [source, setSource] = useState(preview.source);
-  const [tags, setTags] = useState('');
+  const [tags, setTags] = useState([]);
+  const [tagOptions] = useTagOptions();
   const [defaultCity, setDefaultCity] = useState('');
   const [busy, setBusy] = useState(false);
   const [remapping, setRemapping] = useState(false);
@@ -273,7 +275,7 @@ function ImportReview({ preview, onBack, onDone, onRemap }) {
         setProgress(Math.round((i / toSave.length) * 100));
         const r = await api('/api/customers/import/commit', {
           method: 'POST',
-          body: { rows: toSave.slice(i, i + 500), optIn: { confirmed: optIn || smsOptIn ? confirmed : true, value: optIn, sms: smsOptIn }, updateExisting, source, tags: tags.split(','), defaultCity },
+          body: { rows: toSave.slice(i, i + 500), optIn: { confirmed: optIn || smsOptIn ? confirmed : true, value: optIn, sms: smsOptIn }, updateExisting, source, tags, defaultCity },
           timeout: 120000, // 500 customers at a time can take a while
         });
         total.created += r.created;
@@ -290,7 +292,7 @@ function ImportReview({ preview, onBack, onDone, onRemap }) {
 
   const fields = [
     ['phone', 'Phone number', true], ['country_code', 'Country code'], ['name', 'Name'], ['city', 'City', true], ['last_purchase', 'Last purchase'],
-    ['interests', 'Interests'], ['birthday', 'Birthday'], ['anniversary', 'Anniversary'], ['opt_in', 'Agreed to WhatsApp'],
+    ['interests', 'Interests'], ['tags', 'Tags'], ['birthday', 'Birthday'], ['anniversary', 'Anniversary'], ['opt_in', 'Agreed to WhatsApp'],
   ];
 
   return (
@@ -399,8 +401,8 @@ function ImportReview({ preview, onBack, onDone, onRemap }) {
           </>
         )}
         <div className="form-grid two">
-          <Field label="Add a tag (optional)" hint="Helps you pick this group later, e.g. “diwali-2026”.">
-            <input className="input" value={tags} onChange={(e) => setTags(e.target.value)} />
+          <Field label="Tag everyone in this file (optional)" hint="Added to every customer here, on top of a Tags column in the file, e.g. diwali-2026.">
+            <TagPicker value={tags} onChange={setTags} options={tagOptions} allowNew placeholder="Add tags" />
           </Field>
           {s.exists > 0 && (
             <label className="check" style={{ alignSelf: 'center' }}>

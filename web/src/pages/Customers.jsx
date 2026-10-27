@@ -10,6 +10,8 @@ import { atLeast } from '@shared/roles.js';
 import { downloadSample } from '../lib/sample.js';
 import { Avatar, Empty, Modal, OptInBadge, Skeleton, Spinner, useToast } from '../components/ui.jsx';
 import { CustomerFields, customerBody, customerForm, dayText } from '../components/CustomerFields.jsx';
+import { TagPicker, useTagOptions } from '../components/TagPicker.jsx';
+import { isHiddenTag } from '@shared/tags.js';
 import { dateOnly, num, phone } from '../lib/format.js';
 
 const FILTERS = [
@@ -41,7 +43,11 @@ export default function Customers() {
   const sortParam = { name: ['name', 'name_desc'], city: ['city', 'city_desc'], added: ['oldest', 'recent'] }[sort.key]?.[sort.dir === 'asc' ? 0 : 1] || 'recent';
   // Ticked customers (on this page) and what to do with them.
   const [sel, setSel] = useState(new Set());
-  const [groupName, setGroupName] = useState('');
+  const [bulkTags, setBulkTags] = useState([]);
+  // Filter by tags: any of them, or all of them.
+  const [tagFilter, setTagFilter] = useState(() => (urlParams.get('tag') ? [urlParams.get('tag')] : []));
+  const [tagMode, setTagMode] = useState('any');
+  const [tagOptions, reloadTags] = useTagOptions();
   const [askBulk, setAskBulk] = useState(null);
   const canDelete = atLeast(appSettings?.role, 'manager');
   const pageIds = (data?.customers || []).map((c) => c.id);
@@ -49,12 +55,14 @@ export default function Customers() {
   async function bulk(action, extra = {}) {
     try {
       const r = await api('/api/customers/bulk', { method: 'POST', body: { action, ids: [...sel], ...extra } });
-      const what = { delete: 'deleted', tag: `added to “${extra.tag}”`, untag: `removed from “${extra.tag}”`, 'no-consent': 'marked as not agreed' }[action];
+      const names = (extra.tags || []).join(', ');
+      const what = { delete: 'deleted', tag: `tagged ${names}`, untag: `untagged ${names}`, 'no-consent': 'marked as not agreed' }[action];
       toastList(`${num(r.done)} customer${r.done === 1 ? '' : 's'} ${what}`);
       setSel(new Set());
       setAskBulk(null);
-      setGroupName('');
+      setBulkTags([]);
       reload();
+      reloadTags();
     } catch (e) {
       toastList(e.message, 'bad');
     }
@@ -67,6 +75,7 @@ export default function Customers() {
       { label: 'Bought or likes', value: (c) => c.last_purchase || c.interests },
       { label: 'Birthday', value: (c) => c.birthday },
       { label: 'Anniversary', value: (c) => c.anniversary },
+      { label: 'Tags', value: (c) => (c.tags || []).filter((t) => !isHiddenTag(t)).join(', ') },
       { label: 'WhatsApp', value: (c) => (c.opted_out_at ? 'Said STOP' : c.whatsapp_opt_in ? 'Agreed' : 'Not agreed') },
     ], ticked);
   }
@@ -74,7 +83,7 @@ export default function Customers() {
   const reload = () => {
     api('/api/customers/summary').then(setSummary).catch(() => {});
     api('/api/customers/samples').then((r) => setSamples(r.samples)).catch(() => {});
-    const params = new URLSearchParams({ filter, q, limit: PAGE, offset: page * PAGE, sort: sortParam });
+    const params = new URLSearchParams({ filter, q, limit: PAGE, offset: page * PAGE, sort: sortParam, tags: tagFilter.join(','), tagMode });
     api(`/api/customers?${params}`).then(setData).catch(() => setData({ customers: [], total: 0 }));
   };
 
@@ -82,10 +91,10 @@ export default function Customers() {
     const t = setTimeout(reload, q ? 250 : 0);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter, q, page, sortParam]);
+  }, [filter, q, page, sortParam, tagFilter, tagMode]);
 
-  useEffect(() => setPage(0), [filter, q, sortParam]);
-  useEffect(() => setSel(new Set()), [filter, q, page]);
+  useEffect(() => setPage(0), [filter, q, sortParam, tagFilter, tagMode]);
+  useEffect(() => setSel(new Set()), [filter, q, page, tagFilter, tagMode]);
 
   async function samplesAction(add) {
     try {
@@ -144,11 +153,11 @@ export default function Customers() {
               <button className="btn sm" onClick={() => setAskBulk(null)}>Keep</button>
               <button className="btn sm danger" onClick={() => bulk('delete')}>Yes, delete</button>
             </>
-          ) : askBulk === 'group' ? (
+          ) : askBulk === 'tags' ? (
             <>
-              <input className="input sm" style={{ width: 170 }} placeholder="Group, e.g. bridal-2026" value={groupName} onChange={(e) => setGroupName(e.target.value)} autoFocus aria-label="Group name" />
-              <button className="btn sm primary" disabled={!groupName.trim()} onClick={() => bulk('tag', { tag: groupName })}>Add to group</button>
-              <button className="btn sm ghost" disabled={!groupName.trim()} onClick={() => bulk('untag', { tag: groupName })}>Remove from group</button>
+              <span className="bulk-tags"><TagPicker value={bulkTags} onChange={setBulkTags} options={tagOptions} allowNew compact placeholder="Pick or type tags" /></span>
+              <button className="btn sm primary" disabled={!bulkTags.length} onClick={() => bulk('tag', { tags: bulkTags })}>Add tags</button>
+              <button className="btn sm ghost" disabled={!bulkTags.length} onClick={() => bulk('untag', { tags: bulkTags })}>Remove tags</button>
               <button className="btn sm ghost" onClick={() => setAskBulk(null)}>Back</button>
             </>
           ) : askBulk === 'no-consent' ? (
@@ -160,7 +169,7 @@ export default function Customers() {
           ) : (
             <>
               <button className="btn sm primary" onClick={() => navigate(`/campaigns/new?ids=${[...sel].join(',')}`)}><Send size={15} />Send a message</button>
-              <button className="btn sm" onClick={() => setAskBulk('group')}><Tag size={15} />Group</button>
+              <button className="btn sm" onClick={() => setAskBulk('tags')}><Tag size={15} />Tags</button>
               <button className="btn sm" onClick={download}><Download size={15} />Download</button>
               <button className="btn sm ghost" onClick={() => setAskBulk('no-consent')}><Ban size={15} />Not agreed</button>
               {canDelete && <button className="btn sm ghost danger" onClick={() => setAskBulk('delete')}><Trash2 size={15} />Delete</button>}
@@ -181,6 +190,15 @@ export default function Customers() {
               </button>
             ))}
           </div>
+          <div className="row wrap" style={{ gap: 8, flex: '1 1 320px', alignItems: 'center' }}>
+            <span className="tag-filter"><TagPicker value={tagFilter} onChange={setTagFilter} options={tagOptions} placeholder="Filter by tags" compact /></span>
+            {tagFilter.length > 1 && (
+              <div className="seg" role="group" aria-label="Match">
+                <button type="button" className={tagMode === 'any' ? 'on' : ''} onClick={() => setTagMode('any')}>Any of these</button>
+                <button type="button" className={tagMode === 'all' ? 'on' : ''} onClick={() => setTagMode('all')}>All of these</button>
+              </div>
+            )}
+          </div>
           </div>
           {!data ? (
             <div className="stack" style={{ padding: 20 }}>{[0, 1, 2, 3].map((i) => <Skeleton key={i} h={36} />)}</div>
@@ -194,7 +212,7 @@ export default function Customers() {
                     <tr>
                       <th className="tick-col"><input type="checkbox" aria-label="Select all on this page" checked={allTicked(sel, pageIds)} onChange={(e) => setSel(e.target.checked ? new Set([...sel, ...pageIds]) : new Set([...sel].filter((id) => !pageIds.includes(id))))} /></th>
                       <SortTh label="Customer" k="name" sort={sort} toggle={toggle} /><th>Phone</th><SortTh label="City" k="city" sort={sort} toggle={toggle} />
-                      <th>Special days</th><th>WhatsApp</th><SortTh label="Added" k="added" sort={sort} toggle={toggle} />
+                      <th>Tags</th><th>Special days</th><th>WhatsApp</th><SortTh label="Added" k="added" sort={sort} toggle={toggle} />
                     </tr>
                   </thead>
                   <tbody>
@@ -212,6 +230,7 @@ export default function Customers() {
                         </td>
                         <td className="num">{phone(c.phone)}</td>
                         <td>{c.city || <span className="subtle">—</span>}</td>
+                        <td><TagChips tags={c.tags} /></td>
                         <td className="subtle">{specialDays(c) || '—'}</td>
                         <td><OptInBadge c={c} /></td>
                         <td className="subtle">{dateOnly(c.created_at)}</td>
@@ -246,8 +265,20 @@ export default function Customers() {
           )}
         </div>
       </div>
-      {editing && <EditCustomer c={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); reload(); }} />}
+      {editing && <EditCustomer c={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); reload(); reloadTags(); }} />}
     </div>
+  );
+}
+
+/** A customer's tags in the list: the first three, then "+2". */
+function TagChips({ tags }) {
+  const shown = (tags || []).filter((t) => !isHiddenTag(t));
+  if (!shown.length) return <span className="subtle">—</span>;
+  return (
+    <span className="tag-chips">
+      {shown.slice(0, 3).map((t) => <span key={t} className="badge neutral">{t}</span>)}
+      {shown.length > 3 && <span className="subtle">+{shown.length - 3}</span>}
+    </span>
   );
 }
 
@@ -349,7 +380,6 @@ function EditCustomer({ c, onClose, onSaved }) {
           </div>
         </div>
         <CustomerFields f={f} setF={setF} errors={errors} smsOn={settings?.sms?.live} />
-        {c.tags?.length > 0 && <div className="pill-list">{c.tags.map((t) => <span key={t} className="badge neutral">{t}</span>)}</div>}
       </div>
     </Modal>
   );

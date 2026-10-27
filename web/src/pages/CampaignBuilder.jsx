@@ -43,7 +43,7 @@ export default function CampaignBuilder() {
   const [variables, setVariables] = useState({ offer: '', offer_ends: '' });
   // Who gets it: the filters, then single people ticked off (everyone else stays in) or,
   // after "Untick all", only the people ticked by hand.
-  const [filters, setFilters] = useState({ cities: [], tags: [], search: '' });
+  const [filters, setFilters] = useState({ cities: [], tags: [], tagMode: 'any', notTags: [], search: '' });
   // Coming from Customers with ticked rows (?ids=1,2,3): only those customers.
   const [pick, setPick] = useState(() => {
     const ids = String(params.get('ids') || '').split(',').map(Number).filter(Boolean);
@@ -387,7 +387,12 @@ function ReviewStep({ t, name, setName, template, when, setWhen, channel, setCha
   const [renaming, setRenaming] = useState(false);
   const who = pick.only
     ? `${plural(pick.ids.length, 'customer')} picked by hand`
-    : [filters.cities.length && filters.cities.map(cap).join(', '), filters.tags.length && filters.tags.join(', '), filters.search && `“${filters.search}”`].filter(Boolean).join(' · ') || 'Everyone';
+    : [
+      filters.cities.length && filters.cities.map(cap).join(', '),
+      filters.tags.length && `tags: ${filters.tags.join(filters.tagMode === 'all' ? ' + ' : ' or ')}`,
+      filters.notTags?.length && `except ${filters.notTags.join(', ')}`,
+      filters.search && `“${filters.search}”`,
+    ].filter(Boolean).join(' · ') || 'Everyone';
   return (
     <div className="stack">
       <div className="card card-pad stack" style={{ gap: 14 }}>

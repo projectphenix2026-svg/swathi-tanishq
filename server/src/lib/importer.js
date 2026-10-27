@@ -4,6 +4,7 @@
 import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
 import { normalizePhone } from './phone.js';
+import { tagsFrom } from './tags.js';
 import { parseDate, parseOptIn, sheetsCsvUrl, ImportError } from './import-basics.js';
 
 export { parseDate, parseOptIn, sheetsCsvUrl, ImportError };
@@ -17,6 +18,7 @@ export const FIELDS = [
   { key: 'anniversary', label: 'Anniversary', synonyms: ['anniversary', 'wedding anniversary', 'anniversary date', 'wedding date', 'marriage date'] },
   { key: 'last_purchase', label: 'Last purchase', synonyms: ['last purchase', 'last item', 'last bought', 'purchase', 'product', 'last product', 'item'] },
   { key: 'interests', label: 'Interests', synonyms: ['interests', 'interest', 'category', 'preference', 'preferences', 'likes'] },
+  { key: 'tags', label: 'Tags', synonyms: ['tags', 'tag', 'groups', 'group', 'labels', 'label', 'segment', 'segments'] },
   { key: 'opt_in', label: 'WhatsApp opt-in', synonyms: ['opt in', 'optin', 'opt-in', 'whatsapp opt-in', 'whatsapp opt in', 'consent', 'whatsapp consent', 'subscribed'] },
   { key: 'sms_opt_in', label: 'SMS opt-in', synonyms: ['sms opt-in', 'sms opt in', 'sms optin', 'sms consent'] },
 ];
@@ -195,6 +197,7 @@ export function buildPreview({ rows, mapping }, existingPhones = new Set()) {
       anniversary: parseDate(get('anniversary'), 'Anniversary', warnings),
       last_purchase: cleanText(get('last_purchase')),
       interests: cleanText(get('interests')),
+      tags: tagsFrom(get('tags') instanceof Date ? '' : get('tags')),
       opt_in: parseOptIn(get('opt_in')),
       sms_opt_in: parseOptIn(get('sms_opt_in')),
       status: 'ok',
@@ -250,6 +253,7 @@ export const SAMPLE_COLUMNS = [
   ['Anniversary', 'Optional', 'Day/month/year. For anniversary wishes.', '20/11/2016'],
   ['Last purchase', 'Optional', 'What they bought last.', 'Gold bangles'],
   ['Interests', 'Optional', 'What they like, separated by commas.', 'Bridal, Gold'],
+  ['Tags', 'Optional', 'None, one or several, separated by commas. Use them to pick customers when sending.', 'vip, bridal-2026'],
   ['WhatsApp opt-in', 'Optional', 'Yes if they agreed to get offers on WhatsApp; otherwise No.', 'Yes'],
 ];
 
@@ -257,12 +261,12 @@ export const SAMPLE_COLUMNS = [
 export function sampleWorkbook() {
   const rows = [
     SAMPLE_COLUMNS.map((c) => c[0]),
-    ['Priya Sharma', '91', '98765 43210', 'Hyderabad', '14/02/1992', '20/11/2016', 'Gold bangles', 'Bridal, Gold', 'Yes'],
-    ['Ravi Kumar', '91', '91234 56789', 'Secunderabad', '03/07/1988', '', 'Diamond ring', 'Diamonds', 'Yes'],
-    ['Anil Rao', '971', '50 123 4567', 'Dubai', '', '', 'Gold chain', 'Gold', 'Yes'],
+    ['Priya Sharma', '91', '98765 43210', 'Hyderabad', '14/02/1992', '20/11/2016', 'Gold bangles', 'Bridal, Gold', 'vip, bridal-2026', 'Yes'],
+    ['Ravi Kumar', '91', '91234 56789', 'Secunderabad', '03/07/1988', '', 'Diamond ring', 'Diamonds', '', 'Yes'],
+    ['Anil Rao', '971', '50 123 4567', 'Dubai', '', '', 'Gold chain', 'Gold', 'nri', 'Yes'],
   ];
   const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws['!cols'] = [18, 13, 16, 14, 12, 12, 16, 16, 16].map((wch) => ({ wch }));
+  ws['!cols'] = [18, 13, 16, 14, 12, 12, 16, 16, 18, 16].map((wch) => ({ wch }));
   const help = XLSX.utils.aoa_to_sheet([
     ['How to fill the Customers sheet'],
     ['Columns marked * (Phone and City) are required. Keep the first row (the column names) as it is.'],

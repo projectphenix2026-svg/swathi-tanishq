@@ -6,6 +6,7 @@ import { requireLevel } from './auth.js';
 import { offersThisWeekSql, lastOfferSql } from '../lib/campaigns.js';
 import { addSamples, countSamples, removeSamples } from '../lib/samples.js';
 import { getProvider } from '../providers/index.js';
+import { HIDDEN_TAGS, isAutoTag, tagsFrom } from '../lib/tags.js';
 
 const router = express.Router();
 // Everyone adds and edits customers; deleting and bulk imports are for managers and up.
@@ -53,6 +54,20 @@ router.get('/', async (req, res) => {
   if (filter === 'sms') where.push('sms_opt_in = 1 AND opted_out_at IS NULL');
   if (filter === 'no_birthday') where.push('birthday IS NULL AND opted_out_at IS NULL');
   if (filter === 'sleeping') where.push(SLEEPING);
+  // Tags: any of them (default) or all of them; and customers without these tags.
+  const tags = tagsFrom(req.query.tags);
+  if (tags.length) {
+    params.push(JSON.stringify(tags));
+    const t = `$${params.length}`;
+    where.push(req.query.tagMode === 'all'
+      ? `(SELECT count(DISTINCT x.value) FROM json_each(c.tags) x WHERE x.value IN (SELECT value FROM json_each(${t}))) = json_array_length(${t})`
+      : `EXISTS (SELECT 1 FROM json_each(c.tags) x WHERE x.value IN (SELECT value FROM json_each(${t})))`);
+  }
+  const notTags = tagsFrom(req.query.notTags);
+  if (notTags.length) {
+    params.push(JSON.stringify(notTags));
+    where.push(`NOT EXISTS (SELECT 1 FROM json_each(c.tags) x WHERE x.value IN (SELECT value FROM json_each($${params.length})))`);
+  }
   const w = where.join(' AND ');
   const { rows } = await query(
     `SELECT *, ${DATES_SQL}${req.query.offers ? `, ${offersThisWeekSql()} AS offers_this_week, ${lastOfferSql()} AS last_offer` : ''}
@@ -79,12 +94,14 @@ router.get('/summary', async (req, res) => {
       WHERE client_id = $1 AND city IS NOT NULL AND city <> '' GROUP BY 1 ORDER BY 2 DESC LIMIT 30`,
     [req.clientId],
   );
+  // Every tag in use with how many customers have it; "auto" marks the ones Sandesh adds itself.
   const { rows: tags } = await query(
     `SELECT t.value AS tag, count(*) AS count FROM contacts, json_each(contacts.tags) t
-      WHERE client_id = $1 GROUP BY 1 ORDER BY 2 DESC LIMIT 30`,
-    [req.clientId],
+      WHERE client_id = $1 AND ${NOT_DELETED} AND t.value NOT IN (SELECT value FROM json_each($2))
+      GROUP BY 1 ORDER BY 2 DESC, 1 LIMIT 300`,
+    [req.clientId, JSON.stringify(HIDDEN_TAGS)],
   );
-  res.json({ ...s, cities: cities.map((c) => ({ city: titleCase(c.city), count: c.count })), tags });
+  res.json({ ...s, cities: cities.map((c) => ({ city: titleCase(c.city), count: c.count })), tags: tags.map((t) => ({ ...t, auto: isAutoTag(t.tag) })) });
 });
 
 // Sample customers for Test mode: add five (only in test mode), or remove them.
@@ -153,7 +170,14 @@ router.patch('/:id', canEdit, async (req, res) => {
   if (Object.keys(errors).length) return res.status(400).json({ error: 'Please fix the highlighted fields.', fields: errors });
   if ('last_purchase' in b) add('last_purchase', clean(b.last_purchase));
   if ('interests' in b) add('interests', clean(b.interests));
-  if ('tags' in b) add('tags', tagsFrom(b.tags));
+  if ('tags' in b) {
+    // The form shows only staff tags; Sandesh's own hidden tags (test phone, sample) are kept.
+    params.push(JSON.stringify(tagsFrom(b.tags)));
+    const next = `$${params.length}`;
+    params.push(JSON.stringify(HIDDEN_TAGS));
+    sets.push(`tags = (SELECT json_group_array(DISTINCT value) FROM (SELECT value FROM json_each(${next})
+                UNION SELECT value FROM json_each(contacts.tags) WHERE value IN (SELECT value FROM json_each($${params.length}))))`);
+  }
   if ('birthday' in b) add('birthday', parseDate(b.birthday));
   if ('anniversary' in b) add('anniversary', parseDate(b.anniversary));
   if ('sms_opt_in' in b) add('sms_opt_in', Boolean(b.sms_opt_in));
@@ -184,7 +208,7 @@ router.delete('/:id', canManage, async (req, res) => {
 });
 
 // Changes for the customers ticked on the Customers page, at most 500 at a time:
-// delete, add or remove a group, or mark as not agreed to WhatsApp messages.
+// delete, add or remove tags (one or several), or mark as not agreed to WhatsApp messages.
 const BULK = ['delete', 'tag', 'untag', 'no-consent'];
 router.post('/bulk', canEdit, async (req, res) => {
   const action = req.body?.action;
@@ -192,8 +216,8 @@ router.post('/bulk', canEdit, async (req, res) => {
   if (action === 'delete' && !['manager', 'owner', 'app_owner'].includes(req.user.role)) return res.status(403).json({ error: 'Only the store manager or owner can delete customers.' });
   const ids = [...new Set((Array.isArray(req.body?.ids) ? req.body.ids : []).map(Number).filter(Number.isInteger))].slice(0, 500);
   if (!ids.length) return res.status(400).json({ error: 'Tick at least one customer.' });
-  const tag = String(req.body?.tag || '').trim().toLowerCase().replace(/\s+/g, '-').slice(0, 30);
-  if ((action === 'tag' || action === 'untag') && !tag) return res.status(400).json({ error: 'Type the group name.' });
+  const chosen = tagsFrom(req.body?.tags ?? req.body?.tag);
+  if ((action === 'tag' || action === 'untag') && !chosen.length) return res.status(400).json({ error: 'Choose or type a tag.' });
   const { rows } = await query(
     `SELECT id, tags FROM contacts WHERE client_id = $1 AND ${NOT_DELETED} AND id IN (SELECT value FROM json_each($2))`,
     [req.clientId, JSON.stringify(ids)],
@@ -203,7 +227,7 @@ router.post('/bulk', canEdit, async (req, res) => {
     else if (action === 'no-consent') await query(`UPDATE contacts SET whatsapp_opt_in = 0, updated_at = ${NOW} WHERE id = $1`, [c.id]);
     else {
       const tags = new Set(Array.isArray(c.tags) ? c.tags : JSON.parse(c.tags || '[]'));
-      if (action === 'tag') tags.add(tag); else tags.delete(tag);
+      for (const tag of chosen) if (action === 'tag') tags.add(tag); else tags.delete(tag);
       await query(`UPDATE contacts SET tags = $2, updated_at = ${NOW} WHERE id = $1`, [c.id, JSON.stringify([...tags])]);
     }
   }
@@ -316,7 +340,7 @@ router.post('/import/commit', canManage, async (req, res) => {
                 tags = (SELECT json_group_array(DISTINCT value) FROM (SELECT value FROM json_each(contacts.tags) UNION SELECT value FROM json_each(excluded.tags))),
                 updated_at = ${NOW}`,
         params: [req.clientId, clean(r.name), r.phone, clean(r.city) || fallbackCity, r.birthday || null, r.anniversary || null, clean(r.last_purchase),
-          clean(r.interests), extraTags, wa, wa || sms ? src : null, sms],
+          clean(r.interests), JSON.stringify(tagsFrom([...extraTags, ...tagsFrom(r.tags)])), wa, wa || sms ? src : null, sms],
       };
     });
   await batch(statements);
@@ -354,11 +378,6 @@ async function saveDates(clientId, contactId, dates) {
 function clean(v) {
   const s = String(v ?? '').replace(/\s+/g, ' ').trim();
   return s ? s.slice(0, 200) : null;
-}
-
-function tagsFrom(v) {
-  const list = Array.isArray(v) ? v : String(v || '').split(',');
-  return [...new Set(list.map((t) => String(t).trim().toLowerCase()).filter(Boolean))].slice(0, 20);
 }
 
 function titleCase(s) {

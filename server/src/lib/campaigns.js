@@ -11,7 +11,8 @@ import { shopValues, SHOP_KEYS } from './shop.js';
 /**
  * Builds the WHERE clause for an audience. Placeholders continue from `params`
  * (pass the array you are building; it is appended to).
- * audience = { mode: 'all' | 'filter' | 'selected', cities: [], tags: [], search: '', contactIds: [], excludeIds: [] }
+ * audience = { mode: 'all' | 'filter' | 'selected', cities: [], tags: [], tagMode: 'any' | 'all', notTags: [],
+ *              search: '', contactIds: [], excludeIds: [] }
  * excludeIds: customers unticked by hand in "Pick customers" (ignored when picking by hand).
  */
 export function audienceWhere(clientId, audience = {}, params = []) {
@@ -34,7 +35,14 @@ export function audienceWhere(clientId, audience = {}, params = []) {
     const cities = (audience.cities || []).map((s) => String(s).toLowerCase()).filter(Boolean);
     if (cities.length) where.push(`lower(c.city) IN (SELECT value FROM json_each(${p(cities)}))`);
     const tags = (audience.tags || []).filter(Boolean);
-    if (tags.length) where.push(`EXISTS (SELECT 1 FROM json_each(c.tags) t WHERE t.value IN (SELECT value FROM json_each(${p(tags)})))`);
+    if (tags.length && audience.tagMode === 'all') {
+      const t = p(JSON.stringify([...new Set(tags)]));
+      where.push(`(SELECT count(DISTINCT x.value) FROM json_each(c.tags) x WHERE x.value IN (SELECT value FROM json_each(${t}))) = json_array_length(${t})`);
+    } else if (tags.length) {
+      where.push(`EXISTS (SELECT 1 FROM json_each(c.tags) t WHERE t.value IN (SELECT value FROM json_each(${p(tags)})))`);
+    }
+    const notTags = (audience.notTags || []).filter(Boolean);
+    if (notTags.length) where.push(`NOT EXISTS (SELECT 1 FROM json_each(c.tags) t WHERE t.value IN (SELECT value FROM json_each(${p(notTags)})))`);
     if (audience.search) {
       const s = p(`%${audience.search}%`);
       where.push(`(c.interests LIKE ${s} OR c.last_purchase LIKE ${s})`);

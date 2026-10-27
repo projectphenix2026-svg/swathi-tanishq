@@ -246,7 +246,7 @@ export default function Occasions() {
 
 /* ---------- Setting up a wish: event, template (and its blanks), customers, when ---------- */
 function audienceToPick(a = {}) {
-  if (a.mode === 'selected') return { filters: { cities: [], tags: [], search: '' }, pick: { only: true, ids: a.contactIds || [] } };
+  if (a.mode === 'selected') return { filters: { cities: [], tags: [], tagMode: 'any', notTags: [], search: '' }, pick: { only: true, ids: a.contactIds || [] } };
   return { filters: { cities: a.cities || [], tags: a.tags || [], search: a.search || '' }, pick: { only: false, ids: a.excludeIds || [] } };
 }
 
@@ -447,7 +447,7 @@ function OccasionEditor({ initial, templates, setTemplates, businessName, shop, 
               {!showPick && reach != null ? ` (${num(reach)} now)` : ''}. New customers are included automatically.
             </span>
             {showPick
-              ? <button type="button" className="btn ghost sm" onClick={() => { setShowPick(false); setPick({ only: false, ids: [] }); setFilters({ cities: [], tags: [], search: '' }); }}>Include everyone</button>
+              ? <button type="button" className="btn ghost sm" onClick={() => { setShowPick(false); setPick({ only: false, ids: [] }); setFilters({ cities: [], tags: [], tagMode: 'any', notTags: [], search: '' }); }}>Include everyone</button>
               : <button type="button" className="link-btn" onClick={() => setShowPick(true)}>Leave some out?</button>}
           </div>
           {showPick && (
