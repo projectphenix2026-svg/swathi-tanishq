@@ -48,6 +48,20 @@ export async function resumeSending() {
   return rowCount ?? 0;
 }
 
+/** Meta's view of the number: { status, platformType, connected }. Throws if Meta cannot be reached. */
+async function numberStatus(c, fetchImpl) {
+  const res = await fetchImpl(
+    `https://graph.facebook.com/${config.meta.graphVersion}/${encodeURIComponent(c.phone_number_id)}?fields=status,platform_type`,
+    { headers: { Authorization: `Bearer ${c.token}` } },
+  );
+  const data = await res.json().catch(() => ({}));
+  const status = String(data.status || '').toUpperCase() || null;
+  // A number used with both the WhatsApp Business app and the API reports CLOUD_API; one that is
+  // off the API reports NOT_APPLICABLE.
+  const connected = res.ok && status === 'CONNECTED' && data.platform_type !== 'NOT_APPLICABLE';
+  return { status, platformType: data.platform_type || null, connected };
+}
+
 /**
  * While paused, asks Meta every few minutes whether the number is back on the API; if it is,
  * sending carries on by itself. Returns true when it resumed.
@@ -57,12 +71,7 @@ export async function checkReconnected({ fetchImpl = fetch } = {}) {
   const c = await loadConnection();
   if (!c?.token || !c.phone_number_id) return false;
   try {
-    const res = await fetchImpl(
-      `https://graph.facebook.com/${config.meta.graphVersion}/${encodeURIComponent(c.phone_number_id)}?fields=status,platform_type`,
-      { headers: { Authorization: `Bearer ${c.token}` } },
-    );
-    const data = await res.json().catch(() => ({}));
-    if (res.ok && data.platform_type === 'CLOUD_API' && String(data.status).toUpperCase() === 'CONNECTED') {
+    if ((await numberStatus(c, fetchImpl)).connected) {
       const back = await resumeSending();
       console.log(`[whatsapp] number reconnected; sending resumed (${back} message(s) back in the queue)`);
       return true;
@@ -71,4 +80,20 @@ export async function checkReconnected({ fetchImpl = fetch } = {}) {
     console.warn('[whatsapp] could not check the number:', err.message);
   }
   return false;
+}
+
+/**
+ * After Meta's "connect your WhatsApp Business app" pop-up finished for the saved number:
+ * switch replies and delivery updates back on for our app, ask Meta whether the number is
+ * connected, and if it is, carry on sending.
+ * Returns { subscribed, status, platformType, connected, requeued }.
+ */
+export async function afterBusinessAppSignup(c, { fetchImpl = fetch } = {}) {
+  const subscribed = await fetchImpl(
+    `https://graph.facebook.com/${config.meta.graphVersion}/${encodeURIComponent(c.waba_id)}/subscribed_apps`,
+    { method: 'POST', headers: { Authorization: `Bearer ${c.token}` } },
+  ).then((r) => r.ok).catch(() => false);
+  const s = await numberStatus(c, fetchImpl).catch(() => ({ status: null, platformType: null, connected: false }));
+  const requeued = s.connected ? await resumeSending() : 0;
+  return { subscribed, ...s, requeued };
 }

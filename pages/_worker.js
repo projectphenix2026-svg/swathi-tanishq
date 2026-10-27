@@ -27,6 +27,23 @@ export const SECURITY_HEADERS = {
   'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=()',
 };
 
+// The "Reconnect the shop's WhatsApp number" page is the only one that loads Facebook's script
+// (for Meta's pop-up), so only that page allows it.
+export const CONNECT_PAGE = /^\/connect-whatsapp(\.html|\.js)?$/;
+export const CONNECT_PAGE_CSP = [
+  "default-src 'self'",
+  "script-src 'self' https://connect.facebook.net",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: https:",
+  "connect-src 'self' https://*.facebook.com https://*.facebook.net",
+  'frame-src https://*.facebook.com https://facebook.com',
+  "frame-ancestors 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "object-src 'none'",
+  'upgrade-insecure-requests',
+].join('; ');
+
 export default {
   async fetch(request, env) {
     const { pathname } = new URL(request.url);
@@ -34,6 +51,7 @@ export default {
     const asset = await env.ASSETS.fetch(request);
     const res = new Response(asset.body, asset);
     for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.headers.set(k, v);
+    if (CONNECT_PAGE.test(pathname)) res.headers.set('Content-Security-Policy', CONNECT_PAGE_CSP);
     return res;
   },
 };

@@ -69,7 +69,7 @@ function Disconnected({ paused, owner, onResumed }) {
         <ol className="dc-steps">
           <li>On the shop phone, open <b>WhatsApp Business → Settings → Account</b> and check it is still linked to the <b>WhatsApp Business Platform</b>. Ask whether WhatsApp was reinstalled or re-verified.</li>
           <li>On <b>business.facebook.com → WhatsApp Manager → Phone numbers</b>, check the number’s status.</li>
-          <li>If it shows disconnected, connect it again with “connect your existing WhatsApp Business app number” (scan the QR code with the shop phone).</li>
+          <li>If it shows Offline or disconnected, {owner ? <a href="/connect-whatsapp">reconnect it with the WhatsApp Business app</a> : 'ask the owner to reconnect it with the WhatsApp Business app'} (Meta’s pop-up; scan the QR code with the shop phone).</li>
           <li>Come back here and press <b>I’ve reconnected: resume</b>{owner ? '' : ' (the owner can do this)'}. Sandesh also checks with Meta every 5 minutes and resumes by itself.</li>
         </ol>
       )}

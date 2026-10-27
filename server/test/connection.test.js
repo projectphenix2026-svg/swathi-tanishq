@@ -16,7 +16,7 @@ let owner;
 let manager;
 
 // Fake Meta Graph API: answers like Meta for good details, or with an error.
-function fakeMeta({ fail, refuseTemplates, notRegistered } = {}) {
+function fakeMeta({ fail, refuseTemplates, notRegistered, numberStatus } = {}) {
   const calls = [];
   globalThis.fetch = async (url, init = {}) => {
     calls.push({ url: String(url), method: init.method || 'GET', body: init.body });
@@ -38,6 +38,7 @@ function fakeMeta({ fail, refuseTemplates, notRegistered } = {}) {
       return json(200, { data: [{ name: 'photo_tpl', language: 'en', status: 'APPROVED', components: [{ type: 'HEADER', format: 'IMAGE' }, { type: 'BODY', text: 'Hi' }] }] });
     }
     if (String(url).includes('debug_token')) return json(200, { data: { is_valid: true, expires_at: 0 } });
+    if (String(url).includes('/555000111?fields=status')) return json(200, numberStatus || { status: 'PENDING', platform_type: 'NOT_APPLICABLE' });
     if (String(url).includes('/555000111')) return json(200, { display_phone_number: '+91 90000 33333', verified_name: 'Swathi Tanishq', quality_rating: 'GREEN', code_verification_status: 'VERIFIED', messaging_limit_tier: 'TIER_2K' });
     if (String(url).includes('/777000222')) return json(200, { name: 'Swathi Tanishq', account_review_status: 'APPROVED' });
     return json(404, { error: { code: 100, message: 'Unsupported get request' } });
@@ -234,6 +235,38 @@ describe('Connect WhatsApp (owner only)', () => {
     expect((await owner.get('/api/dashboard/sending')).body.paused).toBeNull();
     await drain();
     expect((await query('SELECT status FROM messages WHERE id = $1', [m.id])).rows[0].status).toBe('sent');
+  });
+
+  it('after Meta’s WhatsApp Business app pop-up: re-subscribes, and resumes once Meta says connected', async () => {
+    const setup = (await owner.get('/api/whatsapp/signup')).body;
+    expect(setup).toMatchObject({ phoneNumberId: '555000111', wabaId: '777000222' });
+    expect((await manager.get('/api/whatsapp/signup')).status).toBe(403);
+
+    const clientId = await ensureClient('Test Store');
+    const { rows: [c] } = await query(`INSERT INTO contacts (client_id, name, phone, whatsapp_opt_in) VALUES ($1, 'Waiting', '+919000077777', 1) RETURNING id`, [clientId]);
+    const { rows: [m] } = await query(
+      `INSERT INTO messages (client_id, contact_id, direction, channel, provider, status, body, error_code, idempotency_key)
+       VALUES ($1, $2, 'outbound', 'whatsapp', 'meta', 'failed', 'Hi', '133010', 'coex-wait-1') RETURNING id`, [clientId, c.id]);
+    await query(`UPDATE whatsapp_connection SET disconnected_at = '2026-10-27T15:16:56.678Z', disconnect_code = '133010'`);
+
+    // A different number from the saved one: nothing changes.
+    fakeMeta();
+    const other = await owner.post('/api/whatsapp/business-app').send({ phoneNumberId: '999', wabaId: '777000222' });
+    expect(other.status).toBe(409);
+
+    // Meta has not switched the number on yet: stays paused, the message keeps waiting.
+    let calls = fakeMeta();
+    let r = await owner.post('/api/whatsapp/business-app').send({ phoneNumberId: '555000111', wabaId: '777000222' });
+    expect(r.body).toMatchObject({ subscribed: true, connected: false, requeued: 0 });
+    expect(calls.some((x) => x.url.includes('/777000222/subscribed_apps') && x.method === 'POST')).toBe(true);
+    expect((await owner.get('/api/dashboard/sending')).body.paused).toMatchObject({ code: '133010' });
+
+    // Connected (a number on both the app and the API reports CLOUD_API): sending carries on.
+    calls = fakeMeta({ numberStatus: { status: 'CONNECTED', platform_type: 'CLOUD_API' } });
+    r = await owner.post('/api/whatsapp/business-app').send({ phoneNumberId: '555000111', wabaId: '777000222' });
+    expect(r.body).toMatchObject({ connected: true, requeued: 1 });
+    expect((await owner.get('/api/dashboard/sending')).body.paused).toBeNull();
+    expect((await query('SELECT status FROM messages WHERE id = $1', [m.id])).rows[0].status).toBe('queued');
   });
 
   it('sends a reply to someone who wrote in on the real WhatsApp for real, even in Test mode', async () => {

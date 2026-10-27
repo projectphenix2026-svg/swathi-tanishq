@@ -55,6 +55,10 @@ export const config = {
     graphVersion: env.META_GRAPH_VERSION || 'v25.0',
     // WhatsApp Business account ID: needed to submit templates for approval.
     wabaId: env.META_WABA_ID || '',
+    // Meta's "connect your WhatsApp Business app" pop-up (Embedded Signup with coexistence):
+    // the Meta app ID and the Facebook Login for Business configuration ID. Not secrets.
+    appId: env.META_APP_ID || '',
+    signupConfigId: env.META_SIGNUP_CONFIG_ID || '',
   },
 
   // SMS backup. Until DLT registration is approved, SMS_MODE=preview records the

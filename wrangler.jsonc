@@ -37,7 +37,10 @@
     // Workers Paid plan: about 150 messages a minute (~9,000 an hour), 10 handed to WhatsApp at a time.
     // On the free plan keep 20 / 3: each run has only ~10 ms of CPU and D1 writes are capped daily.
     "SEND_BATCH_SIZE": "150",
-    "SEND_CONCURRENCY": "10"
+    "SEND_CONCURRENCY": "10",
+    // Settings → WhatsApp → "Reconnect with the WhatsApp Business app" (Meta's QR pop-up).
+    "META_APP_ID": "985531990608254",
+    "META_SIGNUP_CONFIG_ID": "1519186300230874"
   },
   "observability": { "enabled": true },
   // Pull-request branches deploy with `wrangler preview`, which requires this block.
