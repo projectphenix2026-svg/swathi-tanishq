@@ -143,7 +143,13 @@ export default function CampaignReport() {
             {r.failed > 0 && <> · <b>{num(r.failed)}</b> couldn’t be reached</>}
           </p>
         </div>
-        {data.pace && r.pending > 0 && (
+        {data.paused && r.pending > 0 && (
+          <Alert tone="warn" icon={Clock}>
+            <b>{num(r.pending)} waiting.</b> The shop’s WhatsApp number is disconnected from Meta, so sending is paused.
+            They go out on their own once it is reconnected.
+          </Alert>
+        )}
+        {!data.paused && data.pace && r.pending > 0 && (
           <Alert tone="info" icon={Clock}>
             <b>{num(r.pending)} waiting.</b> WhatsApp lets this number reach {num(data.pace.limit)} new customers a day
             ({num(data.pace.remaining)} left right now). The rest go out on their own{data.pace.finishBy ? `, finishing by ${dateTime(data.pace.finishBy)}` : ' today'}.

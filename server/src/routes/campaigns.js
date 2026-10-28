@@ -232,7 +232,8 @@ router.get('/:id', async (req, res) => {
   if (!c) return res.status(404).json({ error: 'Campaign not found.' });
   const report = await campaignReport(c.id, c.channel);
   const p = report.pending > 0 && c.channel !== 'sms' ? await pace() : null;
-  res.json({ campaign: c, report, pace: p && { ...p, finishBy: finishEstimate(report.pending, p) } });
+  const paused = report.pending > 0 && c.channel !== 'sms' ? await sendingPaused() : null;
+  res.json({ campaign: c, report, paused, pace: p && { ...p, finishBy: finishEstimate(report.pending, p) } });
 });
 
 router.get('/:id/messages', async (req, res) => {

@@ -9,6 +9,10 @@ import { ProviderError, isRetryableHttp, friendlyError } from './errors.js';
 export function createMetaProvider(cfg, { fetchImpl = fetch } = {}) {
   const { accessToken, phoneNumberId, appSecret, graphVersion, wabaId } = cfg;
   const url = `https://graph.facebook.com/${graphVersion}/${phoneNumberId}/messages`;
+  // Marketing templates go to Meta's Marketing Messages API: Meta stops taking marketing
+  // messages on /messages on 13 Oct 2027. If the account is not set up for it yet, Meta
+  // sends them through the Cloud API instead (its default product_policy).
+  const marketingUrl = `https://graph.facebook.com/${graphVersion}/${phoneNumberId}/marketing_messages`;
 
   /** Meta's template with this name and language, if it was submitted before: { id, status }. */
   async function findTemplate(name, language) {
@@ -27,10 +31,10 @@ export function createMetaProvider(cfg, { fetchImpl = fetch } = {}) {
     return null;
   }
 
-  async function post(payload) {
+  async function post(payload, to = url) {
     let res;
     try {
-      res = await fetchImpl(url, {
+      res = await fetchImpl(to, {
         method: 'POST',
         headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -109,7 +113,7 @@ export function createMetaProvider(cfg, { fetchImpl = fetch } = {}) {
         to: to.replace(/^\+/, ''),
         type: 'template',
         template: { name: template.provider_ref, language: { code: template.language || 'en' }, components },
-      });
+      }, template.category === 'utility' ? url : marketingUrl);
     },
 
     async sendText({ to, body }) {
