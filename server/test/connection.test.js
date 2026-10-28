@@ -27,7 +27,7 @@ function fakeMeta({ fail, refuseTemplates, notRegistered, numberStatus } = {}) {
       return { ok: true, status: 200, headers: new Headers({ 'content-type': 'image/jpeg' }), arrayBuffer: async () => new Uint8Array([255, 216, 255]).buffer };
     }
     if (String(url).includes('/subscribed_apps')) return json(200, { success: true });
-    if (String(url).endsWith('/555000111/messages')) {
+    if (/\/555000111\/(marketing_)?messages$/.test(String(url))) {
       if (notRegistered?.on) return json(400, { error: { code: 133010, message: '(#133010) Account not registered' } });
       return json(200, { messages: [{ id: 'wamid.TEST1' }] });
     }
@@ -141,7 +141,7 @@ describe('Connect WhatsApp (owner only)', () => {
     expect(res.status).toBe(201);
     expect(res.body.campaign.provider).toBe('meta');
     await drain();
-    expect(calls.some((c) => c.url.endsWith('/555000111/messages') && c.method === 'POST')).toBe(true);
+    expect(calls.some((c) => /\/555000111\/(marketing_)?messages$/.test(c.url) && c.method === 'POST')).toBe(true);
     const { rows: [m] } = await query('SELECT status, provider, provider_message_id FROM messages WHERE campaign_id = $1', [res.body.campaign.id]);
     expect(m).toMatchObject({ status: 'sent', provider: 'meta', provider_message_id: 'wamid.TEST1' });
     expect((await owner.get('/api/whatsapp')).body.ready.testSentAt).toBeTruthy();
@@ -179,7 +179,7 @@ describe('Connect WhatsApp (owner only)', () => {
     const res = await owner.post('/api/campaigns/test').send({ templateId: t.id, phone: '90000 44444' });
     expect(res.status).toBe(201);
     await drain();
-    const sent = calls.filter((c) => c.url.endsWith('/555000111/messages') && c.method === 'POST').pop();
+    const sent = calls.filter((c) => /\/555000111\/(marketing_)?messages$/.test(c.url) && c.method === 'POST').pop();
     expect(JSON.parse(sent.body).template.name).toBe('kept');
 
     const undone = await owner.put(`/api/templates/${t.id}`).send({ ...t, buttons: [], body: 'Old approved words' });
@@ -223,9 +223,9 @@ describe('Connect WhatsApp (owner only)', () => {
     expect(m).toMatchObject({ status: 'queued', error_code: '133010' }); // waiting, not lost
     const paused = (await owner.get('/api/dashboard/sending')).body.paused;
     expect(paused).toMatchObject({ code: '133010' });
-    const sendsBefore = calls.filter((c) => c.url.endsWith('/555000111/messages')).length;
+    const sendsBefore = calls.filter((c) => /\/555000111\/(marketing_)?messages$/.test(c.url)).length;
     await drain(); // paused: nothing is tried
-    expect(calls.filter((c) => c.url.endsWith('/555000111/messages')).length).toBe(sendsBefore);
+    expect(calls.filter((c) => /\/555000111\/(marketing_)?messages$/.test(c.url)).length).toBe(sendsBefore);
     const blocked = await owner.post('/api/campaigns/test').send({ templateId: t.id, phone: '90000 46464' });
     expect(blocked.status).toBe(400);
     expect(blocked.body.error).toMatch(/disconnected from Meta/);

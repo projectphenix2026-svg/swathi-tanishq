@@ -92,6 +92,19 @@ describe('Meta adapter (stub)', () => {
     expect(payload.template.components[0].parameters.map((x) => x.text)).toEqual(['Priya', '10% off']);
   });
 
+  it('sends marketing templates to the Marketing Messages API and utility ones to /messages', async () => {
+    const fetchImpl = fakeFetch(200, { messages: [{ id: 'wamid.2' }] });
+    const p = createMetaProvider({ accessToken: 't', phoneNumberId: '123', appSecret: 's', graphVersion: 'v21.0' }, { fetchImpl });
+    await p.send({ to: '+919876543210', template: { body: 'Offer', provider_ref: 'diwali', category: 'marketing' } });
+    await p.send({ to: '+919876543210', template: { body: 'Order ready', provider_ref: 'ready', category: 'utility' } });
+    await p.sendText({ to: '+919876543210', body: 'Thanks' });
+    expect(fetchImpl.calls.map((c) => c.url)).toEqual([
+      'https://graph.facebook.com/v21.0/123/marketing_messages',
+      'https://graph.facebook.com/v21.0/123/messages',
+      'https://graph.facebook.com/v21.0/123/messages',
+    ]);
+  });
+
   it('refuses templates Meta has not approved', async () => {
     const p = createMetaProvider({ accessToken: 't', phoneNumberId: '1', appSecret: 's', graphVersion: 'v21.0' }, { fetchImpl: fakeFetch(200, {}) });
     await expect(p.send({ to: '+91', template: { body: 'x' } })).rejects.toMatchObject({ retryable: false });
